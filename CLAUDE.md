@@ -46,5 +46,6 @@ Build an AI-powered stock analysis platform with FastAPI backend and Next.js fro
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+shell commands, and other important information, read the current plan at
+`specs/001-mvp-stock-analysis/plan.md`.
 <!-- SPECKIT END -->
