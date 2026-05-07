@@ -13,7 +13,7 @@ _MOCK_CANDLES = [
         "close": round(101.0 + i * 2, 2),
         "volume": 1_000_000,
     }
-    for i, m in enumerate(range(11, 17))
+    for i, m in enumerate(range(7, 13))
 ]
 
 _MOCK_LAST = _MOCK_CANDLES[-1]
