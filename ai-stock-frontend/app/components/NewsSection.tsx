@@ -4,6 +4,7 @@ import { NewsItem } from '@/lib/api';
 
 interface NewsSectionProps {
   news: NewsItem[];
+  locale?: 'en' | 'zh';
 }
 
 function formatDate(iso: string): string {
@@ -19,16 +20,19 @@ function formatDate(iso: string): string {
   }
 }
 
-export default function NewsSection({ news }: NewsSectionProps) {
+export default function NewsSection({ news, locale = 'en' }: NewsSectionProps) {
+  const heading = locale === 'zh' ? '最新消息' : 'Recent News';
+  const emptyMsg = locale === 'zh' ? '目前沒有可靠新聞資料。' : 'No recent news available.';
+
   return (
     <div className="w-full rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
       <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        Recent News
+        {heading}
       </h3>
 
       {news.length === 0 ? (
         <p className="mt-3 text-sm text-zinc-400 dark:text-zinc-500">
-          No recent news available.
+          {emptyMsg}
         </p>
       ) : (
         <ul className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { TaiwanStockAnalysisResponse } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -38,7 +39,16 @@ export async function analyzeStock(symbol: string): Promise<StockAnalysisRespons
   return data;
 }
 
+export async function analyzeTW(symbol: string): Promise<TaiwanStockAnalysisResponse> {
+  const { data } = await axios.get<TaiwanStockAnalysisResponse>(`${API_BASE}/analyze/tw`, {
+    params: { symbol: symbol.trim() },
+  });
+  return data;
+}
+
 export async function checkHealth(): Promise<{ status: string; version: string }> {
   const { data } = await axios.get(`${API_BASE}/health`);
   return data;
 }
+
+export type { TaiwanStockAnalysisResponse };
