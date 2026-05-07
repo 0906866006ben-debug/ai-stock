@@ -127,7 +127,7 @@ async def get_tw_ai_analysis(
     chart_data: list[dict], news: list[dict],
 ) -> tuple[dict, str]:
     """Return (result_dict, analysis_source) where analysis_source is 'ai' or 'mock'."""
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return MOCK_AI_RESULT, "mock"
 
@@ -135,7 +135,7 @@ async def get_tw_ai_analysis(
         from pydantic_ai import Agent
 
         agent = Agent(
-            "anthropic:claude-sonnet-4-6",
+            "google-gla:gemini-2.5-pro",
             output_type=TaiwanStockAIAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )

@@ -5,7 +5,7 @@ from ..models.schemas import StockAIAnalysis
 MOCK_RESULT = {
     "summary": (
         "Based on available mock data, this stock shows typical market patterns. "
-        "Live analysis requires a valid ANTHROPIC_API_KEY."
+        "Live analysis requires a valid GEMINI_API_KEY."
     ),
     "trend": "neutral",
     "confidence": 0.50,
@@ -16,14 +16,14 @@ MOCK_RESULT = {
 
 
 async def get_ai_analysis(symbol: str, context: dict) -> dict:
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return MOCK_RESULT
 
     try:
         from pydantic_ai import Agent
 
-        agent = Agent("anthropic:claude-sonnet-4-6", output_type=StockAIAnalysis)
+        agent = Agent("google-gla:gemini-2.5-pro", output_type=StockAIAnalysis)
 
         market = context.get("market_data") or {}
         news = context.get("news_data") or []
