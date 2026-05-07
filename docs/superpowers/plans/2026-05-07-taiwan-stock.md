@@ -48,7 +48,7 @@
 - Create: `backend/tests/conftest.py`
 - Modify: `backend/.env.example`
 
-- [ ] **Step 1: Install test dependencies into the project venv**
+- [x] **Step 1: Install test dependencies into the project venv**
 
 ```bash
 /home/benchang/project/ai-stock/.venv/bin/pip install pytest pytest-asyncio pytest-httpx
@@ -56,7 +56,7 @@
 
 Expected output: `Successfully installed pytest-... pytest-asyncio-... pytest-httpx-...`
 
-- [ ] **Step 2: Create `backend/pytest.ini`**
+- [x] **Step 2: Create `backend/pytest.ini`**
 
 ```ini
 [pytest]
@@ -64,14 +64,14 @@ asyncio_mode = auto
 testpaths = tests
 ```
 
-- [ ] **Step 3: Create `backend/tests/__init__.py`**
+- [x] **Step 3: Create `backend/tests/__init__.py`**
 
 Empty file — makes `tests` a package so pytest can import it.
 
 ```python
 ```
 
-- [ ] **Step 4: Create `backend/tests/conftest.py`**
+- [x] **Step 4: Create `backend/tests/conftest.py`**
 
 ```python
 import sys
@@ -82,7 +82,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 ```
 
-- [ ] **Step 5: Add `FINMIND_API_KEY` to `.env.example`**
+- [x] **Step 5: Add `FINMIND_API_KEY` to `.env.example`**
 
 Append this line to `backend/.env.example`:
 
@@ -90,7 +90,7 @@ Append this line to `backend/.env.example`:
 FINMIND_API_KEY=
 ```
 
-- [ ] **Step 6: Verify pytest is discovered**
+- [x] **Step 6: Verify pytest is discovered**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -99,7 +99,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `no tests ran` (no test files yet) — no errors.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/pytest.ini backend/tests/__init__.py backend/tests/conftest.py backend/.env.example
@@ -114,7 +114,7 @@ git commit -m "chore: add pytest infrastructure and FINMIND_API_KEY env placehol
 - Modify: `backend/app/models/schemas.py` (append only)
 - Create: `backend/tests/test_tw_schemas.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_tw_schemas.py`:
 
@@ -176,7 +176,7 @@ def test_taiwan_response_defaults():
     assert resp.disclaimer == "本分析僅供參考，不構成投資建議。"
 ```
 
-- [ ] **Step 2: Run — expect FAIL (models not defined yet)**
+- [x] **Step 2: Run — expect FAIL (models not defined yet)**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -185,7 +185,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `ImportError` or `ModuleNotFoundError`.
 
-- [ ] **Step 3: Append schemas to `backend/app/models/schemas.py`**
+- [x] **Step 3: Append schemas to `backend/app/models/schemas.py`**
 
 Add at the bottom of the existing file (after all existing code):
 
@@ -239,7 +239,7 @@ class TaiwanStockAnalysisResponse(BaseModel):
     analyzed_at: str
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -248,7 +248,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `5 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/models/schemas.py backend/tests/test_tw_schemas.py
@@ -263,7 +263,7 @@ git commit -m "feat: add CandlePoint, TaiwanStockAIAnalysis, TaiwanStockAnalysis
 - Create: `backend/app/services/finmind_market.py`
 - Create: `backend/tests/test_finmind_market.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_finmind_market.py`:
 
@@ -354,7 +354,7 @@ async def test_network_error_returns_mock(monkeypatch, httpx_mock: HTTPXMock):
     assert is_mock is True
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -363,7 +363,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `ImportError` — module not found.
 
-- [ ] **Step 3: Create `backend/app/services/finmind_market.py`**
+- [x] **Step 3: Create `backend/app/services/finmind_market.py`**
 
 ```python
 import os
@@ -468,7 +468,7 @@ async def get_tw_market_data(symbol: str) -> tuple[dict, bool]:
         return _mock_market()
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -477,7 +477,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `4 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/finmind_market.py backend/tests/test_finmind_market.py
@@ -492,7 +492,7 @@ git commit -m "feat: add FinMind OHLCV market data service with mock fallback"
 - Create: `backend/app/services/finmind_company.py`
 - Create: `backend/tests/test_finmind_company.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_finmind_company.py`:
 
@@ -567,7 +567,7 @@ async def test_empty_response_returns_mock(monkeypatch, httpx_mock: HTTPXMock):
     assert data["company_name"] == "9999"
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -576,7 +576,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `ImportError`.
 
-- [ ] **Step 3: Create `backend/app/services/finmind_company.py`**
+- [x] **Step 3: Create `backend/app/services/finmind_company.py`**
 
 ```python
 import os
@@ -633,7 +633,7 @@ async def get_tw_company_info(symbol: str) -> tuple[dict, bool]:
         return _mock_company(symbol)
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -642,7 +642,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `6 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/finmind_company.py backend/tests/test_finmind_company.py
@@ -657,7 +657,7 @@ git commit -m "feat: add FinMind company info service with market_type mapping"
 - Create: `backend/app/services/tw_ai_analysis.py`
 - Create: `backend/tests/test_tw_ai_analysis.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/tests/test_tw_ai_analysis.py`:
 
@@ -730,7 +730,7 @@ def test_build_prompt_with_news():
     assert "台積電業績亮眼" in prompt
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -739,7 +739,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `ImportError`.
 
-- [ ] **Step 3: Create `backend/app/services/tw_ai_analysis.py`**
+- [x] **Step 3: Create `backend/app/services/tw_ai_analysis.py`**
 
 ```python
 import os
@@ -902,7 +902,7 @@ async def get_tw_ai_analysis(
         return MOCK_AI_RESULT, "mock"
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -911,7 +911,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `5 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/tw_ai_analysis.py backend/tests/test_tw_ai_analysis.py
@@ -927,7 +927,7 @@ git commit -m "feat: add Taiwan AI analysis service with Traditional Chinese Pyd
 - Modify: `backend/app/main.py` (add 3 imports + 1 regex + 1 route function)
 - Create: `backend/tests/test_tw_route.py`
 
-- [ ] **Step 1: Write the failing integration test**
+- [x] **Step 1: Write the failing integration test**
 
 Create `backend/tests/test_tw_route.py`:
 
@@ -990,7 +990,7 @@ def test_existing_us_route_unchanged(client):
     assert "symbol" in resp.json()
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -999,7 +999,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: `ImportError` or route not found.
 
-- [ ] **Step 3: Create `backend/app/graphs/tw_stock_graph.py`**
+- [x] **Step 3: Create `backend/app/graphs/tw_stock_graph.py`**
 
 ```python
 from typing import TypedDict, Optional
@@ -1069,7 +1069,7 @@ async def run_tw_analysis(symbol: str) -> TaiwanAnalysisState:
     return await _compiled.ainvoke(initial)
 ```
 
-- [ ] **Step 4: Add Taiwan route to `backend/app/main.py`**
+- [x] **Step 4: Add Taiwan route to `backend/app/main.py`**
 
 Add these lines to `main.py`. Insert the imports after the existing imports block, and the route function after the existing `/analyze` route.
 
@@ -1125,7 +1125,7 @@ async def analyze_tw(
     )
 ```
 
-- [ ] **Step 5: Run all tests — expect PASS**
+- [x] **Step 5: Run all tests — expect PASS**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -1134,7 +1134,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: all tests pass (including `test_existing_us_route_unchanged`).
 
-- [ ] **Step 6: Manual smoke test**
+- [x] **Step 6: Manual smoke test**
 
 Start the backend (from project root):
 ```bash
@@ -1149,7 +1149,7 @@ curl "http://localhost:8000/analyze/tw?symbol=2330" | python3 -m json.tool | hea
 
 Expected: JSON response with `symbol: "2330"`, `currency: "TWD"`, `data_source: "mock"`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/graphs/tw_stock_graph.py backend/app/main.py backend/tests/test_tw_route.py
@@ -1164,7 +1164,7 @@ git commit -m "feat: add LangGraph Taiwan analysis graph and GET /analyze/tw rou
 - Create: `ai-stock-frontend/lib/types.ts`
 - Modify: `ai-stock-frontend/lib/api.ts`
 
-- [ ] **Step 1: Create `ai-stock-frontend/lib/types.ts`**
+- [x] **Step 1: Create `ai-stock-frontend/lib/types.ts`**
 
 ```typescript
 export interface CandlePoint {
@@ -1206,7 +1206,7 @@ export interface TaiwanStockAnalysisResponse {
 }
 ```
 
-- [ ] **Step 2: Add `analyzeTW()` to `ai-stock-frontend/lib/api.ts`**
+- [x] **Step 2: Add `analyzeTW()` to `ai-stock-frontend/lib/api.ts`**
 
 Add at the bottom of the existing `api.ts` file (after the existing `checkHealth` export):
 
@@ -1225,7 +1225,7 @@ export async function analyzeTW(symbol: string): Promise<TaiwanStockAnalysisResp
 
 Note: the `import type` must go at the top of the file near the other imports, not at the bottom. Move it to the top of `api.ts`.
 
-- [ ] **Step 3: Verify TypeScript compiles**
+- [x] **Step 3: Verify TypeScript compiles**
 
 ```bash
 cd /home/benchang/project/ai-stock/ai-stock-frontend && \
@@ -1234,7 +1234,7 @@ cd /home/benchang/project/ai-stock/ai-stock-frontend && \
 
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add ai-stock-frontend/lib/types.ts ai-stock-frontend/lib/api.ts
@@ -1248,7 +1248,7 @@ git commit -m "feat: add TaiwanStockAnalysisResponse types and analyzeTW() API f
 **Files:**
 - Create: `ai-stock-frontend/app/components/TwSearchBar.tsx`
 
-- [ ] **Step 1: Create `ai-stock-frontend/app/components/TwSearchBar.tsx`**
+- [x] **Step 1: Create `ai-stock-frontend/app/components/TwSearchBar.tsx`**
 
 ```tsx
 'use client';
@@ -1311,7 +1311,7 @@ export default function TwSearchBar({ onSearch, loading = false }: TwSearchBarPr
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
@@ -1319,7 +1319,7 @@ cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
 
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add ai-stock-frontend/app/components/TwSearchBar.tsx
@@ -1333,7 +1333,7 @@ git commit -m "feat: add TwSearchBar component with Taiwan/US symbol validation"
 **Files:**
 - Modify: `ai-stock-frontend/app/components/StockChart.tsx`
 
-- [ ] **Step 1: Update `StockChart.tsx`**
+- [x] **Step 1: Update `StockChart.tsx`**
 
 Replace the entire file content with:
 
@@ -1435,7 +1435,7 @@ export default function StockChart({ chartData, symbol, mode = 'line' }: StockCh
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
@@ -1443,7 +1443,7 @@ cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
 
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add ai-stock-frontend/app/components/StockChart.tsx
@@ -1457,7 +1457,7 @@ git commit -m "feat: add candlestick mode to StockChart for Taiwan OHLCV data"
 **Files:**
 - Create: `ai-stock-frontend/app/components/TwAnalysisCard.tsx`
 
-- [ ] **Step 1: Create `ai-stock-frontend/app/components/TwAnalysisCard.tsx`**
+- [x] **Step 1: Create `ai-stock-frontend/app/components/TwAnalysisCard.tsx`**
 
 ```tsx
 'use client';
@@ -1590,7 +1590,7 @@ export default function TwAnalysisCard({ data }: TwAnalysisCardProps) {
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
@@ -1598,7 +1598,7 @@ cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
 
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add ai-stock-frontend/app/components/TwAnalysisCard.tsx
@@ -1612,7 +1612,7 @@ git commit -m "feat: add TwAnalysisCard with Traditional Chinese labels and sour
 **Files:**
 - Create: `ai-stock-frontend/app/components/TwFinancialSummary.tsx`
 
-- [ ] **Step 1: Create `ai-stock-frontend/app/components/TwFinancialSummary.tsx`**
+- [x] **Step 1: Create `ai-stock-frontend/app/components/TwFinancialSummary.tsx`**
 
 ```tsx
 'use client';
@@ -1666,7 +1666,7 @@ export default function TwFinancialSummary({
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
@@ -1674,7 +1674,7 @@ cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
 
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add ai-stock-frontend/app/components/TwFinancialSummary.tsx
@@ -1688,7 +1688,7 @@ git commit -m "feat: add TwFinancialSummary component with Traditional Chinese m
 **Files:**
 - Modify: `ai-stock-frontend/app/page.tsx`
 
-- [ ] **Step 1: Replace `page.tsx` with Taiwan-aware version**
+- [x] **Step 1: Replace `page.tsx` with Taiwan-aware version**
 
 Replace the entire content of `ai-stock-frontend/app/page.tsx` with:
 
@@ -1824,7 +1824,7 @@ export default function DashboardPage() {
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
@@ -1832,7 +1832,7 @@ cd /home/benchang/project/ai-stock/ai-stock-frontend && npx tsc --noEmit
 
 Expected: no errors.
 
-- [ ] **Step 3: Start dev server and manually test Taiwan flow**
+- [x] **Step 3: Start dev server and manually test Taiwan flow**
 
 ```bash
 cd /home/benchang/project/ai-stock/ai-stock-frontend && npm run dev
@@ -1848,7 +1848,7 @@ Manual tests:
 5. Verify disclaimer appears below Taiwan results
 6. Verify error message appears in Traditional Chinese when a request fails (stop backend and try)
 
-- [ ] **Step 4: Run all backend tests one final time**
+- [x] **Step 4: Run all backend tests one final time**
 
 ```bash
 cd /home/benchang/project/ai-stock/backend && \
@@ -1857,7 +1857,7 @@ cd /home/benchang/project/ai-stock/backend && \
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ai-stock-frontend/app/page.tsx
