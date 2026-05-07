@@ -7,7 +7,8 @@ interface TwSearchBarProps {
   loading?: boolean;
 }
 
-const TW_SYMBOL_RE = /^\d{4,6}$/;
+const TW_RE = /^\d{4,6}$/;
+const US_RE = /^[A-Z0-9]{1,10}$/;
 
 export default function TwSearchBar({ onSearch, loading = false }: TwSearchBarProps) {
   const [value, setValue] = useState('');
@@ -15,13 +16,19 @@ export default function TwSearchBar({ onSearch, loading = false }: TwSearchBarPr
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const symbol = value.trim();
-    if (!TW_SYMBOL_RE.test(symbol)) {
-      setError('請輸入 4–6 位數字股票代碼，例如 2330 或 00878');
+    const trimmed = value.trim();
+    const upper = trimmed.toUpperCase();
+
+    if (!trimmed) {
+      setError('請輸入股票代碼。');
+      return;
+    }
+    if (!TW_RE.test(trimmed) && !US_RE.test(upper)) {
+      setError('請輸入有效代碼：台灣股票為 4–6 位數字（如 2330），美股為 1–10 碼英數字（如 AAPL）。');
       return;
     }
     setError('');
-    onSearch(symbol);
+    onSearch(TW_RE.test(trimmed) ? trimmed : upper);
   }
 
   return (
@@ -31,10 +38,10 @@ export default function TwSearchBar({ onSearch, loading = false }: TwSearchBarPr
           type="text"
           value={value}
           onChange={(e) => { setValue(e.target.value); setError(''); }}
-          placeholder="輸入股票代碼，例如 2330 或 00878"
-          maxLength={6}
+          placeholder="輸入股票代碼，例如 2330 或 AAPL"
+          maxLength={10}
           className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 text-base text-zinc-900 placeholder-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
-          aria-label="Taiwan stock symbol"
+          aria-label="股票代碼"
         />
         <button
           type="submit"
