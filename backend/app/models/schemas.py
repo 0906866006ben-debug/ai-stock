@@ -391,3 +391,43 @@ class TelegramWatchlistSyncRequest(BaseModel):
 class TelegramWatchlistSyncResponse(BaseModel):
     status: str
     message: str
+
+
+# ── 4-Pillar Analysis Schemas ────────────────────────────────────────────────
+
+class FundamentalMetrics(BaseModel):
+    """Key fundamental financial metrics."""
+    latest_revenue: Optional[str] = None  # e.g., "196.8B"
+    revenue_yoy: Optional[float] = None  # Year-over-year % change
+    revenue_mom: Optional[float] = None  # Month-over-month % change
+    eps_latest: Optional[float] = None  # Latest earnings per share
+    eps_yoy: Optional[float] = None  # EPS YoY % change
+    pe_ratio: Optional[float] = None  # Price-to-Earnings
+    pb_ratio: Optional[float] = None  # Price-to-Book
+    roe: Optional[float] = None  # Return on Equity %
+    roa: Optional[float] = None  # Return on Assets %
+    gross_margin: Optional[float] = None  # Gross profit margin %
+    operating_margin: Optional[float] = None  # Operating margin %
+    net_margin: Optional[float] = None  # Net profit margin %
+    dividend_yield: Optional[float] = None  # Annual dividend yield %
+    payout_ratio: Optional[float] = None  # Dividend payout ratio %
+    debt_ratio: Optional[float] = None  # Total debt / assets
+    current_ratio: Optional[float] = None  # Current assets / current liabilities
+    quick_ratio: Optional[float] = None  # Quick assets / current liabilities
+    operating_cf: Optional[str] = None  # Operating cash flow (e.g., "1.2T")
+    free_cf: Optional[str] = None  # Free cash flow
+    cf_trend: str = "stable"  # strong | stable | declining
+
+
+class FundamentalAnalysis(BaseModel):
+    """Fundamental analysis output from agent."""
+    summary: str  # Traditional Chinese narrative
+    revenue_trend: str  # improving | stable | declining
+    profitability: dict  # Keys: trend, quality, metrics
+    valuation: dict  # Keys: level, support, interpretation
+    financial_health: dict  # Keys: debt_risk, liquidity, cash_flow_quality
+    risks: list[str]  # List of fundamental risks
+    catalysts: list[str]  # Positive catalysts
+    metrics: FundamentalMetrics  # Raw metrics
+    confidence: float = 0.5  # 0-1 confidence level
+    is_mock: bool = False  # Whether data is mocked

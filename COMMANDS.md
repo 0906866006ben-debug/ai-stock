@@ -1,59 +1,57 @@
-# Commands Quick Reference
+ Backend (FastAPI)
 
-## Start Backend (WSL Terminal)
+  cd /home/ben_0527/project/ai-stock
+  .venv/bin/uvicorn backend.app.main:app --reload --port 8000
 
-```bash
-cd /home/ben_0527/project/ai-stock
-source .venv/bin/activate
-uvicorn backend.app.main:app --reload --port 3000
-```
+  What it does:
+  - Starts FastAPI server on http://localhost:8000
+  - Auto-reloads on code changes
+  - Provides /health, /analyze/tw, /tw/price-history endpoints
 
-## Start Frontend (Windows Terminal or WSL with Node)
+  ---
+  Frontend (Next.js)
 
-```bash
-cd /home/ben_0527/project/ai-stock/ai-stock-frontend
-npm run dev
-```
+  cd /home/ben_0527/project/ai-stock/ai-stock-frontend
+  npm run dev
 
-Open → http://localhost:3000
+  What it does:
+  - Starts Next.js dev server on http://localhost:3000
+  - Auto-reloads on code changes
+  - Provides Taiwan stock analysis UI
 
----
+  ---
+  Run All Tests
 
-## Verify Backend is Running
+  cd /home/ben_0527/project/ai-stock
+  .venv/bin/python -m pytest backend/tests/ -q
 
-```bash
-curl http://localhost:3000/health
-```
+  Output: 48 tests pass in ~15 seconds
 
-## Run Tests
+  ---
+  TypeScript Check
 
-```bash
-cd /home/ben_0527/project/ai-stock
-source .venv/bin/activate
-python -m pytest backend/tests/ -v
-```
+  cd /home/ben_0527/project/ai-stock/ai-stock-frontend
+  npx tsc --noEmit
 
----
+  Output: No errors found
 
-## API Endpoints
+  ---
+  Quick Health Check (Backend Running)
 
-| Endpoint | Description |
-|---|---|
-| `GET /health` | Server health check |
-| `GET /analyze?symbol=AAPL` | US stock analysis |
-| `GET /analyze/tw?symbol=2330` | Taiwan stock analysis |
-| `GET /market` | Economic indicators + top stocks |
-| `GET /compare?symbol=AAPL` | Competitor / peer comparison |
-| `GET /search?query=AAPL` | Symbol autocomplete |
+  curl http://localhost:8000/health
 
----
+  Expected Response:
+  {"status": "ok", "version": "3.0.0"}
 
-## API Keys — `backend/.env`
+  ---
+  Test Taiwan Stock Analysis
 
-```
-GEMINI_API_KEY=...       # AI analysis
-FMP_API_KEY=...          # Fundamentals, peers, market data
-FINNHUB_API_KEY=...      # US news
-POLYGON_API_KEY=...      # US price data
-FINMIND_API_KEY=...      # Taiwan stock data
-```
+  curl "http://localhost:8000/analyze/tw?symbol=2330"
+
+  Expected Response: Company: 台積電, Market: TWSE, Trend: 中立, etc.
+
+  ---
+  Stop Services
+
+  pkill -f "uvicorn"   # Stop backend
+  pkill -f "npm"       # Stop frontend
