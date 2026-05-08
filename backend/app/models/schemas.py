@@ -444,3 +444,16 @@ class TechnicalAnalysis(BaseModel):
     opportunities: list[str]  # Trading opportunities
     confidence: float = 0.5  # 0-1 confidence level
     is_mock: bool = False  # Whether data is mocked
+
+
+class ChipAnalysis(BaseModel):
+    """Chip/institutional analysis output from agent."""
+    summary: str  # Traditional Chinese narrative
+    institutional_sentiment: dict  # Keys: foreign, domestic_fund, dealer with trends
+    chip_position: dict  # Keys: overall_trend, abnormal_movement, interpretation
+    risk_indicators: dict  # Keys: margin_ratio, short_interest, concentration_risk
+    liquidity: dict  # Keys: daily_turnover, liquidity_risk
+    risks: list[str]  # Chip-related risks
+    signals: list[str]  # Bullish/bearish chip signals
+    confidence: float = 0.5  # 0-1 confidence level
+    is_mock: bool = False  # Whether data is mocked
