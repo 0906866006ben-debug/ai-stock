@@ -29,6 +29,8 @@ from .models.schemas import (
     ETFHolding, ETFSectorWeight, ETFHoldingsResponse,
     # Phase 3: 4-pillar comprehensive analysis
     ComprehensiveAnalysis,
+    # Phase 4: elite equity research
+    EquityResearch,
 )
 from .graphs.stock_analysis_graph import run_analysis
 from .graphs.tw_stock_graph import run_tw_analysis
@@ -244,6 +246,10 @@ async def analyze_tw(
     if comprehensive_state and comprehensive_state.get("comprehensive_analysis"):
         comprehensive_analysis = comprehensive_state["comprehensive_analysis"]
 
+    equity_research = None
+    if comprehensive_state and comprehensive_state.get("equity_research"):
+        equity_research = comprehensive_state["equity_research"]
+
     return TaiwanStockAnalysisResponse(
         symbol=symbol,
         company_name=company.get("company_name", symbol),
@@ -271,6 +277,7 @@ async def analyze_tw(
         next_dividend=next_dividend,
         etf_holdings=etf_holdings_resp,
         comprehensive_analysis=comprehensive_analysis,
+        equity_research=equity_research,
     )
 
 

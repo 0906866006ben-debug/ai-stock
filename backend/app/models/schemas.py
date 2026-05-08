@@ -206,6 +206,8 @@ class TaiwanStockAnalysisResponse(BaseModel):
     etf_holdings: Optional["ETFHoldingsResponse"] = None
     # Phase 3: 4-pillar comprehensive analysis (backward-compatible — nullable)
     comprehensive_analysis: Optional["ComprehensiveAnalysis"] = None
+    # Phase 4: elite equity research framework (backward-compatible — nullable)
+    equity_research: Optional["EquityResearch"] = None
 
 
 # ── Competitor / peers ────────────────────────────────────────────────────────
@@ -491,3 +493,49 @@ class ComprehensiveAnalysis(BaseModel):
     catalyst_timeline: list[str]  # Aggregated catalysts
     conflict_resolution: str  # How to interpret conflicts
     is_mock: bool = False  # Whether synthesis was mocked
+
+
+# ── Elite Equity Research Framework ──────────────────────────────────────────
+
+class ScenarioPrice(BaseModel):
+    """Price target scenario for equity research."""
+    target_price: float  # Target price for this scenario
+    rationale: str  # 1-2 sentence justification (Traditional Chinese)
+    key_risk: str  # Primary risk to this scenario
+    upside_pct: Optional[float] = None  # Percentage upside from current price
+    timeframe: str = ""  # Time horizon (e.g., "3-6 months", "1-2 years")
+
+
+class EquityResearch(BaseModel):
+    """Elite equity research report synthesizing all pillars."""
+    # [1] Market Narrative
+    social_sentiment: str  # Summary of retail/forum sentiment (Traditional Chinese)
+    sentiment_stage: str  # euphoric | fearful | skeptical | early-stage
+    catalysts: list[str]  # Specific events with dates and numbers
+    institutional_view: str  # Analyst consensus + institutional positioning
+    narrative_conclusion: str  # "Stock moving because X, market underestimates Y"
+    # [2] Fundamental Snapshot
+    valuation_verdict: str  # overvalued | fairly valued | undervalued
+    valuation_assumptions: str  # Assumptions + math justification
+    financial_risks: list[str]  # Top 3 financial risks
+    # [3] Technical Snapshot
+    technical_verdict: str  # momentum strengthening | weakening | consolidating
+    institutional_positioning: str  # accumulating | distributing | neutral
+    setup_suitability: str  # swing trader | long-term | both | neither
+    # [4] Scenario Framework
+    scenario_bear: ScenarioPrice  # Bear case: -15% to -25%
+    scenario_base: ScenarioPrice  # Base case: +10% to +15%
+    scenario_bull: ScenarioPrice  # Bull case: +25% to +50%
+    scenario_stretched: ScenarioPrice  # Stretched case: +50%+ (unlikely)
+    # [5] Actionable Framework
+    entry_zone: str  # Recommended entry price range (e.g., "145-155 TWD")
+    add_zone: str  # Add more position at this zone
+    profit_taking: str  # Take profits at these levels
+    thesis_break: str  # Exit if this condition occurs
+    key_catalyst: str  # Most important upcoming catalyst
+    hidden_risk: str  # Less obvious risk that could derail thesis
+    # Meta
+    investment_rating: str = "Hold"  # Strong Buy | Buy | Hold | Sell | Strong Sell
+    summary: str  # Executive summary (Traditional Chinese, 3-4 sentences)
+    confidence: float = 0.5  # 0-1 confidence in the research
+    is_mock: bool = False  # Whether research was AI-generated or mocked

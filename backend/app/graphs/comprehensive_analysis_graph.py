@@ -7,8 +7,9 @@ LangGraph orchestration for 4-pillar Taiwan stock analysis:
 3. Chip/Institutional Analysis
 4. News/Sentiment Analysis
 5. Synthesis & Recommendation
+6. Elite Equity Research
 
-All 4 pillars run in parallel, then synthesis combines them.
+All 4 pillars run in parallel, then synthesis combines them, then equity research synthesizes final report.
 """
 from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
@@ -16,11 +17,13 @@ import asyncio
 
 from ..services.finmind_market import get_tw_market_data
 from ..services.finmind_company import get_tw_company_info
+from ..services.tw_market_research import fetch_market_research
 from ..agents.fundamental_agent import analyze_fundamental
 from ..agents.technical_agent import analyze_technical
 from ..agents.chip_agent import analyze_chip
 from ..agents.news_agent import analyze_news
 from ..agents.synthesis_agent import synthesize_analysis
+from ..agents.equity_research_agent import analyze_equity_research
 
 
 class ComprehensiveAnalysisState(TypedDict):
@@ -37,6 +40,7 @@ class ComprehensiveAnalysisState(TypedDict):
     chip_analysis: Optional[object]
     news_analysis: Optional[object]
     comprehensive_analysis: Optional[object]
+    equity_research: Optional[object]
 
 
 async def fetch_market(state: ComprehensiveAnalysisState) -> dict:
@@ -146,6 +150,42 @@ async def run_synthesis(state: ComprehensiveAnalysisState) -> dict:
         return {"comprehensive_analysis": None}
 
 
+async def run_equity_research(state: ComprehensiveAnalysisState) -> dict:
+    """Run elite equity research agent synthesizing all pillars into research report."""
+    try:
+        fundamental = state.get("fundamental_analysis")
+        technical = state.get("technical_analysis")
+        chip = state.get("chip_analysis")
+        news = state.get("news_analysis")
+        comprehensive = state.get("comprehensive_analysis")
+
+        if not all([fundamental, technical, chip, news, comprehensive]):
+            return {"equity_research": None}
+
+        # Fetch market research data (Gemini grounded search + fallbacks)
+        research_data = await fetch_market_research(
+            symbol=state["symbol"],
+            company_name=state.get("company_name", state["symbol"]),
+        )
+
+        # Run equity research agent
+        analysis = await analyze_equity_research(
+            symbol=state["symbol"],
+            company_name=state.get("company_name", state["symbol"]),
+            current_price=state.get("current_price", 0.0),
+            fundamental=fundamental,
+            technical=technical,
+            chip=chip,
+            news=news,
+            comprehensive=comprehensive,
+            research_data=research_data,
+        )
+        return {"equity_research": analysis}
+    except Exception as e:
+        print(f"Equity research error: {e}")
+        return {"equity_research": None}
+
+
 _graph = StateGraph(ComprehensiveAnalysisState)
 
 # Add nodes
@@ -156,6 +196,7 @@ _graph.add_node("run_technical", run_technical)
 _graph.add_node("run_chip", run_chip)
 _graph.add_node("run_news", run_news)
 _graph.add_node("run_synthesis", run_synthesis)
+_graph.add_node("run_equity_research", run_equity_research)
 
 # Set entry point
 _graph.set_entry_point("fetch_market")
@@ -175,8 +216,11 @@ _graph.add_edge("run_technical", "run_synthesis")
 _graph.add_edge("run_chip", "run_synthesis")
 _graph.add_edge("run_news", "run_synthesis")
 
-# End after synthesis
-_graph.add_edge("run_synthesis", END)
+# After synthesis, run equity research
+_graph.add_edge("run_synthesis", "run_equity_research")
+
+# End after equity research
+_graph.add_edge("run_equity_research", END)
 
 _compiled = _graph.compile()
 
@@ -205,5 +249,6 @@ async def run_comprehensive_analysis(symbol: str) -> ComprehensiveAnalysisState:
         "chip_analysis": None,
         "news_analysis": None,
         "comprehensive_analysis": None,
+        "equity_research": None,
     }
     return await _compiled.ainvoke(initial)

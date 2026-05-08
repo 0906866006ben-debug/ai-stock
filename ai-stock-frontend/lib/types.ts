@@ -159,6 +159,50 @@ export interface ComprehensiveAnalysis {
   is_mock: boolean;
 }
 
+// ── Elite Equity Research Framework ──────────────────────────────────────────
+
+export interface ScenarioPrice {
+  target_price: number;
+  rationale: string;
+  key_risk: string;
+  upside_pct?: number | null;
+  timeframe: string;
+}
+
+export interface EquityResearch {
+  // [1] Market Narrative
+  social_sentiment: string;
+  sentiment_stage: string;
+  catalysts: string[];
+  institutional_view: string;
+  narrative_conclusion: string;
+  // [2] Fundamental Snapshot
+  valuation_verdict: string;
+  valuation_assumptions: string;
+  financial_risks: string[];
+  // [3] Technical Snapshot
+  technical_verdict: string;
+  institutional_positioning: string;
+  setup_suitability: string;
+  // [4] Scenario Framework
+  scenario_bear: ScenarioPrice;
+  scenario_base: ScenarioPrice;
+  scenario_bull: ScenarioPrice;
+  scenario_stretched: ScenarioPrice;
+  // [5] Actionable Framework
+  entry_zone: string;
+  add_zone: string;
+  profit_taking: string;
+  thesis_break: string;
+  key_catalyst: string;
+  hidden_risk: string;
+  // Meta
+  investment_rating: string;
+  summary: string;
+  confidence: number;
+  is_mock: boolean;
+}
+
 export interface TaiwanStockAnalysisResponse {
   symbol: string;
   company_name: string;
@@ -196,6 +240,8 @@ export interface TaiwanStockAnalysisResponse {
   chip?: ChipAnalysis | null;
   news?: NewsAnalysis | null;
   comprehensive_analysis?: ComprehensiveAnalysis | null;
+  // Phase 4: elite equity research framework
+  equity_research?: EquityResearch | null;
 }
 
 // ── FMP Fundamentals ─────────────────────────────────────────────────────────

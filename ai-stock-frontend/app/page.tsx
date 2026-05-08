@@ -29,6 +29,7 @@ import AddPosition from './components/AddPosition';
 import DividendCalendar from './components/DividendCalendar';
 import EarningsCalendar from './components/EarningsCalendar';
 import ETFHoldingsCard from './components/ETFHoldingsCard';
+import EquityResearchReport from './components/EquityResearchReport';
 
 type Page = 'analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position';
 const TW_RE = /^\d{4,6}$/;
@@ -339,6 +340,16 @@ export default function DashboardPage() {
                     />
 
                     <NewsSection news={twResult.recent_news} />
+
+                    {/* Elite equity research report */}
+                    {twResult.equity_research && (
+                      <EquityResearchReport
+                        data={twResult.equity_research}
+                        currentPrice={twResult.current_price}
+                        companyName={twResult.company_name}
+                        symbol={twResult.symbol}
+                      />
+                    )}
 
                     {/* Favorite toggle for analyzed stock */}
                     <div className="flex items-center justify-center gap-3">
