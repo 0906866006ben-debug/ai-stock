@@ -204,6 +204,8 @@ class TaiwanStockAnalysisResponse(BaseModel):
     # Phase 2 enrichments (backward-compatible — nullable)
     next_dividend: Optional["DividendEvent"] = None
     etf_holdings: Optional["ETFHoldingsResponse"] = None
+    # Phase 3: 4-pillar comprehensive analysis (backward-compatible — nullable)
+    comprehensive_analysis: Optional["ComprehensiveAnalysis"] = None
 
 
 # ── Competitor / peers ────────────────────────────────────────────────────────
@@ -457,3 +459,35 @@ class ChipAnalysis(BaseModel):
     signals: list[str]  # Bullish/bearish chip signals
     confidence: float = 0.5  # 0-1 confidence level
     is_mock: bool = False  # Whether data is mocked
+
+
+class NewsAnalysis(BaseModel):
+    """News & sentiment analysis output from agent."""
+    summary: str  # Traditional Chinese narrative
+    recent_headlines: list[dict]  # List of {title, source, date, sentiment, impact, relevance}
+    sentiment_aggregate: dict  # Keys: bullish_count, neutral_count, bearish_count, overall_score, trend
+    key_catalysts: list[dict]  # Upcoming events {event, date, potential_impact, direction}
+    macro_impact: dict  # Keys: relevant_factors, impact_on_stock
+    risks: list[str]  # News-driven risks
+    opportunities: list[str]  # News-driven opportunities
+    confidence: float = 0.5  # 0-1 confidence level
+    is_mock: bool = False  # Whether data is mocked
+
+
+class ComprehensiveAnalysis(BaseModel):
+    """Synthesis of all 4 pillars with final recommendation."""
+    summary: str  # Traditional Chinese narrative
+    overall_direction: str  # bullish | bearish | neutral
+    confirmation_pillars: dict  # Keys: 基本面, 技術面, 籌碼面, 消息面 with their directions
+    confirmation_score: float  # 0-1, how many pillars agree on direction
+    conflicts: list[str]  # Conflict descriptions between pillars
+    composite_confidence: float  # 0-1 averaged confidence across pillars
+    target_price: float  # Recommended target price
+    stop_loss: float  # Recommended stop loss level
+    timeframe: str  # 短期|中期|長期 recommendation horizon
+    conviction_level: str  # 低|中|高 conviction strength
+    recommendation: str  # Investment action narrative
+    key_risks: list[str]  # Aggregated risks from all pillars
+    catalyst_timeline: list[str]  # Aggregated catalysts
+    conflict_resolution: str  # How to interpret conflicts
+    is_mock: bool = False  # Whether synthesis was mocked

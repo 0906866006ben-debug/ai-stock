@@ -27,9 +27,12 @@ from .models.schemas import (
     DividendEvent, DividendCalendarResponse,
     EarningsEvent, EarningsCalendarResponse,
     ETFHolding, ETFSectorWeight, ETFHoldingsResponse,
+    # Phase 3: 4-pillar comprehensive analysis
+    ComprehensiveAnalysis,
 )
 from .graphs.stock_analysis_graph import run_analysis
 from .graphs.tw_stock_graph import run_tw_analysis
+from .graphs.comprehensive_analysis_graph import run_comprehensive_analysis
 from .services.fmp_market import get_market_overview
 from .services.fmp_peers import get_competitors
 from .services.fmp_client import fmp_get
@@ -192,9 +195,10 @@ async def analyze_tw(
     detail_task = _asyncio.create_task(get_tw_detail(symbol))
     macro_task = _asyncio.create_task(get_macro_summary())
     dividend_task = _asyncio.create_task(get_next_dividend_live(symbol))
+    comprehensive_task = _asyncio.create_task(run_comprehensive_analysis(symbol))
 
-    state, detail, macro_raw, next_div_raw = await _asyncio.gather(
-        state_task, detail_task, macro_task, dividend_task,
+    state, detail, macro_raw, next_div_raw, comprehensive_state = await _asyncio.gather(
+        state_task, detail_task, macro_task, dividend_task, comprehensive_task,
         return_exceptions=False,
     )
     # Fall back to mock if live lookup returned nothing
@@ -236,6 +240,10 @@ async def analyze_tw(
             status=raw_h.get("status", "mock"),
         )
 
+    comprehensive_analysis = None
+    if comprehensive_state and comprehensive_state.get("comprehensive_analysis"):
+        comprehensive_analysis = comprehensive_state["comprehensive_analysis"]
+
     return TaiwanStockAnalysisResponse(
         symbol=symbol,
         company_name=company.get("company_name", symbol),
@@ -262,6 +270,7 @@ async def analyze_tw(
         macro_summary=macro_summary,
         next_dividend=next_dividend,
         etf_holdings=etf_holdings_resp,
+        comprehensive_analysis=comprehensive_analysis,
     )
 
 
