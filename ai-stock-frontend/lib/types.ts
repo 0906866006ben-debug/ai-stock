@@ -67,6 +67,98 @@ export interface ETFSummary {
 
 // ── Taiwan stock response ─────────────────────────────────────────────────────
 
+// ── 4-Pillar Analysis Models ──────────────────────────────────────────────────
+
+export interface FundamentalMetrics {
+  latest_revenue?: string | null;
+  revenue_yoy?: number | null;
+  revenue_mom?: number | null;
+  eps_latest?: number | null;
+  eps_yoy?: number | null;
+  pe_ratio?: number | null;
+  pb_ratio?: number | null;
+  roe?: number | null;
+  roa?: number | null;
+  gross_margin?: number | null;
+  operating_margin?: number | null;
+  net_margin?: number | null;
+  dividend_yield?: number | null;
+  payout_ratio?: number | null;
+  debt_ratio?: number | null;
+  current_ratio?: number | null;
+  quick_ratio?: number | null;
+  operating_cf?: string | null;
+  free_cf?: string | null;
+  cf_trend?: string;
+}
+
+export interface FundamentalAnalysis {
+  summary: string;
+  revenue_trend: string;
+  profitability?: Record<string, any> | null;
+  valuation?: Record<string, any> | null;
+  financial_health?: Record<string, any> | null;
+  risks: string[];
+  catalysts: string[];
+  metrics?: FundamentalMetrics | null;
+  confidence: number;
+  is_mock: boolean;
+}
+
+export interface TechnicalAnalysis {
+  summary: string;
+  trend: string;
+  momentum?: Record<string, any> | null;
+  volatility?: Record<string, any> | null;
+  key_levels?: Record<string, any> | null;
+  risks: string[];
+  opportunities: string[];
+  confidence: number;
+  is_mock: boolean;
+}
+
+export interface ChipAnalysis {
+  summary: string;
+  institutional_sentiment?: Record<string, any> | null;
+  chip_position?: Record<string, any> | null;
+  risk_indicators?: Record<string, any> | null;
+  liquidity?: Record<string, any> | null;
+  risks: string[];
+  signals: string[];
+  confidence: number;
+  is_mock: boolean;
+}
+
+export interface NewsAnalysis {
+  summary: string;
+  recent_headlines: Record<string, any>[];
+  sentiment_aggregate?: Record<string, any> | null;
+  key_catalysts: Record<string, any>[];
+  macro_impact?: Record<string, any> | null;
+  risks: string[];
+  opportunities: string[];
+  confidence: number;
+  is_mock: boolean;
+}
+
+export interface ComprehensiveAnalysis {
+  summary: string;
+  overall_direction: string;
+  confirmation_pillars?: Record<string, string> | null;
+  confirmation_score: number;
+  conflicts: string[];
+  composite_confidence: number;
+  target_price: number;
+  stop_loss: number;
+  timeframe: string;
+  conviction_level: string;
+  recommendation: string;
+  key_risks: string[];
+  catalyst_timeline: string[];
+  conflict_resolution: string;
+  is_mock: boolean;
+}
+
 export interface TaiwanStockAnalysisResponse {
   symbol: string;
   company_name: string;
@@ -98,6 +190,12 @@ export interface TaiwanStockAnalysisResponse {
   // Phase 2 enrichments
   next_dividend?: DividendEvent | null;
   etf_holdings?: ETFHoldingsResponse | null;
+  // Phase 3: 4-pillar comprehensive analysis
+  fundamental?: FundamentalAnalysis | null;
+  technical?: TechnicalAnalysis | null;
+  chip?: ChipAnalysis | null;
+  news?: NewsAnalysis | null;
+  comprehensive_analysis?: ComprehensiveAnalysis | null;
 }
 
 // ── FMP Fundamentals ─────────────────────────────────────────────────────────

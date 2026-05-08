@@ -1,6 +1,7 @@
 'use client';
 
 import { TaiwanStockAnalysisResponse } from '@/lib/types';
+import FourPillarAnalysis from './FourPillarAnalysis';
 
 interface TwAnalysisCardProps {
   data: TaiwanStockAnalysisResponse;
@@ -90,6 +91,18 @@ export default function TwAnalysisCard({ data }: TwAnalysisCardProps) {
           <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
             {data.recommendation}
           </p>
+        </div>
+      )}
+
+      {/* 4-Pillar Analysis */}
+      {(data.fundamental || data.technical || data.chip || data.news) && (
+        <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+          <FourPillarAnalysis
+            fundamental={data.fundamental}
+            technical={data.technical}
+            chip={data.chip}
+            news={data.news}
+          />
         </div>
       )}
 
