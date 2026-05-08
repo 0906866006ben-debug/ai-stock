@@ -20,31 +20,51 @@ interface IndicatorToggles {
   ma5: boolean;
   ma20: boolean;
   ma60: boolean;
+  ma120: boolean;
+  ma240: boolean;
   volume: boolean;
   rsi: boolean;
   macd: boolean;
+  kd: boolean;
+  bb: boolean;
+  atr: boolean;
 }
 
 const DEFAULT_TOGGLES: IndicatorToggles = {
   ma5: false,
   ma20: true,
   ma60: false,
+  ma120: false,
+  ma240: false,
   volume: true,
   rsi: false,
   macd: false,
+  kd: false,
+  bb: false,
+  atr: false,
 };
 
 const COLORS = {
   ma5: '#f97316',   // orange
   ma20: '#3b82f6',  // blue
   ma60: '#a855f7',  // purple
+  ma120: '#ec4899', // pink
+  ma240: '#8b5cf6', // violet
   rsi: '#06b6d4',   // cyan
   macdLine: '#3b82f6',
   signalLine: '#ef4444',
+  kdK: '#3b82f6',   // blue (K line)
+  kdD: '#ef4444',   // red (D line)
+  bbUpper: '#a855f7',  // purple
+  bbMiddle: '#6b7280', // gray
+  bbLower: '#a855f7',  // purple
+  atr: '#f59e0b',   // amber
   upBar: '#22c55e',
   downBar: '#ef4444',
   rsiOverbought: '#ef4444',
   rsiOversold: '#22c55e',
+  support: '#10b981',   // emerald
+  resistance: '#ef4444', // red
 };
 
 interface Props {
@@ -54,10 +74,14 @@ interface Props {
 
 function indicatorParam(t: IndicatorToggles): string {
   const parts: string[] = [];
-  if (t.ma5 || t.ma20 || t.ma60) parts.push('ma');
+  if (t.ma5 || t.ma20 || t.ma60 || t.ma120 || t.ma240) parts.push('ma');
   if (t.volume) parts.push('volume');
   if (t.rsi) parts.push('rsi');
   if (t.macd) parts.push('macd');
+  if (t.kd) parts.push('kd');
+  if (t.bb) parts.push('bb');
+  if (t.atr) parts.push('atr');
+  parts.push('support_resistance'); // Always request for support/resistance lines
   return parts.join(',');
 }
 
@@ -73,6 +97,8 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
   const volumeContainerRef = useRef<HTMLDivElement>(null);
   const rsiContainerRef = useRef<HTMLDivElement>(null);
   const macdContainerRef = useRef<HTMLDivElement>(null);
+  const kdBBContainerRef = useRef<HTMLDivElement>(null);
+  const atrContainerRef = useRef<HTMLDivElement>(null);
   const chartsRef = useRef<IChartApi[]>([]);
 
   const fetchHistory = useCallback(async (r: Range, t: IndicatorToggles) => {
@@ -153,6 +179,37 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
     addMaLine(priceChart, candles, indicators?.ma5, toggles.ma5, COLORS.ma5);
     addMaLine(priceChart, candles, indicators?.ma20, toggles.ma20, COLORS.ma20);
     addMaLine(priceChart, candles, indicators?.ma60, toggles.ma60, COLORS.ma60);
+    addMaLine(priceChart, candles, indicators?.ma120, toggles.ma120, COLORS.ma120);
+    addMaLine(priceChart, candles, indicators?.ma240, toggles.ma240, COLORS.ma240);
+
+    // Add support/resistance lines
+    if (indicators?.support_resistance) {
+      const sr = indicators.support_resistance;
+      if (sr.support && sr.support.length > 0) {
+        sr.support.forEach((level) => {
+          candleSeries.createPriceLine({
+            price: level,
+            color: COLORS.support,
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: `S: ${level.toFixed(2)}`,
+          });
+        });
+      }
+      if (sr.resistance && sr.resistance.length > 0) {
+        sr.resistance.forEach((level) => {
+          candleSeries.createPriceLine({
+            price: level,
+            color: COLORS.resistance,
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: `R: ${level.toFixed(2)}`,
+          });
+        });
+      }
+    }
 
     // ── Volume pane ──────────────────────────────────────────────────────────
     if (toggles.volume && volumeContainerRef.current) {
@@ -270,6 +327,117 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
       syncTimeScale(priceChart, macdChart);
     }
 
+    // ── KD & Bollinger Bands pane ───────────────────────────────────────────────
+    if ((toggles.kd || toggles.bb) && kdBBContainerRef.current) {
+      const kdBBChart = createChart(kdBBContainerRef.current, {
+        ...baseOptions,
+        width: kdBBContainerRef.current.clientWidth,
+        height: 140,
+        rightPriceScale: {
+          borderColor: '#e5e7eb',
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+      });
+      chartsRef.current.push(kdBBChart);
+
+      // Bollinger Bands (shown as semi-transparent area)
+      if (toggles.bb && indicators?.bollinger_bands) {
+        const bbUpper = kdBBChart.addSeries(LineSeries, {
+          color: COLORS.bbUpper,
+          lineWidth: 1,
+          lineStyle: 1,
+        });
+        const bbUpperData = candles
+          .map((c, i) => ({ time: c.time, value: indicators.bollinger_bands!.upper[i] ?? null }))
+          .filter((p) => p.value !== null) as { time: string; value: number }[];
+        if (bbUpperData.length > 0) bbUpper.setData(bbUpperData);
+
+        const bbMiddle = kdBBChart.addSeries(LineSeries, {
+          color: COLORS.bbMiddle,
+          lineWidth: 1,
+          lineStyle: 2,
+        });
+        const bbMiddleData = candles
+          .map((c, i) => ({ time: c.time, value: indicators.bollinger_bands!.middle[i] ?? null }))
+          .filter((p) => p.value !== null) as { time: string; value: number }[];
+        if (bbMiddleData.length > 0) bbMiddle.setData(bbMiddleData);
+
+        const bbLower = kdBBChart.addSeries(LineSeries, {
+          color: COLORS.bbLower,
+          lineWidth: 1,
+          lineStyle: 1,
+        });
+        const bbLowerData = candles
+          .map((c, i) => ({ time: c.time, value: indicators.bollinger_bands!.lower[i] ?? null }))
+          .filter((p) => p.value !== null) as { time: string; value: number }[];
+        if (bbLowerData.length > 0) bbLower.setData(bbLowerData);
+      }
+
+      // KD (Stochastic)
+      if (toggles.kd && indicators?.kd) {
+        const kLineSeries = kdBBChart.addSeries(LineSeries, {
+          color: COLORS.kdK,
+          lineWidth: 2,
+        });
+        const kLineData = candles
+          .map((c, i) => ({ time: c.time, value: indicators.kd!["%K"][i] ?? null }))
+          .filter((p) => p.value !== null) as { time: string; value: number }[];
+        if (kLineData.length > 0) kLineSeries.setData(kLineData);
+
+        const dLineSeries = kdBBChart.addSeries(LineSeries, {
+          color: COLORS.kdD,
+          lineWidth: 1,
+        });
+        const dLineData = candles
+          .map((c, i) => ({ time: c.time, value: indicators.kd!["%D"][i] ?? null }))
+          .filter((p) => p.value !== null) as { time: string; value: number }[];
+        if (dLineData.length > 0) dLineSeries.setData(dLineData);
+
+        // Overbought/oversold reference lines for KD
+        kLineSeries.createPriceLine({
+          price: 80,
+          color: COLORS.kdD,
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: false,
+        });
+        kLineSeries.createPriceLine({
+          price: 20,
+          color: COLORS.kdK,
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: false,
+        });
+      }
+
+      syncTimeScale(priceChart, kdBBChart);
+    }
+
+    // ── ATR pane ─────────────────────────────────────────────────────────────
+    if (toggles.atr && atrContainerRef.current && indicators?.atr) {
+      const atrChart = createChart(atrContainerRef.current, {
+        ...baseOptions,
+        width: atrContainerRef.current.clientWidth,
+        height: 120,
+        rightPriceScale: {
+          borderColor: '#e5e7eb',
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+      });
+      chartsRef.current.push(atrChart);
+
+      const atrSeries = atrChart.addSeries(LineSeries, {
+        color: COLORS.atr,
+        lineWidth: 2,
+      });
+      const atrData = candles
+        .map((c, i) => ({ time: c.time, value: indicators.atr![i] ?? null }))
+        .filter((p) => p.value !== null) as { time: string; value: number }[];
+      if (atrData.length > 0) atrSeries.setData(atrData);
+
+      syncTimeScale(priceChart, atrChart);
+    }
+
     // Resize handler
     const handleResize = () => {
       chartsRef.current.forEach((c, idx) => {
@@ -278,6 +446,8 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
           toggles.volume ? volumeContainerRef.current : null,
           toggles.rsi ? rsiContainerRef.current : null,
           toggles.macd ? macdContainerRef.current : null,
+          (toggles.kd || toggles.bb) ? kdBBContainerRef.current : null,
+          toggles.atr ? atrContainerRef.current : null,
         ].filter(Boolean) as HTMLElement[];
         if (containers[idx]) {
           c.applyOptions({ width: containers[idx].clientWidth });
@@ -292,15 +462,20 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
       chartsRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, indicators, toggles.ma5, toggles.ma20, toggles.ma60, toggles.volume, toggles.rsi, toggles.macd]);
+  }, [candles, indicators, toggles.ma5, toggles.ma20, toggles.ma60, toggles.ma120, toggles.ma240, toggles.volume, toggles.rsi, toggles.macd, toggles.kd, toggles.bb, toggles.atr]);
 
   const togglesList: { key: keyof IndicatorToggles; label: string; color: string }[] = useMemo(() => [
     { key: 'ma5', label: 'MA5', color: COLORS.ma5 },
     { key: 'ma20', label: 'MA20', color: COLORS.ma20 },
     { key: 'ma60', label: 'MA60', color: COLORS.ma60 },
+    { key: 'ma120', label: 'MA120', color: COLORS.ma120 },
+    { key: 'ma240', label: 'MA240', color: COLORS.ma240 },
     { key: 'volume', label: '成交量', color: '#71717a' },
     { key: 'rsi', label: 'RSI', color: COLORS.rsi },
     { key: 'macd', label: 'MACD', color: COLORS.macdLine },
+    { key: 'kd', label: 'KD', color: COLORS.kdK },
+    { key: 'bb', label: 'BB', color: COLORS.bbMiddle },
+    { key: 'atr', label: 'ATR', color: COLORS.atr },
   ], []);
 
   return (
@@ -378,6 +553,22 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
             <div>
               <div className="text-xs text-zinc-400 mt-2">MACD (12, 26, 9)</div>
               <div ref={macdContainerRef} className="w-full" />
+            </div>
+          )}
+          {(toggles.kd || toggles.bb) && (
+            <div>
+              <div className="text-xs text-zinc-400 mt-2">
+                {toggles.kd && 'KD (9,3,3)'}
+                {toggles.kd && toggles.bb && ' / '}
+                {toggles.bb && 'Bollinger Bands (20,2)'}
+              </div>
+              <div ref={kdBBContainerRef} className="w-full" />
+            </div>
+          )}
+          {toggles.atr && (
+            <div>
+              <div className="text-xs text-zinc-400 mt-2">ATR (14)</div>
+              <div ref={atrContainerRef} className="w-full" />
             </div>
           )}
         </div>

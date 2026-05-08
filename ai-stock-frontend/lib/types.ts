@@ -212,12 +212,34 @@ export interface MACDBundle {
   histogram: (number | null)[];
 }
 
+export interface KDBundle {
+  "%K": (number | null)[];
+  "%D": (number | null)[];
+}
+
+export interface BollingerBandsBundle {
+  upper: (number | null)[];
+  middle: (number | null)[];
+  lower: (number | null)[];
+}
+
+export interface SupportResistanceBundle {
+  support: number[];
+  resistance: number[];
+}
+
 export interface IndicatorsBundle {
   ma5?: (number | null)[] | null;
   ma20?: (number | null)[] | null;
   ma60?: (number | null)[] | null;
+  ma120?: (number | null)[] | null;
+  ma240?: (number | null)[] | null;
   rsi?: (number | null)[] | null;
   macd?: MACDBundle | null;
+  kd?: KDBundle | null;
+  bollinger_bands?: BollingerBandsBundle | null;
+  atr?: (number | null)[] | null;
+  support_resistance?: SupportResistanceBundle | null;
   volume?: number[] | null;
 }
 
