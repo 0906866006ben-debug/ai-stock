@@ -2,11 +2,11 @@ import pytest
 from pytest_httpx import HTTPXMock
 
 
-def _finmind_info_response(stock_type: str, company_name: str = "台積電") -> dict:
+def _finmind_info_response(stock_type: str, stock_name: str = "台積電") -> dict:
     return {
         "msg": "success",
         "status": 200,
-        "data": [{"stock_id": "2330", "company_name": company_name, "type": stock_type}],
+        "data": [{"stock_id": "2330", "stock_name": stock_name, "type": stock_type}],
     }
 
 
@@ -16,7 +16,7 @@ async def test_mock_returned_when_no_api_key(monkeypatch):
     from backend.app.services.finmind_company import get_tw_company_info
     data, is_mock = await get_tw_company_info("2330")
     assert is_mock is True
-    assert data["company_name"] == "2330"
+    assert data["company_name"] == "台積電"  # Mock returns proper company name for 2330
     assert data["market_type"] == "TWSE"
 
 

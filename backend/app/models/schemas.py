@@ -86,7 +86,7 @@ class StockAnalysisResponse(BaseModel):
     recommendation: str
     recent_news: list[NewsItem]
     financial_summary: dict[str, str]
-    chart_data: list[ChartPoint]
+    chart_data: list["CandlePoint"]
     data_source: str
     fundamentals: Optional[FundamentalsData] = None
 
@@ -201,6 +201,9 @@ class TaiwanStockAnalysisResponse(BaseModel):
     chip_risk_summary: Optional[ChipRiskSummary] = None
     macro_summary: Optional[MacroEnvironmentSummary] = None
     etf_summary: Optional[ETFSummary] = None
+    # Phase 2 enrichments (backward-compatible — nullable)
+    next_dividend: Optional["DividendEvent"] = None
+    etf_holdings: Optional["ETFHoldingsResponse"] = None
 
 
 # ── Competitor / peers ────────────────────────────────────────────────────────
@@ -284,6 +287,7 @@ class PriceHistoryResponse(BaseModel):
     range: str
     candles: list[CandlePoint]
     is_mock: bool
+    indicators: Optional["IndicatorsBundle"] = None
 
 
 # ── External news ─────────────────────────────────────────────────────────────
@@ -300,6 +304,80 @@ class ExternalNewsResponse(BaseModel):
     categories: dict[str, list[ExternalNewsItem]]
     total: int
     status: str = "live"
+
+
+# ── Technical indicators (price-history extension) ────────────────────────────
+
+class MACDBundle(BaseModel):
+    macd: list[Optional[float]] = []
+    signal: list[Optional[float]] = []
+    histogram: list[Optional[float]] = []
+
+
+class IndicatorsBundle(BaseModel):
+    ma5: Optional[list[Optional[float]]] = None
+    ma20: Optional[list[Optional[float]]] = None
+    ma60: Optional[list[Optional[float]]] = None
+    rsi: Optional[list[Optional[float]]] = None
+    macd: Optional[MACDBundle] = None
+    volume: Optional[list[int]] = None
+
+
+# ── TW Calendar ───────────────────────────────────────────────────────────────
+
+class DividendEvent(BaseModel):
+    stock_code: str
+    company_name: Optional[str] = None
+    ex_date: Optional[str] = None
+    payment_date: Optional[str] = None
+    announcement_date: Optional[str] = None
+    cash_per_share: Optional[float] = None
+    stock_per_share: Optional[float] = None
+    type: str = "cash"  # cash | stock | mixed
+
+
+class DividendCalendarResponse(BaseModel):
+    events: list[DividendEvent]
+    data_source: str = "live"
+
+
+class EarningsEvent(BaseModel):
+    stock_code: str
+    fiscal_year: int
+    fiscal_quarter: int
+    deadline: str
+    actual_filing_date: Optional[str] = None
+    eps: Optional[float] = None
+    is_upcoming: bool = True
+
+
+class EarningsCalendarResponse(BaseModel):
+    events: list[EarningsEvent]
+    data_source: str = "live"
+
+
+# ── ETF Holdings ──────────────────────────────────────────────────────────────
+
+class ETFHolding(BaseModel):
+    stock_code: Optional[str] = None
+    company_name: str
+    weight_pct: Optional[float] = None
+    shares: Optional[int] = None
+
+
+class ETFSectorWeight(BaseModel):
+    sector: str
+    weight_pct: float
+
+
+class ETFHoldingsResponse(BaseModel):
+    symbol: str
+    fund_name: Optional[str] = None
+    total_constituents: Optional[int] = None
+    last_updated: Optional[str] = None
+    holdings: list[ETFHolding] = []
+    sector_weights: list[ETFSectorWeight] = []
+    status: str = "live"  # live | mock | unsupported
 
 
 # ── Telegram watchlist ────────────────────────────────────────────────────────

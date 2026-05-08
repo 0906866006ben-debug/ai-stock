@@ -26,8 +26,11 @@ import ExternalNews from './components/ExternalNews';
 import PortfolioDashboard from './components/PortfolioDashboard';
 import Watchlist from './components/Watchlist';
 import AddPosition from './components/AddPosition';
+import DividendCalendar from './components/DividendCalendar';
+import EarningsCalendar from './components/EarningsCalendar';
+import ETFHoldingsCard from './components/ETFHoldingsCard';
 
-type Page = 'analysis' | 'portfolio' | 'directory' | 'news' | 'watchlist' | 'add-position';
+type Page = 'analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_FAVORITES = 'stockAssistant.favorites';
@@ -42,6 +45,7 @@ const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'portfolio', label: '投資組合', icon: '📊' },
   { page: 'directory', label: '股票目錄', icon: '📋' },
   { page: 'news', label: '市場新聞', icon: '📰' },
+  { page: 'calendar', label: '行事曆', icon: '📅' },
   { page: 'watchlist', label: '自選清單', icon: '★' },
   { page: 'add-position', label: '新增持倉', icon: '+' },
 ];
@@ -281,7 +285,32 @@ export default function DashboardPage() {
                   <>
                     <TwAnalysisCard data={twResult} />
 
-                    {/* Dedicated price history chart with range selector */}
+                    {/* Next dividend banner */}
+                    {twResult.next_dividend && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/40">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-amber-800 dark:text-amber-200">
+                            💰 即將除息
+                          </span>
+                          <span className="text-xs text-amber-700 dark:text-amber-300">
+                            除息日：{twResult.next_dividend.ex_date}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                          {twResult.next_dividend.cash_per_share != null && twResult.next_dividend.cash_per_share > 0 && (
+                            <span>現金股利 {twResult.next_dividend.cash_per_share.toFixed(2)} 元</span>
+                          )}
+                          {twResult.next_dividend.stock_per_share != null && twResult.next_dividend.stock_per_share > 0 && (
+                            <span className="ml-2">股票股利 {twResult.next_dividend.stock_per_share.toFixed(2)} 元</span>
+                          )}
+                          {twResult.next_dividend.payment_date && (
+                            <span className="ml-2">· 發放日 {twResult.next_dividend.payment_date}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dedicated price history chart with indicators */}
                     <PriceHistoryChart
                       stockCode={twResult.symbol}
                       initialCandles={twResult.chart_data}
@@ -294,6 +323,11 @@ export default function DashboardPage() {
                       price_change_percent={twResult.price_change_percent}
                       volume={twResult.volume}
                     />
+
+                    {/* ETF holdings (only when analyzing an ETF) */}
+                    {twResult.is_etf && twResult.etf_holdings && (
+                      <ETFHoldingsCard data={twResult.etf_holdings} />
+                    )}
 
                     {/* Detailed analysis: revenue, valuation, institutional, chip, macro */}
                     <TwDetailedAnalysis
@@ -381,6 +415,14 @@ export default function DashboardPage() {
 
             {/* ── External news ── */}
             {page === 'news' && <ExternalNews />}
+
+            {/* ── Calendar (dividends + earnings) ── */}
+            {page === 'calendar' && (
+              <div className="space-y-6">
+                <DividendCalendar symbol={twResult?.symbol} />
+                <EarningsCalendar symbol={twResult?.symbol} />
+              </div>
+            )}
 
             {/* ── Watchlist ── */}
             {page === 'watchlist' && (

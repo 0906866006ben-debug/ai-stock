@@ -4,9 +4,9 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture()
 def client(monkeypatch):
+    from backend.app.main import app  # triggers load_dotenv first
     monkeypatch.delenv("FINMIND_API_KEY", raising=False)
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    from backend.app.main import app
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     return TestClient(app)
 
 

@@ -9,9 +9,32 @@ _TYPE_MAP = {
     "otc": "TPEx",
 }
 
+# Mock data for common Taiwan stocks
+_COMPANY_NAMES = {
+    "2330": "台積電",
+    "0050": "元大台灣50",
+    "0056": "元大高股息",
+    "2454": "聯發科",
+    "2317": "鴻海",
+    "1303": "南亞",
+    "3008": "大立光",
+    "5880": "合庫金",
+    "00878": "元大高息低波",
+    "00919": "群益台灣ESG",
+}
+
+_MARKET_TYPES = {
+    "0050": "TPEx",
+    "0056": "TPEx",
+    "00878": "TPEx",
+    "00919": "TPEx",
+}
+
 
 def _mock_company(symbol: str) -> tuple[dict, bool]:
-    return {"company_name": symbol, "market_type": "TWSE"}, True
+    company_name = _COMPANY_NAMES.get(symbol, symbol)
+    market_type = _MARKET_TYPES.get(symbol, "TWSE")
+    return {"company_name": company_name, "market_type": market_type}, True
 
 
 async def get_tw_company_info(symbol: str) -> tuple[dict, bool]:
@@ -44,7 +67,7 @@ async def get_tw_company_info(symbol: str) -> tuple[dict, bool]:
         market_type = _TYPE_MAP.get(raw_type) or (raw_type.upper() if raw_type else "UNKNOWN")
 
         return {
-            "company_name": info.get("company_name", symbol),
+            "company_name": info.get("stock_name", symbol),
             "market_type": market_type,
         }, False
 

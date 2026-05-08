@@ -1,6 +1,7 @@
 import os
 
 from ..models.schemas import TaiwanStockAIAnalysis
+from .tw_technical_analysis import compute_all_indicators
 
 MOCK_AI_RESULT: dict = {
     "summary": "目前無法取得 AI 分析，以下為模擬資料。",
@@ -22,35 +23,29 @@ _SYSTEM_PROMPT = (
 
 
 def _compute_indicators(chart_data: list[dict]) -> dict:
+    """Compute technical indicators using pandas/numpy."""
+    ind = compute_all_indicators(chart_data)
     closes = [r["close"] for r in chart_data]
-    volumes = [r["volume"] for r in chart_data]
     n = len(closes)
+    current_price = closes[-1] if closes else 0
 
-    ma5 = sum(closes[-5:]) / min(5, n) if n > 0 else None
-    ma20 = sum(closes[-20:]) / min(20, n) if n >= 20 else None
-
-    price_5d_change = (
-        (closes[-1] - closes[-6]) / closes[-6] * 100 if n >= 6 else None
-    )
-    price_20d_change = (
-        (closes[-1] - closes[-21]) / closes[-21] * 100 if n >= 21 else None
-    )
-
-    avg_vol_20 = sum(volumes[-20:]) / min(20, n) if n > 0 else None
-    latest_vol = volumes[-1] if n > 0 else None
-
-    above_ma5 = (closes[-1] > ma5) if (ma5 is not None and n > 0) else None
-    above_ma20 = (closes[-1] > ma20) if (ma20 is not None and n > 0) else None
+    ma5 = ind["ma"]["ma5"]
+    ma20 = ind["ma"]["ma20"]
 
     return {
         "ma5": ma5,
         "ma20": ma20,
-        "price_5d_change": price_5d_change,
-        "price_20d_change": price_20d_change,
-        "avg_vol_20": avg_vol_20,
-        "latest_vol": latest_vol,
-        "above_ma5": above_ma5,
-        "above_ma20": above_ma20,
+        "ma60": ind["ma"]["ma60"],
+        "rsi": ind["rsi"],
+        "macd": ind["macd"],
+        "price_5d_change": ind["price_changes"]["change_5d"],
+        "price_20d_change": ind["price_changes"]["change_20d"],
+        "price_60d_change": ind["price_changes"]["change_60d"],
+        "avg_vol_20": ind["volume"]["avg_vol_20"],
+        "latest_vol": ind["volume"]["latest_vol"],
+        "vol_ratio": ind["volume"]["vol_ratio"],
+        "above_ma5": (current_price > ma5) if ma5 is not None else None,
+        "above_ma20": (current_price > ma20) if ma20 is not None else None,
         "ohlcv_summary": chart_data[-5:] if n >= 5 else chart_data,
     }
 
@@ -76,8 +71,17 @@ def _build_prompt(
 
     ma5_str = _fmt(ind["ma5"])
     ma20_str = _fmt(ind["ma20"])
+    ma60_str = _fmt(ind["ma60"])
+    rsi_str = _fmt(ind["rsi"], fmt=".2f")
+
+    # MACD formatting
+    macd_str = "N/A"
+    if ind["macd"]:
+        macd_str = f"線{ind['macd']['macd']:.4f} 信號{ind['macd']['signal']:.4f} 柱狀{ind['macd']['histogram']:.4f}"
+
     p5_str = _fmt(ind["price_5d_change"], suffix="%")
     p20_str = _fmt(ind["price_20d_change"], suffix="%")
+    p60_str = _fmt(ind["price_60d_change"], suffix="%")
 
     def _above(flag) -> str:
         if flag is None:
@@ -86,8 +90,7 @@ def _build_prompt(
 
     vol_str = "N/A"
     if ind["latest_vol"] and ind["avg_vol_20"]:
-        ratio = ind["latest_vol"] / ind["avg_vol_20"]
-        vol_str = f"{ind['latest_vol']:,}（20日均量 {ind['avg_vol_20']:.0f} 的 {ratio:.1f} 倍）"
+        vol_str = f"{ind['latest_vol']:,}（20日均量 {ind['avg_vol_20']:,} 的 {ind.get('vol_ratio', 0):.1f} 倍）"
 
     ohlcv_lines = "\n".join(
         f"  {r['time']}: 開{r['open']} 高{r['high']} 低{r['low']} 收{r['close']} 量{r['volume']:,}"
@@ -107,10 +110,16 @@ def _build_prompt(
 成交量：{vol_str}
 
 === 技術指標 ===
-MA5：{ma5_str}（目前股價{_above(ind['above_ma5'])} MA5）
-MA20：{ma20_str}（目前股價{_above(ind['above_ma20'])} MA20）
-5日漲跌：{p5_str}
-20日漲跌：{p20_str}
+移動平均線：
+  MA5：{ma5_str}（目前股價{_above(ind['above_ma5'])} MA5）
+  MA20：{ma20_str}（目前股價{_above(ind['above_ma20'])} MA20）
+  MA60：{ma60_str}
+相對強度指數（RSI）：{rsi_str}
+MACD（12,26,9）：{macd_str}
+價格漲跌：
+  5日：{p5_str}
+  20日：{p20_str}
+  60日：{p60_str}
 
 === 近5日 OHLCV ===
 {ohlcv_lines}
@@ -135,7 +144,7 @@ async def get_tw_ai_analysis(
         from pydantic_ai import Agent
 
         agent = Agent(
-            "google-gla:gemini-2.5-pro",
+            "google-gla:gemini-2.5-flash",
             output_type=TaiwanStockAIAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )

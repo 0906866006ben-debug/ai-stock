@@ -29,9 +29,13 @@ async def test_mock_returned_when_no_api_key(monkeypatch):
 def test_compute_indicators_ma5_ma20():
     from backend.app.services.tw_ai_analysis import _compute_indicators
     indicators = _compute_indicators(_SAMPLE_CHART)
-    expected_ma5 = sum(r["close"] for r in _SAMPLE_CHART[-5:]) / 5
+    # Pandas rolling average for last 5 values
+    import pandas as pd
+    closes = [r["close"] for r in _SAMPLE_CHART]
+    expected_ma5 = float(pd.Series(closes).rolling(5).mean().iloc[-1])
     assert abs(indicators["ma5"] - expected_ma5) < 0.01
-    expected_ma20 = sum(r["close"] for r in _SAMPLE_CHART[-20:]) / 20
+    # Pandas rolling average for last 20 values
+    expected_ma20 = float(pd.Series(closes).rolling(20).mean().iloc[-1])
     assert abs(indicators["ma20"] - expected_ma20) < 0.01
 
 
@@ -39,7 +43,8 @@ def test_compute_indicators_price_changes():
     from backend.app.services.tw_ai_analysis import _compute_indicators
     indicators = _compute_indicators(_SAMPLE_CHART)
     closes = [r["close"] for r in _SAMPLE_CHART]
-    expected_5d = (closes[-1] - closes[-6]) / closes[-6] * 100
+    # 5-day change: from closes[-5] to closes[-1]
+    expected_5d = (closes[-1] - closes[-5]) / closes[-5] * 100
     assert abs(indicators["price_5d_change"] - expected_5d) < 0.01
 
 

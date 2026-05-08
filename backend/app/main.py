@@ -22,6 +22,11 @@ from .models.schemas import (
     PriceHistoryResponse, CandlePoint,
     ExternalNewsItem, ExternalNewsResponse,
     TelegramWatchlistSyncRequest, TelegramWatchlistSyncResponse,
+    # Phase 2 schemas
+    IndicatorsBundle, MACDBundle,
+    DividendEvent, DividendCalendarResponse,
+    EarningsEvent, EarningsCalendarResponse,
+    ETFHolding, ETFSectorWeight, ETFHoldingsResponse,
 )
 from .graphs.stock_analysis_graph import run_analysis
 from .graphs.tw_stock_graph import run_tw_analysis
@@ -33,7 +38,15 @@ from .services.tw_macro import get_macro_summary
 from .services.tw_stocks_list import get_tw_stocks
 from .services.yahoo_news import get_external_news
 from .services.telegram_service import sync_watchlist, handle_webhook
-from .services.finmind_market import get_tw_market_data
+from .services.finmind_market import get_tw_market_data, get_tw_price_history
+from .services.tw_candles import RANGE_CONFIG, normalize_range, aggregate_candles, trim_to_max
+from .services.tw_indicators import build_indicators, parse_indicator_query
+from .services.tw_calendar import (
+    get_dividend_events, get_earnings_events, get_next_dividend_live,
+    get_next_dividend_for,
+)
+from .services.tw_etf_holdings import get_etf_holdings, is_supported_etf
+from .services.fmp_price_history import get_us_price_history
 
 app = FastAPI(title="AI Stock Analysis API", version="3.0.0")
 
@@ -157,7 +170,7 @@ async def analyze(symbol: str = Query(..., description="Stock ticker symbol")) -
         recommendation=ai.get("recommendation", ""),
         recent_news=news,
         financial_summary=merged_summary,
-        chart_data=[{"time": p["time"], "value": p["value"]} for p in chart_raw],
+        chart_data=[CandlePoint(**p) for p in chart_raw],
         data_source=data_source,
         fundamentals=fundamentals,
     )
@@ -178,8 +191,15 @@ async def analyze_tw(
     state_task = _asyncio.create_task(run_tw_analysis(symbol))
     detail_task = _asyncio.create_task(get_tw_detail(symbol))
     macro_task = _asyncio.create_task(get_macro_summary())
+    dividend_task = _asyncio.create_task(get_next_dividend_live(symbol))
 
-    state, detail, macro_raw = await _asyncio.gather(state_task, detail_task, macro_task)
+    state, detail, macro_raw, next_div_raw = await _asyncio.gather(
+        state_task, detail_task, macro_task, dividend_task,
+        return_exceptions=False,
+    )
+    # Fall back to mock if live lookup returned nothing
+    if next_div_raw is None:
+        next_div_raw = get_next_dividend_for(symbol)
 
     market = state.get("market_data") or {}
     company = state.get("company_data") or {}
@@ -198,6 +218,23 @@ async def analyze_tw(
     institutional_summary = InstitutionalSummary(**inst) if inst else None
     chip_risk_summary = ChipRiskSummary(**chip) if chip else None
     macro_summary = MacroEnvironmentSummary(**macro_raw) if macro_raw else None
+
+    next_dividend = None
+    if next_div_raw:
+        next_dividend = DividendEvent(**next_div_raw)
+
+    etf_holdings_resp = None
+    if is_etf and is_supported_etf(symbol):
+        raw_h = get_etf_holdings(symbol)
+        etf_holdings_resp = ETFHoldingsResponse(
+            symbol=raw_h["symbol"],
+            fund_name=raw_h.get("fund_name"),
+            total_constituents=raw_h.get("total_constituents"),
+            last_updated=raw_h.get("last_updated"),
+            holdings=[ETFHolding(**h) for h in raw_h.get("holdings", [])],
+            sector_weights=[ETFSectorWeight(**s) for s in raw_h.get("sector_weights", [])],
+            status=raw_h.get("status", "mock"),
+        )
 
     return TaiwanStockAnalysisResponse(
         symbol=symbol,
@@ -223,6 +260,8 @@ async def analyze_tw(
         institutional_summary=institutional_summary,
         chip_risk_summary=chip_risk_summary,
         macro_summary=macro_summary,
+        next_dividend=next_dividend,
+        etf_holdings=etf_holdings_resp,
     )
 
 
@@ -256,67 +295,103 @@ async def tw_stocks(
     )
 
 
+# ── US price history ──────────────────────────────────────────────────────────
+
+@app.get("/price-history", response_model=PriceHistoryResponse)
+async def us_price_history(
+    symbol: str = Query(..., description="US stock symbol"),
+    range: str = Query("D", description="Time range: D (Day), 5D (5 days), W (Week), M (Month), Y (Year)"),
+    include_indicators: str | None = Query(
+        None,
+        description="Comma-separated indicators: ma,rsi,macd,volume (or 'all'). "
+                    "'ma' expands to ma5,ma20,ma60.",
+    ),
+) -> PriceHistoryResponse:
+    symbol = symbol.strip().upper()
+    if not SYMBOL_RE.match(symbol):
+        raise HTTPException(status_code=422, detail="Invalid US stock symbol.")
+
+    result = await get_us_price_history(symbol, range, include_indicators)
+    candles = [CandlePoint(**c) for c in result.get("candles", [])]
+
+    indicators_model = None
+    if result.get("indicators"):
+        ind = result["indicators"]
+        macd_payload = ind.pop("macd", None)
+        macd_model = MACDBundle(**macd_payload) if macd_payload else None
+        indicators_model = IndicatorsBundle(macd=macd_model, **ind)
+
+    return PriceHistoryResponse(
+        stock_code=symbol,
+        range=result.get("range", "D"),
+        candles=candles,
+        is_mock=result.get("is_mock", False),
+        indicators=indicators_model,
+    )
+
+
 # ── Taiwan price history ──────────────────────────────────────────────────────
 
 @app.get("/tw/price-history", response_model=PriceHistoryResponse)
 async def tw_price_history(
     stock_code: str = Query(..., description="Taiwan stock code"),
-    range: str = Query("1M", description="Range: 1D, 5D, 1W, 1M, 1Y"),
+    range: str = Query("D", description="K-bar granularity: D (日), W (週), M (月), Y (年)"),
+    include_indicators: str | None = Query(
+        None,
+        description="Comma-separated indicators: ma,rsi,macd,volume (or 'all'). "
+                    "'ma' expands to ma5,ma20,ma60.",
+    ),
 ) -> PriceHistoryResponse:
     stock_code = stock_code.strip()
     if not TW_SYMBOL_RE.match(stock_code):
         raise HTTPException(status_code=422, detail="Invalid Taiwan stock code.")
 
-    valid_ranges = {"1D", "5D", "1W", "1M", "1Y"}
-    if range not in valid_ranges:
-        range = "1M"
+    range = normalize_range(range)
+    granularity, lookback_days, max_candles = RANGE_CONFIG[range]
+
+    requested = parse_indicator_query(include_indicators)
+    indicator_token = ",".join(sorted(requested)) if requested else ""
 
     import time as _time
-    cache_key = f"{stock_code}:{range}"
+    cache_key = f"{stock_code}:{range}:{indicator_token}"
     if cache_key in _tw_price_cache:
         cached_data, cached_at = _tw_price_cache[cache_key]
         if _time.time() - cached_at < _PRICE_CACHE_TTL:
             return PriceHistoryResponse(**cached_data)
 
-    # Fetch market data (always returns 6 months)
-    market, is_mock = await get_tw_market_data(stock_code)
-    all_candles = market.get("chart_data", [])
+    # Fetch enough daily history to cover the requested granularity
+    daily_candles, is_mock = await get_tw_price_history(stock_code, lookback_days)
 
-    # Trim to requested range
-    candles = _filter_range(all_candles, range)
+    # Aggregate into the chosen granularity
+    candles = aggregate_candles(daily_candles, granularity)
+    candles = trim_to_max(candles, max_candles)
 
-    response_data = {
+    indicators_bundle = None
+    if requested and candles:
+        indicators_bundle = build_indicators(candles, requested)
+
+    response_data: dict = {
         "stock_code": stock_code,
         "range": range,
         "candles": candles,
         "is_mock": is_mock,
+        "indicators": indicators_bundle,
     }
     _tw_price_cache[cache_key] = (response_data, _time.time())
+
+    indicators_model = None
+    if indicators_bundle:
+        macd_payload = indicators_bundle.pop("macd", None)
+        macd_model = MACDBundle(**macd_payload) if macd_payload else None
+        indicators_model = IndicatorsBundle(macd=macd_model, **indicators_bundle)
 
     return PriceHistoryResponse(
         stock_code=stock_code,
         range=range,
         candles=[CandlePoint(**c) for c in candles],
         is_mock=is_mock,
+        indicators=indicators_model,
     )
-
-
-def _filter_range(candles: list[dict], range_str: str) -> list[dict]:
-    if not candles:
-        return candles
-    today = date.today()
-    cutoffs = {
-        "1D": today - timedelta(days=2),
-        "5D": today - timedelta(days=7),
-        "1W": today - timedelta(weeks=1),
-        "1M": today - timedelta(days=31),
-        "1Y": today - timedelta(days=366),
-    }
-    cutoff = cutoffs.get(range_str)
-    if not cutoff:
-        return candles
-    cutoff_str = cutoff.strftime("%Y-%m-%d")
-    return [c for c in candles if c.get("time", "") >= cutoff_str]
 
 
 # ── External news ─────────────────────────────────────────────────────────────
@@ -354,3 +429,59 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     body = await request.json()
     background_tasks.add_task(handle_webhook, body)
     return {"ok": True}
+
+
+# ── TW Calendar ───────────────────────────────────────────────────────────────
+
+@app.get("/tw/calendar/dividends", response_model=DividendCalendarResponse)
+async def calendar_dividends(
+    symbol: str | None = Query(None, description="Optional TW stock code"),
+    start: str | None = Query(None, description="YYYY-MM-DD; defaults to today"),
+    end: str | None = Query(None, description="YYYY-MM-DD; defaults to today + 90d"),
+) -> DividendCalendarResponse:
+    if symbol and not TW_SYMBOL_RE.match(symbol.strip()):
+        raise HTTPException(status_code=422, detail="Invalid Taiwan stock code.")
+    today = date.today()
+    try:
+        start_d = datetime.strptime(start, "%Y-%m-%d").date() if start else today
+        end_d = datetime.strptime(end, "%Y-%m-%d").date() if end else today + timedelta(days=90)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+    if end_d < start_d:
+        raise HTTPException(status_code=422, detail="end must be on or after start.")
+
+    data = await get_dividend_events(symbol.strip() if symbol else None, start_d, end_d)
+    events = [DividendEvent(**e) for e in data["events"]]
+    return DividendCalendarResponse(events=events, data_source=data.get("data_source", "mock"))
+
+
+@app.get("/tw/calendar/earnings", response_model=EarningsCalendarResponse)
+async def calendar_earnings(
+    symbol: str | None = Query(None, description="Optional TW stock code"),
+) -> EarningsCalendarResponse:
+    if symbol and not TW_SYMBOL_RE.match(symbol.strip()):
+        raise HTTPException(status_code=422, detail="Invalid Taiwan stock code.")
+    data = await get_earnings_events(symbol.strip() if symbol else None)
+    events = [EarningsEvent(**e) for e in data["events"]]
+    return EarningsCalendarResponse(events=events, data_source=data.get("data_source", "mock"))
+
+
+# ── TW ETF Holdings ───────────────────────────────────────────────────────────
+
+@app.get("/tw/etf/holdings", response_model=ETFHoldingsResponse)
+async def etf_holdings(
+    symbol: str = Query(..., description="Taiwan ETF stock code (e.g. 0050, 0056)"),
+) -> ETFHoldingsResponse:
+    symbol = symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(status_code=422, detail="Invalid Taiwan stock code.")
+    raw = get_etf_holdings(symbol)
+    return ETFHoldingsResponse(
+        symbol=raw["symbol"],
+        fund_name=raw.get("fund_name"),
+        total_constituents=raw.get("total_constituents"),
+        last_updated=raw.get("last_updated"),
+        holdings=[ETFHolding(**h) for h in raw.get("holdings", [])],
+        sector_weights=[ETFSectorWeight(**s) for s in raw.get("sector_weights", [])],
+        status=raw.get("status", "unsupported"),
+    )

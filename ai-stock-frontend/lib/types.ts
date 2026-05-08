@@ -95,6 +95,9 @@ export interface TaiwanStockAnalysisResponse {
   chip_risk_summary?: ChipRiskSummary | null;
   macro_summary?: MacroEnvironmentSummary | null;
   etf_summary?: ETFSummary | null;
+  // Phase 2 enrichments
+  next_dividend?: DividendEvent | null;
+  etf_holdings?: ETFHoldingsResponse | null;
 }
 
 // ── FMP Fundamentals ─────────────────────────────────────────────────────────
@@ -201,13 +204,86 @@ export interface StockListResponse {
   data_source: string;
 }
 
-// ── TW Price history ──────────────────────────────────────────────────────────
+// ── TW Price history + indicators ─────────────────────────────────────────────
+
+export interface MACDBundle {
+  macd: (number | null)[];
+  signal: (number | null)[];
+  histogram: (number | null)[];
+}
+
+export interface IndicatorsBundle {
+  ma5?: (number | null)[] | null;
+  ma20?: (number | null)[] | null;
+  ma60?: (number | null)[] | null;
+  rsi?: (number | null)[] | null;
+  macd?: MACDBundle | null;
+  volume?: number[] | null;
+}
 
 export interface PriceHistoryResponse {
   stock_code: string;
   range: string;
   candles: CandlePoint[];
   is_mock: boolean;
+  indicators?: IndicatorsBundle | null;
+}
+
+// ── TW Calendar ───────────────────────────────────────────────────────────────
+
+export interface DividendEvent {
+  stock_code: string;
+  company_name?: string | null;
+  ex_date?: string | null;
+  payment_date?: string | null;
+  announcement_date?: string | null;
+  cash_per_share?: number | null;
+  stock_per_share?: number | null;
+  type: 'cash' | 'stock' | 'mixed' | string;
+}
+
+export interface DividendCalendarResponse {
+  events: DividendEvent[];
+  data_source: string;
+}
+
+export interface EarningsEvent {
+  stock_code: string;
+  fiscal_year: number;
+  fiscal_quarter: number;
+  deadline: string;
+  actual_filing_date?: string | null;
+  eps?: number | null;
+  is_upcoming: boolean;
+}
+
+export interface EarningsCalendarResponse {
+  events: EarningsEvent[];
+  data_source: string;
+}
+
+// ── ETF Holdings ──────────────────────────────────────────────────────────────
+
+export interface ETFHolding {
+  stock_code?: string | null;
+  company_name: string;
+  weight_pct?: number | null;
+  shares?: number | null;
+}
+
+export interface ETFSectorWeight {
+  sector: string;
+  weight_pct: number;
+}
+
+export interface ETFHoldingsResponse {
+  symbol: string;
+  fund_name?: string | null;
+  total_constituents?: number | null;
+  last_updated?: string | null;
+  holdings: ETFHolding[];
+  sector_weights: ETFSectorWeight[];
+  status: 'live' | 'mock' | 'unsupported' | string;
 }
 
 // ── External news ─────────────────────────────────────────────────────────────

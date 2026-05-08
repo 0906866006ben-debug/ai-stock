@@ -8,6 +8,10 @@ import type {
   StockListResponse,
   PriceHistoryResponse,
   ExternalNewsResponse,
+  DividendCalendarResponse,
+  EarningsCalendarResponse,
+  ETFHoldingsResponse,
+  CandlePoint,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -37,7 +41,7 @@ export interface StockAnalysisResponse {
   recommendation: string;
   recent_news: NewsItem[];
   financial_summary: Record<string, string>;
-  chart_data: ChartPoint[];
+  chart_data: CandlePoint[];
   data_source: string;
   fundamentals?: FundamentalsData | null;
 }
@@ -94,11 +98,53 @@ export async function getTwStocks(params: {
 
 export async function getTwPriceHistory(
   stock_code: string,
-  range: '1D' | '5D' | '1W' | '1M' | '1Y' = '1M'
+  range: 'D' | 'W' | 'M' | 'Y' = 'D',
+  include_indicators?: string
 ): Promise<PriceHistoryResponse> {
-  const { data } = await axios.get<PriceHistoryResponse>(`${API_BASE}/tw/price-history`, {
-    params: { stock_code: stock_code.trim(), range },
-  });
+  const params: Record<string, string> = { stock_code: stock_code.trim(), range };
+  if (include_indicators) params.include_indicators = include_indicators;
+  const { data } = await axios.get<PriceHistoryResponse>(`${API_BASE}/tw/price-history`, { params });
+  return data;
+}
+
+export async function getUsPriceHistory(
+  symbol: string,
+  range: string = 'D',
+  include_indicators?: string
+): Promise<PriceHistoryResponse> {
+  const params: Record<string, string> = { symbol: symbol.trim().toUpperCase(), range };
+  if (include_indicators) params.include_indicators = include_indicators;
+  const { data } = await axios.get<PriceHistoryResponse>(`${API_BASE}/price-history`, { params });
+  return data;
+}
+
+// ── Phase 2: calendar + ETF holdings ──────────────────────────────────────────
+
+export async function getDividendCalendar(params: {
+  symbol?: string;
+  start?: string;
+  end?: string;
+}): Promise<DividendCalendarResponse> {
+  const { data } = await axios.get<DividendCalendarResponse>(
+    `${API_BASE}/tw/calendar/dividends`,
+    { params }
+  );
+  return data;
+}
+
+export async function getEarningsCalendar(symbol?: string): Promise<EarningsCalendarResponse> {
+  const { data } = await axios.get<EarningsCalendarResponse>(
+    `${API_BASE}/tw/calendar/earnings`,
+    { params: symbol ? { symbol } : {} }
+  );
+  return data;
+}
+
+export async function getETFHoldings(symbol: string): Promise<ETFHoldingsResponse> {
+  const { data } = await axios.get<ETFHoldingsResponse>(
+    `${API_BASE}/tw/etf/holdings`,
+    { params: { symbol: symbol.trim() } }
+  );
   return data;
 }
 
@@ -131,4 +177,7 @@ export type {
   StockListResponse,
   PriceHistoryResponse,
   ExternalNewsResponse,
+  DividendCalendarResponse,
+  EarningsCalendarResponse,
+  ETFHoldingsResponse,
 };
