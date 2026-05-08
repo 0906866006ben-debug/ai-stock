@@ -2,6 +2,7 @@
 
 import { TaiwanStockAnalysisResponse } from '@/lib/types';
 import FourPillarAnalysis from './FourPillarAnalysis';
+import SynthesisRecommendation from './SynthesisRecommendation';
 
 interface TwAnalysisCardProps {
   data: TaiwanStockAnalysisResponse;
@@ -91,6 +92,13 @@ export default function TwAnalysisCard({ data }: TwAnalysisCardProps) {
           <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
             {data.recommendation}
           </p>
+        </div>
+      )}
+
+      {/* Comprehensive Analysis & Synthesis */}
+      {data.comprehensive_analysis && (
+        <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-700">
+          <SynthesisRecommendation data={data.comprehensive_analysis} />
         </div>
       )}
 
