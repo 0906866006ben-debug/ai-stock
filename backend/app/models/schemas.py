@@ -431,3 +431,16 @@ class FundamentalAnalysis(BaseModel):
     metrics: FundamentalMetrics  # Raw metrics
     confidence: float = 0.5  # 0-1 confidence level
     is_mock: bool = False  # Whether data is mocked
+
+
+class TechnicalAnalysis(BaseModel):
+    """Technical analysis output from agent."""
+    summary: str  # Traditional Chinese narrative
+    trend: str  # uptrend | downtrend | sideways
+    momentum: dict  # Keys: rsi, rsi_signal, macd_signal, trend_confirmation
+    volatility: dict  # Keys: atr, bb_position, volatility_level
+    key_levels: dict  # Keys: support, resistance, breakout_potential
+    risks: list[str]  # Technical risks (e.g., overbought, divergence)
+    opportunities: list[str]  # Trading opportunities
+    confidence: float = 0.5  # 0-1 confidence level
+    is_mock: bool = False  # Whether data is mocked
