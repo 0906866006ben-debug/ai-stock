@@ -169,6 +169,55 @@ export interface ScenarioPrice {
   timeframe: string;
 }
 
+export interface SentimentScore {
+  score: number;
+  stage: string;
+  avg_likes_per_post?: number | null;
+  avg_comments_per_post?: number | null;
+  source: string;
+}
+
+export interface AnalystEntry {
+  firm: string;
+  rating: string;
+  target_price?: number | null;
+}
+
+export interface AnalystConsensus {
+  buy_count: number;
+  hold_count: number;
+  sell_count: number;
+  target_low?: number | null;
+  target_median?: number | null;
+  target_high?: number | null;
+  entries: AnalystEntry[];
+}
+
+export interface CatalystRow {
+  time_horizon: string;
+  event: string;
+  data_point: string;
+  impact: string;
+}
+
+export interface RiskRow {
+  risk: string;
+  probability_pct: number;
+  mitigation: string;
+}
+
+export interface CategoryRating {
+  category: string;
+  label_zh: string;
+  stars: number;
+}
+
+export interface SourceCitation {
+  title: string;
+  url?: string | null;
+  source: string;
+}
+
 export interface EquityResearch {
   // [1] Market Narrative
   social_sentiment: string;
@@ -176,6 +225,12 @@ export interface EquityResearch {
   catalysts: string[];
   institutional_view: string;
   narrative_conclusion: string;
+  sentiment_data?: SentimentScore | null;
+  analyst_consensus_data?: AnalystConsensus | null;
+  catalyst_table?: CatalystRow[] | null;
+  risk_table?: RiskRow[] | null;
+  category_ratings?: CategoryRating[] | null;
+  source_citations?: SourceCitation[] | null;
   // [2] Fundamental Snapshot
   valuation_verdict: string;
   valuation_assumptions: string;

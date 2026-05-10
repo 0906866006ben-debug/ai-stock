@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Literal, Any
 
 
@@ -506,6 +506,62 @@ class ScenarioPrice(BaseModel):
     timeframe: str = ""  # Time horizon (e.g., "3-6 months", "1-2 years")
 
 
+class SentimentScore(BaseModel):
+    """Numeric sentiment analysis with engagement metrics."""
+    score: int
+    stage: str
+    avg_likes_per_post: Optional[int] = None
+    avg_comments_per_post: Optional[int] = None
+    source: str = "mock"
+
+
+class AnalystEntry(BaseModel):
+    """Individual analyst firm's rating and target."""
+    firm: str
+    rating: str
+    target_price: Optional[float] = None
+
+
+class AnalystConsensus(BaseModel):
+    """Aggregate analyst consensus with individual firm data."""
+    buy_count: int = 0
+    hold_count: int = 0
+    sell_count: int = 0
+    target_low: Optional[float] = None
+    target_median: Optional[float] = None
+    target_high: Optional[float] = None
+    entries: list[AnalystEntry] = Field(default_factory=list)
+
+
+class CatalystRow(BaseModel):
+    """Individual catalyst event with impact assessment."""
+    time_horizon: str
+    event: str
+    data_point: str
+    impact: str
+
+
+class RiskRow(BaseModel):
+    """Individual risk with probability and mitigation."""
+    risk: str
+    probability_pct: int
+    mitigation: str
+
+
+class CategoryRating(BaseModel):
+    """Per-dimension investment rating."""
+    category: str
+    label_zh: str
+    stars: int
+
+
+class SourceCitation(BaseModel):
+    """Data source with optional hyperlink."""
+    title: str
+    url: Optional[str] = None
+    source: str
+
+
 class EquityResearch(BaseModel):
     """Elite equity research report synthesizing all pillars."""
     # [1] Market Narrative
@@ -514,6 +570,12 @@ class EquityResearch(BaseModel):
     catalysts: list[str]  # Specific events with dates and numbers
     institutional_view: str  # Analyst consensus + institutional positioning
     narrative_conclusion: str  # "Stock moving because X, market underestimates Y"
+    sentiment_data: Optional[SentimentScore] = None
+    analyst_consensus_data: Optional[AnalystConsensus] = None
+    catalyst_table: Optional[list[CatalystRow]] = None
+    risk_table: Optional[list[RiskRow]] = None
+    category_ratings: Optional[list[CategoryRating]] = None
+    source_citations: Optional[list[SourceCitation]] = None
     # [2] Fundamental Snapshot
     valuation_verdict: str  # overvalued | fairly valued | undervalued
     valuation_assumptions: str  # Assumptions + math justification

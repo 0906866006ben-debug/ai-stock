@@ -261,7 +261,7 @@ export default function DashboardPage() {
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="mx-auto max-w-3xl space-y-6">
+          <div className="mx-auto max-w-6xl space-y-6">
 
             {/* ── Analysis ── */}
             {page === 'analysis' && (
@@ -312,18 +312,23 @@ export default function DashboardPage() {
                     )}
 
                     {/* Dedicated price history chart with indicators */}
-                    <PriceHistoryChart
-                      stockCode={twResult.symbol}
-                      initialCandles={twResult.chart_data}
-                    />
-
-                    <TwFinancialSummary
-                      currency={twResult.currency}
-                      market_type={twResult.market_type}
-                      current_price={twResult.current_price}
-                      price_change_percent={twResult.price_change_percent}
-                      volume={twResult.volume}
-                    />
+                    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+                      <div className="min-w-0">
+                        <PriceHistoryChart
+                          stockCode={twResult.symbol}
+                          initialCandles={twResult.chart_data}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <TwFinancialSummary
+                          currency={twResult.currency}
+                          market_type={twResult.market_type}
+                          current_price={twResult.current_price}
+                          price_change_percent={twResult.price_change_percent}
+                          volume={twResult.volume}
+                        />
+                      </div>
+                    </div>
 
                     {/* ETF holdings (only when analyzing an ETF) */}
                     {twResult.is_etf && twResult.etf_holdings && (

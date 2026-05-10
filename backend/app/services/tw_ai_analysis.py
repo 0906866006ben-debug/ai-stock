@@ -2,6 +2,11 @@ import os
 
 from ..models.schemas import TaiwanStockAIAnalysis
 from .tw_technical_analysis import compute_all_indicators
+from .gemini_diagnostics import (
+    get_gemini_model_chain,
+    is_gemini_enabled,
+    log_gemini_diagnostics,
+)
 
 MOCK_AI_RESULT: dict = {
     "summary": "目前無法取得 AI 分析，以下為模擬資料。",
@@ -137,31 +142,71 @@ async def get_tw_ai_analysis(
 ) -> tuple[dict, str]:
     """Return (result_dict, analysis_source) where analysis_source is 'ai' or 'mock'."""
     api_key = os.getenv("GEMINI_API_KEY")
+    model_chain = get_gemini_model_chain()
+    if not is_gemini_enabled():
+        print("Gemini disabled by GEMINI_ENABLED=false; using fallback.")
+        log_gemini_diagnostics(
+            context="tw_quick_analysis",
+            model=model_chain[0],
+            attempted=False,
+            fallback_used=True,
+            fallback_models=model_chain[1:],
+        )
+        return MOCK_AI_RESULT, "mock"
+
     if not api_key:
+        log_gemini_diagnostics(
+            context="tw_quick_analysis",
+            model=model_chain[0],
+            attempted=False,
+            fallback_used=True,
+            fallback_models=model_chain[1:],
+        )
         return MOCK_AI_RESULT, "mock"
 
-    try:
-        from pydantic_ai import Agent
+    prompt = _build_prompt(
+        symbol, company_name, market_type,
+        current_price, price_change_percent, chart_data, news,
+    )
+    last_error = None
 
-        agent = Agent(
-            "google-gla:gemini-2.5-flash",
-            output_type=TaiwanStockAIAnalysis,
-            system_prompt=_SYSTEM_PROMPT,
-        )
-        prompt = _build_prompt(
-            symbol, company_name, market_type,
-            current_price, price_change_percent, chart_data, news,
-        )
-        result = await agent.run(prompt)
-        analysis: TaiwanStockAIAnalysis = result.output
-        return {
-            "summary": analysis.summary,
-            "trend": analysis.trend,
-            "confidence": analysis.confidence,
-            "risks": analysis.risks,
-            "catalysts": analysis.catalysts,
-            "recommendation": analysis.recommendation,
-        }, "ai"
+    for model_name in model_chain:
+        try:
+            from pydantic_ai import Agent
 
-    except Exception:
-        return MOCK_AI_RESULT, "mock"
+            log_gemini_diagnostics(
+                context="tw_quick_analysis",
+                model=model_name,
+                attempted=True,
+                fallback_models=model_chain[1:],
+            )
+            agent = Agent(
+                model_name,
+                output_type=TaiwanStockAIAnalysis,
+                system_prompt=_SYSTEM_PROMPT,
+            )
+            result = await agent.run(prompt)
+            analysis: TaiwanStockAIAnalysis = result.output
+            return {
+                "summary": analysis.summary,
+                "trend": analysis.trend,
+                "confidence": analysis.confidence,
+                "risks": analysis.risks,
+                "catalysts": analysis.catalysts,
+                "recommendation": analysis.recommendation,
+            }, "ai"
+
+        except Exception as e:
+            last_error = e
+            log_gemini_diagnostics(
+                context="tw_quick_analysis",
+                model=model_name,
+                attempted=True,
+                fallback_used=True,
+                error=e,
+                fallback_models=model_chain[1:],
+            )
+            print(f"TW quick AI analysis error for {model_name}: {e}; trying fallback if available")
+
+    print(f"All Gemini models failed for TW quick analysis; using fallback. Last error: {last_error}")
+    return MOCK_AI_RESULT, "mock"
