@@ -10,10 +10,13 @@ usage() {
   cat <<'USAGE'
 Usage:
   ./git_push.sh
-      Push the current branch. Fails if there are uncommitted changes.
+      Stage all current changes, auto-generate a commit message, then push.
 
   ./git_push.sh --commit "commit message"
       Stage all current changes, commit them, then push the current branch.
+
+  ./git_push.sh --push-only
+      Push the current branch. Fails if there are uncommitted changes.
 
 Environment overrides:
   GIT_REMOTE_URL   Remote HTTPS URL. Defaults to this project's GitHub repo.
@@ -70,6 +73,7 @@ read_token() {
 }
 
 commit_message=""
+push_only="false"
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   usage
   exit 0
@@ -80,6 +84,8 @@ elif [[ "${1:-}" == "--commit" ]]; then
     usage
     exit 1
   fi
+elif [[ "${1:-}" == "--push-only" ]]; then
+  push_only="true"
 elif [[ $# -gt 0 ]]; then
   echo "Unknown argument: $1" >&2
   usage
@@ -101,7 +107,11 @@ echo "Token: $(mask_secret "$GIT_TOKEN")"
 
 git remote set-url origin "$REPO_URL"
 
-if [[ -n "$commit_message" ]]; then
+if [[ "$push_only" == "false" && -z "$commit_message" ]]; then
+  commit_message="auto: update project files $(date +%Y-%m-%d_%H-%M-%S)"
+fi
+
+if [[ "$push_only" == "false" ]]; then
   git add -A
   if git diff --cached --name-only | grep -E '(^|/)\.env($|\.|/)|backend/\.env$' >/dev/null; then
     echo "Refusing to commit staged .env file(s). Unstage/remove secrets first." >&2
@@ -111,6 +121,7 @@ if [[ -n "$commit_message" ]]; then
   if git diff --cached --quiet; then
     echo "No staged changes to commit."
   else
+    echo "Commit message: $commit_message"
     git commit -m "$commit_message"
   fi
 else
