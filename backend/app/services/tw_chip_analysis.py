@@ -2,17 +2,21 @@
 Taiwan stock chip/institutional analysis.
 
 Analyzes institutional flows: foreign investors, 投信, dealers.
-Includes margin financing, short interest, major shareholders.
+Includes margin financing, short interest.
 
 Uses FinMind API when available, falls back to realistic mock data.
+Datasets used:
+  TaiwanStockInstitutionalInvestors  — daily rows with name/buy/sell fields
+  TaiwanStockMarginPurchaseSale      — margin balance
+  TaiwanStockShortSale               — short sale balance
 """
 import os
+import asyncio
 import httpx
 from datetime import date, timedelta
 
 FINMIND_BASE = "https://api.finmindtrade.com/api/v4/data"
 
-# Mock institutional data
 _MOCK_CHIP_DATA = {
     "2330": {
         "company_name": "台積電",
@@ -56,11 +60,8 @@ _MOCK_CHIP_DATA = {
 
 
 def _mock_chip_data(symbol: str) -> dict:
-    """Generate realistic mock chip/institutional data."""
     if symbol in _MOCK_CHIP_DATA:
         return _MOCK_CHIP_DATA[symbol].copy()
-
-    # Generic mock for unknown symbols
     return {
         "company_name": symbol,
         "foreign_5d_net": 500000,
@@ -82,75 +83,107 @@ def _mock_chip_data(symbol: str) -> dict:
     }
 
 
+def _parse_payload(resp: httpx.Response) -> list[dict]:
+    """Return data list from a FinMind response, or [] on any failure."""
+    try:
+        payload = resp.json()
+        if payload.get("status") == 200 and isinstance(payload.get("data"), list):
+            return payload["data"]
+    except Exception:
+        pass
+    return []
+
+
+def _rolling_net(rows: list[dict], n: int) -> int:
+    """Sum (buy - sell) for the last n rows, sorted ascending by date."""
+    recent = sorted(rows, key=lambda r: r.get("date", ""))[-n:]
+    return sum(int(r.get("buy", 0) or 0) - int(r.get("sell", 0) or 0) for r in recent)
+
+
+def _infer_trend(net_value: int | float) -> str:
+    if net_value > 1_000_000:
+        return "accumulating"
+    if net_value < -1_000_000:
+        return "distributing"
+    return "neutral"
+
+
 async def get_tw_chip_analysis(symbol: str) -> tuple[dict, bool]:
     """
     Fetch Taiwan stock chip/institutional analysis data.
 
-    Returns: (chip_data_dict, is_mock)
-
-    chip_data_dict keys:
-      company_name, foreign_5d_net, foreign_10d_net, foreign_20d_net,
-      trust_5d_net, trust_10d_net, dealer_5d_net, dealer_10d_net,
-      margin_balance, margin_balance_change,
-      short_interest, short_interest_change,
-      foreign_accumulation_trend, trust_accumulation_trend, dealer_trend,
-      shareholder_concentration, major_shareholders_count
+    Returns (chip_data_dict, is_mock).
     """
     token = os.getenv("FINMIND_API_KEY")
     if not token:
         return _mock_chip_data(symbol), True
 
+    start = (date.today() - timedelta(days=35)).strftime("%Y-%m-%d")
+    params_base = {"data_id": symbol, "start_date": start, "token": token}
+
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Try to fetch institutional data
-            resp = await client.get(
-                FINMIND_BASE,
-                params={
-                    "dataset": "TaiwanStockInstitutional",
-                    "data_id": symbol,
-                    "token": token,
-                },
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            inst_r, margin_r = await asyncio.gather(
+                client.get(FINMIND_BASE, params={**params_base, "dataset": "TaiwanStockInstitutionalInvestorsBuySell"}),
+                client.get(FINMIND_BASE, params={**params_base, "dataset": "TaiwanStockMarginPurchaseShortSale"}),
             )
-            resp.raise_for_status()
-            payload = resp.json()
 
-            if payload.get("status") != 200 or not payload.get("data"):
-                return _mock_chip_data(symbol), True
+        inst_rows = _parse_payload(inst_r)
+        margin_rows = _parse_payload(margin_r)
+        short_rows = margin_rows  # same dataset contains both margin and short
 
-            # Parse institutional data
-            latest_data = payload["data"][-1] if isinstance(payload["data"], list) else payload["data"]
+        if not inst_rows:
+            return _mock_chip_data(symbol), True
 
-            chip_data = {
-                "company_name": symbol,
-                "foreign_5d_net": int(latest_data.get("foreign_5d", 0)) if latest_data.get("foreign_5d") else 0,
-                "foreign_10d_net": int(latest_data.get("foreign_10d", 0)) if latest_data.get("foreign_10d") else 0,
-                "foreign_20d_net": int(latest_data.get("foreign_20d", 0)) if latest_data.get("foreign_20d") else 0,
-                "trust_5d_net": int(latest_data.get("trust_5d", 0)) if latest_data.get("trust_5d") else 0,
-                "trust_10d_net": int(latest_data.get("trust_10d", 0)) if latest_data.get("trust_10d") else 0,
-                "dealer_5d_net": int(latest_data.get("dealer_5d", 0)) if latest_data.get("dealer_5d") else 0,
-                "dealer_10d_net": int(latest_data.get("dealer_10d", 0)) if latest_data.get("dealer_10d") else 0,
-                "margin_balance": float(latest_data.get("margin_balance", 0)) if latest_data.get("margin_balance") else 0,
-                "margin_balance_change": float(latest_data.get("margin_change", 0)) if latest_data.get("margin_change") else 0,
-                "short_interest": float(latest_data.get("short_interest", 0)) if latest_data.get("short_interest") else 0,
-                "short_interest_change": float(latest_data.get("short_change", 0)) if latest_data.get("short_change") else 0,
-                "foreign_accumulation_trend": _infer_trend(latest_data.get("foreign_5d", 0)),
-                "trust_accumulation_trend": _infer_trend(latest_data.get("trust_5d", 0)),
-                "dealer_trend": _infer_trend(latest_data.get("dealer_5d", 0)),
-                "shareholder_concentration": latest_data.get("concentration", "moderate"),
-                "major_shareholders_count": int(latest_data.get("major_count", 5)) if latest_data.get("major_count") else 5,
-            }
+        # Split institutional rows by investor type
+        foreign_rows = [r for r in inst_rows if r.get("name") in ("Foreign_Investor", "Foreign_Dealer_Self")]
+        trust_rows   = [r for r in inst_rows if r.get("name") == "Investment_Trust"]
+        dealer_rows  = [r for r in inst_rows if r.get("name") in ("Dealer_self", "Dealer", "Dealer_Hedging")]
 
-            return chip_data, False
+        foreign_5d  = _rolling_net(foreign_rows, 5)
+        foreign_10d = _rolling_net(foreign_rows, 10)
+        foreign_20d = _rolling_net(foreign_rows, 20)
+        trust_5d    = _rolling_net(trust_rows,   5)
+        trust_10d   = _rolling_net(trust_rows,   10)
+        dealer_5d   = _rolling_net(dealer_rows,  5)
+        dealer_10d  = _rolling_net(dealer_rows,  10)
+
+        # Margin + short balance from TaiwanStockMarginPurchaseShortSale
+        # Fields: MarginPurchaseTodayBalance, ShortSaleTodayBalance
+        margin_balance = 0
+        margin_change  = 0
+        short_interest = 0
+        short_change   = 0
+        if margin_rows:
+            sorted_m = sorted(margin_rows, key=lambda r: r.get("date", ""))
+            latest_m = sorted_m[-1]
+            margin_balance = int(latest_m.get("MarginPurchaseTodayBalance") or 0)
+            short_interest = int(latest_m.get("ShortSaleTodayBalance") or 0)
+            if len(sorted_m) >= 2:
+                prev_m = sorted_m[-2]
+                margin_change = margin_balance - int(prev_m.get("MarginPurchaseTodayBalance") or 0)
+                short_change  = short_interest - int(prev_m.get("ShortSaleTodayBalance") or 0)
+
+        chip_data = {
+            "company_name": symbol,
+            "foreign_5d_net": foreign_5d,
+            "foreign_10d_net": foreign_10d,
+            "foreign_20d_net": foreign_20d,
+            "trust_5d_net": trust_5d,
+            "trust_10d_net": trust_10d,
+            "dealer_5d_net": dealer_5d,
+            "dealer_10d_net": dealer_10d,
+            "margin_balance": margin_balance,
+            "margin_balance_change": margin_change,
+            "short_interest": short_interest,
+            "short_interest_change": short_change,
+            "foreign_accumulation_trend": _infer_trend(foreign_5d),
+            "trust_accumulation_trend": _infer_trend(trust_5d),
+            "dealer_trend": _infer_trend(dealer_5d),
+            "shareholder_concentration": "moderate",
+            "major_shareholders_count": 5,
+        }
+        return chip_data, False
 
     except Exception:
         return _mock_chip_data(symbol), True
-
-
-def _infer_trend(net_value: int | float) -> str:
-    """Infer accumulation/distribution trend from net buying value."""
-    if net_value > 1000000:
-        return "accumulating"
-    elif net_value < -1000000:
-        return "distributing"
-    else:
-        return "neutral"

@@ -41,6 +41,12 @@ mask_secret() {
 }
 
 read_token() {
+  local env_token="${GITHUB_TOKEN:-${GITHUB_PAT:-${GH_TOKEN:-${PERSONAL_ACCESS_TOKEN:-}}}}"
+  if [[ -n "$env_token" ]]; then
+    printf '%s' "$env_token"
+    return 0
+  fi
+
   if [[ ! -f "$ENV_FILE" ]]; then
     echo "Missing env file: $ENV_FILE" >&2
     return 1
@@ -113,9 +119,16 @@ fi
 
 if [[ "$push_only" == "false" ]]; then
   git add -A
-  if git diff --cached --name-only | grep -E '(^|/)\.env($|\.|/)|backend/\.env$' >/dev/null; then
+
+  # Block real environment files that may contain secrets, but allow example
+  # templates such as .env.example and backend/.env.example.
+  staged_env_files="$(
+    git diff --cached --name-only       | grep -E '(^|/)\.env($|\.|/)|backend/\.env$'       | grep -vE '(^|/)\.env\.example$|(^|/)\.env\.sample$|(^|/)\.env\.template$'       || true
+  )"
+
+  if [[ -n "$staged_env_files" ]]; then
     echo "Refusing to commit staged .env file(s). Unstage/remove secrets first." >&2
-    git diff --cached --name-only | grep -E '(^|/)\.env($|\.|/)|backend/\.env$' >&2
+    echo "$staged_env_files" >&2
     exit 1
   fi
   if git diff --cached --quiet; then

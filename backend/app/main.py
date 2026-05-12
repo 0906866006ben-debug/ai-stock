@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .models.schemas import (
     HealthResponse,
     StockAnalysisResponse, TaiwanStockAnalysisResponse,
+    NewsItem,
     FundamentalsData, AnalystTarget, LastEarnings, ESGData,
     CompetitorResponse, PeerStock,
     MarketOverviewResponse, EconomicIndicator, TopStock,
@@ -41,7 +42,7 @@ from .services.fmp_client import fmp_get
 from .services.finmind_detail import get_tw_detail, detect_is_etf
 from .services.tw_macro import get_macro_summary
 from .services.tw_stocks_list import get_tw_stocks
-from .services.yahoo_news import get_external_news
+from .services.yahoo_news import get_external_news, get_tw_stock_news
 from .services.telegram_service import sync_watchlist, handle_webhook
 from .services.finmind_market import get_tw_market_data, get_tw_price_history
 from .services.tw_candles import RANGE_CONFIG, normalize_range, aggregate_candles, trim_to_max
@@ -50,7 +51,7 @@ from .services.tw_calendar import (
     get_dividend_events, get_earnings_events, get_next_dividend_live,
     get_next_dividend_for,
 )
-from .services.tw_etf_holdings import get_etf_holdings, is_supported_etf
+from .services.tw_etf_holdings import get_etf_holdings
 from .services.fmp_price_history import get_us_price_history
 
 app = FastAPI(title="AI Stock Analysis API", version="3.0.0")
@@ -70,6 +71,33 @@ _tw_price_cache: dict[str, tuple[dict, float]] = {}
 _stocks_cache: tuple[dict | None, float] = (None, 0.0)
 _PRICE_CACHE_TTL = 300
 _STOCKS_CACHE_TTL = 86400
+
+
+def _tw_news_items_from_analysis(news_analysis: object | None) -> list[NewsItem]:
+    """Map TW news agent headlines to the public recent_news shape."""
+    if not news_analysis:
+        return []
+
+    headlines = getattr(news_analysis, "recent_headlines", None)
+    if not headlines and isinstance(news_analysis, dict):
+        headlines = news_analysis.get("recent_headlines")
+    if not headlines:
+        return []
+
+    items: list[NewsItem] = []
+    for raw in headlines[:8]:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title") or "").strip()
+        if not title:
+            continue
+        items.append(NewsItem(
+            title=title,
+            published_at=str(raw.get("published_at") or raw.get("date") or ""),
+            source=str(raw.get("source") or "市場新聞"),
+            url=raw.get("url"),
+        ))
+    return items
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -198,9 +226,10 @@ async def analyze_tw(
     macro_task = _asyncio.create_task(get_macro_summary())
     dividend_task = _asyncio.create_task(get_next_dividend_live(symbol))
     comprehensive_task = _asyncio.create_task(run_comprehensive_analysis(symbol))
+    news_task = _asyncio.create_task(get_tw_stock_news(symbol))
 
-    state, detail, macro_raw, next_div_raw, comprehensive_state = await _asyncio.gather(
-        state_task, detail_task, macro_task, dividend_task, comprehensive_task,
+    state, detail, macro_raw, next_div_raw, comprehensive_state, tw_news_raw = await _asyncio.gather(
+        state_task, detail_task, macro_task, dividend_task, comprehensive_task, news_task,
         return_exceptions=False,
     )
     # Fall back to mock if live lookup returned nothing
@@ -230,21 +259,46 @@ async def analyze_tw(
         next_dividend = DividendEvent(**next_div_raw)
 
     etf_holdings_resp = None
-    if is_etf and is_supported_etf(symbol):
-        raw_h = get_etf_holdings(symbol)
-        etf_holdings_resp = ETFHoldingsResponse(
-            symbol=raw_h["symbol"],
-            fund_name=raw_h.get("fund_name"),
-            total_constituents=raw_h.get("total_constituents"),
-            last_updated=raw_h.get("last_updated"),
-            holdings=[ETFHolding(**h) for h in raw_h.get("holdings", [])],
-            sector_weights=[ETFSectorWeight(**s) for s in raw_h.get("sector_weights", [])],
-            status=raw_h.get("status", "mock"),
-        )
+    if is_etf:
+        raw_h = await get_etf_holdings(symbol)
+        if raw_h.get("status") != "unsupported":
+            etf_holdings_resp = ETFHoldingsResponse(
+                symbol=raw_h["symbol"],
+                fund_name=raw_h.get("fund_name"),
+                total_constituents=raw_h.get("total_constituents"),
+                last_updated=raw_h.get("last_updated"),
+                holdings=[ETFHolding(**h) for h in raw_h.get("holdings", [])],
+                sector_weights=[ETFSectorWeight(**s) for s in raw_h.get("sector_weights", [])],
+                status=raw_h.get("status", "mock"),
+            )
 
     comprehensive_analysis = None
     if comprehensive_state and comprehensive_state.get("comprehensive_analysis"):
         comprehensive_analysis = comprehensive_state["comprehensive_analysis"]
+
+    fundamental_analysis = None
+    technical_analysis = None
+    chip_analysis = None
+    news_analysis = None
+    if comprehensive_state:
+        fundamental_analysis = comprehensive_state.get("fundamental_analysis")
+        technical_analysis = comprehensive_state.get("technical_analysis")
+        chip_analysis = comprehensive_state.get("chip_analysis")
+        news_analysis = comprehensive_state.get("news_analysis")
+
+    # Prefer live Yahoo Finance news; fall back to news_analysis agent headlines
+    if tw_news_raw:
+        recent_news = [
+            NewsItem(
+                title=item["title"],
+                published_at=item.get("published_at") or "",
+                source=item.get("source") or "Yahoo Finance",
+                url=item.get("url"),
+            )
+            for item in tw_news_raw
+        ]
+    else:
+        recent_news = _tw_news_items_from_analysis(news_analysis)
 
     equity_research = None
     if comprehensive_state and comprehensive_state.get("equity_research"):
@@ -263,7 +317,7 @@ async def analyze_tw(
         risks=ai.get("risks", []),
         catalysts=ai.get("catalysts", []),
         recommendation=ai.get("recommendation", ""),
-        recent_news=[],
+        recent_news=recent_news,
         chart_data=market.get("chart_data", []),
         data_source="mock" if state.get("data_is_mock") else "live",
         analysis_source="mock" if state.get("analysis_is_mock") else "ai",
@@ -276,6 +330,10 @@ async def analyze_tw(
         macro_summary=macro_summary,
         next_dividend=next_dividend,
         etf_holdings=etf_holdings_resp,
+        fundamental=fundamental_analysis,
+        technical=technical_analysis,
+        chip=chip_analysis,
+        news=news_analysis,
         comprehensive_analysis=comprehensive_analysis,
         equity_research=equity_research,
     )
@@ -491,7 +549,7 @@ async def etf_holdings(
     symbol = symbol.strip()
     if not TW_SYMBOL_RE.match(symbol):
         raise HTTPException(status_code=422, detail="Invalid Taiwan stock code.")
-    raw = get_etf_holdings(symbol)
+    raw = await get_etf_holdings(symbol)
     return ETFHoldingsResponse(
         symbol=raw["symbol"],
         fund_name=raw.get("fund_name"),

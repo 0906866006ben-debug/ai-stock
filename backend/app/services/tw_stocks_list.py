@@ -85,7 +85,7 @@ async def _fetch_from_finmind(token: str) -> list[dict]:
 
             raw_stocks.append({
                 "stock_code": code,
-                "company_name": item.get("company_name", code),
+                "company_name": item.get("stock_name") or item.get("company_name", code),
                 "market_type": market_type,
                 "industry": item.get("industry_category") or None,
             })

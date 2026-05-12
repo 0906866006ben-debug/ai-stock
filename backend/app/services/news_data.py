@@ -50,8 +50,38 @@ async def get_news_data(symbol: str) -> list[dict]:
                     "source": item.get("source", ""),
                     "url": item.get("url") or None,
                 })
-            return result if result else _make_mock(symbol)
+            if result:
+                # Supplement with SerpAPI when Finnhub coverage is thin (< 3 items)
+                if len(result) < 3:
+                    from .serpapi_news import get_us_stock_news_serpapi
+                    serp = await get_us_stock_news_serpapi(symbol)
+                    seen = {n["title"] for n in result}
+                    for s in serp:
+                        if s["title"] not in seen:
+                            result.append({
+                                "title": s["title"],
+                                "published_at": s.get("published_at", ""),
+                                "source": s.get("source", "Google News"),
+                                "url": s.get("url"),
+                            })
+                            seen.add(s["title"])
+                    result = result[:10]
+                return result
+            return _make_mock(symbol)
         except Exception:
             pass
 
+    # No Finnhub key — try SerpAPI directly
+    from .serpapi_news import get_us_stock_news_serpapi
+    serp = await get_us_stock_news_serpapi(symbol)
+    if serp:
+        return [
+            {
+                "title": s["title"],
+                "published_at": s.get("published_at", ""),
+                "source": s.get("source", "Google News"),
+                "url": s.get("url"),
+            }
+            for s in serp
+        ]
     return _make_mock(symbol)

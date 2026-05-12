@@ -11,7 +11,6 @@ import {
 
 import TwSearchBar from './components/TwSearchBar';
 import AnalysisCard from './components/AnalysisCard';
-import TwAnalysisCard from './components/TwAnalysisCard';
 import StockChart from './components/StockChart';
 import NewsSection from './components/NewsSection';
 import FinancialSummary from './components/FinancialSummary';
@@ -29,9 +28,9 @@ import AddPosition from './components/AddPosition';
 import DividendCalendar from './components/DividendCalendar';
 import EarningsCalendar from './components/EarningsCalendar';
 import ETFHoldingsCard from './components/ETFHoldingsCard';
-import EquityResearchReport from './components/EquityResearchReport';
+import { AIAnalysisPage } from './components/ai-analysis/AIAnalysisPage';
 
-type Page = 'analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position';
+type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_FAVORITES = 'stockAssistant.favorites';
@@ -43,6 +42,7 @@ interface FavoriteItem { code: string; name: string }
 
 const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'analysis', label: 'AI 分析', icon: '🔍' },
+  { page: 'stock-analysis', label: '股票分析', icon: '📈' },
   { page: 'portfolio', label: '投資組合', icon: '📊' },
   { page: 'directory', label: '股票目錄', icon: '📋' },
   { page: 'news', label: '市場新聞', icon: '📰' },
@@ -201,7 +201,7 @@ export default function DashboardPage() {
 
   // Navigate to analysis and pre-fill symbol
   function goAnalyze(code: string, name: string) {
-    setPage('analysis');
+    setPage('stock-analysis');
     handleSearch(code);
     // Also update recent name if we have it
     saveRecents([{ code, name }, ...recents.filter((r) => r.code !== code)].slice(0, 20));
@@ -230,6 +230,13 @@ export default function DashboardPage() {
   function deletePosition(id: string) {
     savePositions(positions.filter((p) => p.id !== id));
   }
+
+  const latestTwCandle = twResult?.chart_data?.[twResult.chart_data.length - 1] ?? null;
+  const currentAnalyzedStock = twResult
+    ? { stock_code: twResult.symbol, company_name: twResult.company_name }
+    : usResult
+      ? { stock_code: usResult.symbol, company_name: usResult.company_name }
+      : null;
 
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -263,8 +270,8 @@ export default function DashboardPage() {
         <main className="flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto max-w-6xl space-y-6">
 
-            {/* ── Analysis ── */}
-            {page === 'analysis' && (
+            {/* ── Stock / AI analysis ── */}
+            {(page === 'analysis' || page === 'stock-analysis') && (
               <>
                 <MarketOverview />
                 <TwSearchBar onSearch={handleSearch} loading={loading} />
@@ -284,10 +291,8 @@ export default function DashboardPage() {
                 {/* Taiwan results */}
                 {twResult && !loading && (
                   <>
-                    <TwAnalysisCard data={twResult} />
-
                     {/* Next dividend banner */}
-                    {twResult.next_dividend && (
+                    {page === 'stock-analysis' && twResult.next_dividend && (
                       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/40">
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-amber-800 dark:text-amber-200">
@@ -311,49 +316,152 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    {/* Dedicated price history chart with indicators */}
-                    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-                      <div className="min-w-0">
-                        <PriceHistoryChart
-                          stockCode={twResult.symbol}
-                          initialCandles={twResult.chart_data}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <TwFinancialSummary
-                          currency={twResult.currency}
-                          market_type={twResult.market_type}
-                          current_price={twResult.current_price}
-                          price_change_percent={twResult.price_change_percent}
-                          volume={twResult.volume}
-                        />
-                      </div>
-                    </div>
+                    {page === 'stock-analysis' && (
+                      <div className="space-y-6">
+                        <section className="space-y-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                              Fundamental
+                            </p>
+                            <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                              基本面
+                            </h2>
+                          </div>
+                          <div className="grid grid-cols-1 gap-3 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-3">
+                            <div>
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400">股票編號</p>
+                              <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                                {twResult.symbol}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400">名稱</p>
+                              <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                                {twResult.company_name}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400">分類</p>
+                              <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                                {twResult.is_etf ? 'ETF' : twResult.market_type}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+                            <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+                              <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                                最新價格資料
+                              </h3>
+                              {latestTwCandle ? (
+                                <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+                                  <div>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">日期</p>
+                                    <p className="mt-1 font-semibold text-zinc-800 dark:text-zinc-200">{latestTwCandle.time}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">開盤</p>
+                                    <p className="mt-1 font-semibold text-zinc-800 dark:text-zinc-200">{latestTwCandle.open.toFixed(2)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">收盤</p>
+                                    <p className="mt-1 font-semibold text-zinc-800 dark:text-zinc-200">{latestTwCandle.close.toFixed(2)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">最高 / 最低</p>
+                                    <p className="mt-1 font-semibold text-zinc-800 dark:text-zinc-200">
+                                      {latestTwCandle.high.toFixed(2)} / {latestTwCandle.low.toFixed(2)}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">成交量</p>
+                                    <p className="mt-1 font-semibold text-zinc-800 dark:text-zinc-200">
+                                      {latestTwCandle.volume.toLocaleString()}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="mt-3 text-sm text-zinc-400 dark:text-zinc-500">暫無價格資料</p>
+                              )}
+                            </div>
+                            <TwFinancialSummary
+                              currency={twResult.currency}
+                              market_type={twResult.market_type}
+                              current_price={twResult.current_price}
+                              price_change_percent={twResult.price_change_percent}
+                              volume={twResult.volume}
+                            />
+                          </div>
+                          <TwDetailedAnalysis
+                            revenue_summary={twResult.revenue_summary}
+                            valuation_summary={twResult.valuation_summary}
+                          />
+                          {twResult.is_etf && twResult.etf_holdings && (
+                            <ETFHoldingsCard data={twResult.etf_holdings} />
+                          )}
+                        </section>
 
-                    {/* ETF holdings (only when analyzing an ETF) */}
-                    {twResult.is_etf && twResult.etf_holdings && (
-                      <ETFHoldingsCard data={twResult.etf_holdings} />
+                        <section className="space-y-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                              Technical
+                            </p>
+                            <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                              技術面
+                            </h2>
+                          </div>
+                          <PriceHistoryChart
+                            stockCode={twResult.symbol}
+                            initialCandles={twResult.chart_data}
+                          />
+                        </section>
+
+                        <section className="space-y-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                              Chip
+                            </p>
+                            <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                              籌碼面
+                            </h2>
+                          </div>
+                          <TwDetailedAnalysis
+                            institutional_summary={twResult.institutional_summary}
+                            chip_risk_summary={twResult.chip_risk_summary}
+                          />
+                        </section>
+
+                        <section className="space-y-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                              News
+                            </p>
+                            <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                              消息面
+                            </h2>
+                          </div>
+                          {twResult.news?.summary && (
+                            <div className="rounded-xl border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                              {twResult.news.summary}
+                            </div>
+                          )}
+                          <NewsSection news={twResult.recent_news} />
+                        </section>
+                      </div>
                     )}
 
-                    {/* Detailed analysis: revenue, valuation, institutional, chip, macro */}
-                    <TwDetailedAnalysis
-                      revenue_summary={twResult.revenue_summary}
-                      valuation_summary={twResult.valuation_summary}
-                      institutional_summary={twResult.institutional_summary}
-                      chip_risk_summary={twResult.chip_risk_summary}
-                      macro_summary={twResult.macro_summary}
-                    />
+                    {page === 'analysis' && (
+                      <section className="min-w-0 space-y-5">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                            AI View
+                          </p>
+                          <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                            AI 分析判讀
+                          </h2>
+                        </div>
 
-                    <NewsSection news={twResult.recent_news} />
-
-                    {/* Elite equity research report */}
-                    {twResult.equity_research && (
-                      <EquityResearchReport
-                        data={twResult.equity_research}
-                        currentPrice={twResult.current_price}
-                        companyName={twResult.company_name}
-                        symbol={twResult.symbol}
-                      />
+                        <AIAnalysisPage symbol={twResult.symbol} sourceData={twResult} />
+                      </section>
                     )}
 
                     {/* Favorite toggle for analyzed stock */}
@@ -388,14 +496,19 @@ export default function DashboardPage() {
                       </span>
                     </div>
 
-                    <AnalysisCard data={usResult} />
-                    <StockChart chartData={usResult.chart_data} symbol={usResult.symbol} />
-                    <NewsSection news={usResult.recent_news} />
-                    <FinancialSummary summary={usResult.financial_summary} />
+                    {page === 'analysis' && <AnalysisCard data={usResult} />}
 
-                    {usResult.fundamentals && <FundamentalsCard data={usResult.fundamentals} />}
+                    {page === 'stock-analysis' && (
+                      <>
+                        <StockChart chartData={usResult.chart_data} symbol={usResult.symbol} />
+                        <NewsSection news={usResult.recent_news} />
+                        <FinancialSummary summary={usResult.financial_summary} />
+                      </>
+                    )}
 
-                    {(peersLoading || competitors) && (
+                    {page === 'stock-analysis' && usResult.fundamentals && <FundamentalsCard data={usResult.fundamentals} />}
+
+                    {page === 'stock-analysis' && (peersLoading || competitors) && (
                       <CompetitorCard
                         symbol={usResult.symbol}
                         peers={competitors?.peers ?? []}
@@ -458,7 +571,10 @@ export default function DashboardPage() {
                 <h2 className="mb-4 text-base font-semibold text-zinc-800 dark:text-zinc-200">
                   新增持倉
                 </h2>
-                <AddPosition onAdd={addPosition} />
+                <AddPosition
+                  onAdd={addPosition}
+                  currentAnalyzedStock={currentAnalyzedStock}
+                />
               </div>
             )}
 

@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getTwStocks, syncTelegramWatchlist } from '@/lib/api';
+import { getTwStocks } from '@/lib/api';
 import type { StockInfo } from '@/lib/types';
 
-const MARKET_TYPES = ['全部', '上市', '上櫃', 'ETF', '興櫃', '創新板'];
+const MARKET_TYPES = ['全部', '上市', '上櫃', 'ETF', '興櫃'];
 
 interface Props {
   onSelectStock?: (code: string, name: string) => void;
@@ -28,8 +28,15 @@ export default function StockDirectory({ onSelectStock, favorites, onToggleFavor
         stock_type: type === '全部' ? undefined : type,
         limit: 100,
       });
-      setStocks(result.stocks);
-      setTotal(result.total);
+      const seenCodes = new Set<string>();
+      const uniqueStocks = result.stocks.filter((stock) => {
+        if (seenCodes.has(stock.stock_code)) return false;
+        seenCodes.add(stock.stock_code);
+        return true;
+      });
+
+      setStocks(uniqueStocks);
+      setTotal(uniqueStocks.length);
     } catch {
       setStocks([]);
     } finally {
@@ -82,24 +89,24 @@ export default function StockDirectory({ onSelectStock, favorites, onToggleFavor
         </div>
       ) : (
         <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-          {stocks.map((s) => (
+          {stocks.map((s, index) => (
             <div
-              key={s.stock_code}
-              className="flex items-center justify-between py-2.5"
+              key={`${s.stock_code}-${s.company_name}-${s.market_type}-${index}`}
+              className="flex items-center justify-between gap-3 py-3"
             >
               <button
                 onClick={() => onSelectStock?.(s.stock_code, s.company_name)}
-                className="flex flex-1 items-center gap-3 text-left"
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
               >
-                <div>
-                  <span className="font-mono text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                    {s.stock_code}
-                  </span>
-                  <span className="ml-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">
                     {s.company_name}
-                  </span>
+                  </p>
+                  <p className="mt-0.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                    {s.stock_code}
+                  </p>
                 </div>
-                <div className="ml-auto flex gap-1">
+                <div className="ml-auto flex flex-wrap justify-end gap-1">
                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800">
                     {s.market_type}
                   </span>

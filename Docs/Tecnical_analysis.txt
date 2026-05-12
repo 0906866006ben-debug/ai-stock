@@ -1,0 +1,2532 @@
+# Technical Analysis Deep Logic Specification
+
+This document defines the detailed technical-analysis logic for the Taiwan Stock AI Decision-Support & Strategy-Validation Platform.
+
+This file is intended for:
+- Claude Code
+- Codex
+- future `TechnicalFeatureBuilder`
+- future `TechnicalAnalyzer`
+- future `TechnicalAnalysisResult`
+- future technical-analysis frontend cards
+- future technical-rule backtesting registry
+
+This is a v1 specification.
+
+Every threshold, score weight, rule, and state definition is a v1 hypothesis until historical backtesting validates it.
+
+---
+
+# 0. Core Purpose
+
+Technical analysis in this platform is not a buy/sell signal generator.
+
+Technical analysis answers:
+
+1. What is the current price structure?
+2. Is the stock tradable in the short term?
+3. Can the current trend continue in the swing / mid-term?
+4. Is the long-term technical structure supportive or risky?
+5. Is the current move healthy, overheated, weak, or likely to fail?
+6. Is price action confirmed by volume?
+7. Is the move supported by market / sector / liquidity context?
+8. What conditions would invalidate the current technical view?
+
+Technical analysis must always be interpreted together with:
+
+- chip / institutional analysis
+- news / catalyst analysis
+- fundamental / valuation analysis
+- market regime
+- sector money flow
+- liquidity guard
+- day-trading / speculative-noise filter
+- calendar distortion filter
+- data traceability
+
+Technical analysis alone must never produce a final investment recommendation.
+
+---
+
+# 1. Non-Negotiable Principles
+
+## 1.1 No Single-Indicator Decisions
+
+The system must not output a conclusion based only on:
+
+- MA crossover
+- RSI > 70
+- RSI < 30
+- MACD golden cross
+- MACD death cross
+- KD golden cross
+- KD death cross
+- Bollinger upper-band touch
+- Bollinger lower-band touch
+- one-day volume spike
+- one candlestick pattern
+- one gap
+- one support / resistance touch
+
+These are supporting signals only.
+
+Correct logic:
+
+technical view =
+price state
++ trend structure
++ moving average structure
++ volume confirmation
++ support / resistance location
++ breakout / breakdown quality
++ momentum
++ volatility
++ candle behavior
++ market / sector regime
++ liquidity condition
++ invalidation signal
+
+In simple terms:
+
+指標只是證據，不是結論。
+
+---
+
+## 1.2 Horizon-Aware Interpretation
+
+The same technical signal has different meaning across different horizons.
+
+Example:
+
+Price above MA20:
+- Short-term: supportive
+- Swing-term: insufficient unless MA60 / swing structure also supports
+- Long-term: only minor timing information
+
+Example:
+
+Price below MA60:
+- Short-term: weak but may rebound
+- Swing-term: important risk
+- Long-term: not enough unless MA120 / MA240 and fundamentals also deteriorate
+
+---
+
+## 1.3 Every Non-Neutral Technical View Needs Invalidation
+
+No bullish or bearish technical view may be output without invalidation conditions.
+
+Example:
+
+Short-term bullish view invalidates if:
+- close below MA20
+- volume expands on breakdown
+- breakout point fails
+- price falls back into previous range
+- short-term institutional buying turns into selling
+
+---
+
+## 1.4 Strong Technical Signal Is Not Equal to High Confidence
+
+A technical signal can be strong but low-confidence if:
+
+- volume is weak
+- liquidity is thin
+- market regime is bearish
+- sector peers are weak
+- day-trading ratio is high
+- calendar distortion exists
+- data is missing
+- data is mock / fallback / estimated
+- chip flow contradicts price
+
+Example:
+
+A stock may have:
+- signal_score = 80
+- confidence_score = 45
+- risk_score = 75
+
+Meaning:
+
+短線訊號偏強，但由於資料品質、籌碼矛盾或高波動風險，信心不能給太高，追價風險偏高。
+
+---
+
+## 1.5 Technical Rules Are V1 Hypotheses
+
+Every technical rule must be stored as:
+
+is_v1_hypothesis = true
+backtest_status = not_tested
+
+Do not claim a technical rule is validated until historical backtesting supports it.
+
+---
+
+# 2. Technical Analysis by Horizon
+
+## 2.1 Short-Term Technical Analysis
+
+Short-term technical analysis focuses on:
+
+可交易性。
+
+Main question:
+
+現在能不能交易？
+
+Primary inputs:
+
+- MA5
+- MA10
+- MA20
+- volume
+- support / resistance
+- breakout / false breakout
+- RSI
+- MACD histogram
+- KD
+- ATR
+- candle behavior
+- liquidity
+- day-trading noise
+- short-term chip confirmation
+
+Short-term technical analysis should answer:
+
+- Is the setup near support or resistance?
+- Is chasing risk high?
+- Is there enough volume?
+- Is the breakout real or false?
+- Is the stock too overheated?
+- Where is the invalidation point?
+- Is liquidity good enough to trade?
+
+Common short-term output language:
+
+- 偏多但不宜追高
+- 等待放量突破
+- 等待回測 MA20 支撐
+- 短線轉弱
+- 高風險，避免短線操作
+- 中性觀望
+
+---
+
+## 2.2 Swing / Mid-Term Technical Analysis
+
+Swing / mid-term technical analysis focuses on:
+
+趨勢可延續性。
+
+Main question:
+
+這個趨勢能不能繼續？
+
+Primary inputs:
+
+- MA20
+- MA60
+- swing highs
+- swing lows
+- volume trend
+- breakout and retest
+- sector strength
+- institutional flow continuity
+
+Swing technical analysis should answer:
+
+- Is MA60 supportive?
+- Are swing highs and lows improving?
+- Is the trend structure still intact?
+- Is volume confirming continuation?
+- Is sector strength broad enough?
+- Are foreign investors or investment trusts still supporting the move?
+
+Common swing output language:
+
+- 波段偏多，可續觀察
+- 波段偏多，但等待回檔
+- 波段中性，等待方向
+- 波段轉弱，降低追價
+- 波段失敗，偏空觀察
+
+---
+
+## 2.3 Long-Term Technical Analysis
+
+Long-term technical analysis is only a timing and risk filter.
+
+Primary inputs:
+
+- MA120
+- MA240
+- long-term high / low structure
+- long-term volume
+- distance from long-term averages
+
+Long-term technical analysis must never override:
+
+- revenue
+- EPS
+- margin
+- cash flow
+- valuation
+- industry trend
+
+Long-term technical analysis should answer:
+
+- Is the long-term price position healthy?
+- Is the stock technically overextended?
+- Is the current price attractive or overheated from a long-term timing perspective?
+- Is long-term structure deteriorating?
+
+Common long-term output language:
+
+- 長期技術結構改善，但估值仍需確認
+- 長線標的但短線位置過熱
+- 長期技術結構轉弱，需搭配基本面重新評估
+
+---
+
+# 3. Input Data Requirements
+
+## 3.1 Required OHLCV Fields
+
+Required raw fields:
+
+- date
+- open
+- high
+- low
+- close
+- volume
+- turnover_value
+
+---
+
+## 3.2 Required Derived Candle Fields
+
+Required derived fields:
+
+- daily_return
+- gap_percent
+- intraday_range
+- upper_shadow_ratio
+- lower_shadow_ratio
+- body_ratio
+- close_position_in_range
+
+Suggested formulas:
+
+intraday_range = high - low
+
+body = abs(close - open)
+
+upper_shadow:
+- if close >= open: high - close
+- else: high - open
+
+lower_shadow:
+- if close >= open: open - low
+- else: close - low
+
+upper_shadow_ratio = upper_shadow / intraday_range
+
+lower_shadow_ratio = lower_shadow / intraday_range
+
+body_ratio = body / intraday_range
+
+close_position_in_range = (close - low) / (high - low)
+
+If high == low:
+- avoid division by zero
+- mark candle metrics as unavailable
+- reduce confidence if candle metrics are necessary for the conclusion
+
+---
+
+## 3.3 Required Moving Averages
+
+Required moving averages:
+
+- MA5
+- MA10
+- MA20
+- MA60
+- MA120
+- MA240
+
+---
+
+## 3.4 Required Moving Average Slope Fields
+
+Required slope fields:
+
+- MA5_slope
+- MA10_slope
+- MA20_slope
+- MA60_slope
+- MA120_slope
+- MA240_slope
+
+Suggested normalized formula:
+
+MA20_slope_pct = (MA20_today / MA20_n_days_ago - 1) * 100
+
+Suggested v1 slope lookbacks:
+
+- MA5_slope: compare with 3 trading days ago
+- MA10_slope: compare with 5 trading days ago
+- MA20_slope: compare with 10 trading days ago
+- MA60_slope: compare with 20 trading days ago
+- MA120_slope: compare with 40 trading days ago
+- MA240_slope: compare with 60 trading days ago
+
+These lookbacks are v1 hypotheses and must be backtested.
+
+---
+
+## 3.5 Required Volume Fields
+
+Required volume fields:
+
+- volume_MA5
+- volume_MA20
+- volume_MA60
+- volume_ratio_20d
+- turnover_value_MA20
+- turnover_value_ratio_20d
+
+Suggested definitions:
+
+volume_ratio_20d = volume / volume_MA20
+
+turnover_value_ratio_20d = turnover_value / turnover_value_MA20
+
+---
+
+## 3.6 Required Momentum Indicators
+
+Required indicators:
+
+- RSI
+- MACD_DIF
+- MACD_DEA
+- MACD_histogram
+- KD_K
+- KD_D
+- Bollinger_upper
+- Bollinger_middle
+- Bollinger_lower
+- Bollinger_bandwidth
+- ATR
+- ATR_ratio
+
+Suggested definitions:
+
+Bollinger_bandwidth = (Bollinger_upper - Bollinger_lower) / Bollinger_middle
+
+ATR_ratio = ATR / close
+
+---
+
+## 3.7 Required Structure Fields
+
+Required structure fields:
+
+- recent_high_20d
+- recent_low_20d
+- recent_high_60d
+- recent_low_60d
+- previous_swing_high
+- previous_swing_low
+- support_levels
+- resistance_levels
+- gap_levels
+- volume_profile_zone_if_available
+
+---
+
+## 3.8 Required Context Fields
+
+Required context fields:
+
+- market_regime
+- sector_strength
+- peer_confirmation
+- liquidity_bucket
+- day_trading_noise_flag
+- calendar_distortion_flag
+
+If any context field is unavailable:
+
+- mark unavailable
+- do not hallucinate
+- do not use it as supporting evidence
+- reduce confidence if the missing field is important for the conclusion
+
+---
+
+# 4. Technical Output Contract
+
+TechnicalAnalyzer should eventually output:
+
+- technical_state
+- trend_direction
+- trend_phase
+- ma_structure
+- volume_quality
+- support_resistance_context
+- breakout_status
+- momentum_status
+- volatility_status
+- candle_risk
+- technical_signal_score
+- technical_confidence_score
+- technical_risk_score
+- technical_reasons
+- technical_invalidation_signals
+- technical_observation_conditions
+- traceability
+- backtest_status
+
+Suggested enums:
+
+technical_state:
+- strong_uptrend
+- steady_uptrend
+- consolidation
+- early_strengthening
+- overheated_high_level
+- early_weakening
+- weak_rebound
+- downtrend_continuation
+
+trend_direction:
+- bullish
+- neutral_bullish
+- neutral
+- neutral_bearish
+- bearish
+
+breakout_status:
+- healthy_breakout
+- breakout_pending_confirmation
+- false_breakout_risk
+- no_breakout
+- effective_breakdown
+- false_breakdown_possible
+
+volume_quality:
+- supportive
+- neutral
+- weak
+- divergent
+- noisy
+- abnormal_event_driven
+
+volatility_status:
+- normal_volatility
+- compressed_volatility
+- expanding_volatility
+- high_risk_volatility
+
+---
+
+# 5. Price State Classification
+
+Price state is the foundation of the technical module.
+
+The system must classify the stock into one primary state and optional secondary flags.
+
+---
+
+## 5.1 Strong Uptrend
+
+### Definition
+
+A strong uptrend means price structure, moving averages, and volume all support bullish continuation.
+
+### Possible v1 conditions
+
+- close > MA20
+- close > MA60
+- MA20_slope > 0
+- MA60_slope > 0
+- recent swing highs are rising
+- recent swing lows are rising
+- pullbacks hold above MA20 or MA60
+- volume expands on up days or breakouts
+
+### Supporting evidence
+
+- RSI between 50 and 75
+- MACD histogram positive or improving
+- price not extremely extended from MA20
+- sector strength supportive
+- chip flow not negative
+
+### Risk flags
+
+- RSI > 75
+- large gap-up after long rally
+- high-level long upper shadow
+- high day-trading ratio
+- margin financing expands aggressively
+- sector peers weaken
+
+### Interpretation
+
+Technical structure is strong, but if the stock is extended, the system must avoid aggressive chasing language.
+
+### Output language
+
+技術結構偏強，股價維持在 MA20 與 MA60 上方，且波段高低點持續墊高。若後續回檔能守住 MA20 / MA60，且量能未失控，短線與波段結構仍偏多。不過若乖離過大，仍需避免追價。
+
+---
+
+## 5.2 Steady Uptrend
+
+### Definition
+
+A steady uptrend is a healthier, slower uptrend. Price rises along major moving averages without extreme overheating.
+
+### Possible v1 conditions
+
+- close > MA20
+- MA20_slope > 0
+- close near or moderately above MA20
+- MA60 flat-to-up or rising
+- pullbacks are volume-shrinking
+- no severe upper-shadow reversal
+
+### Interpretation
+
+This is often more sustainable than a vertical rally.
+
+### Output language
+
+技術面呈現緩步偏多，股價沿 MA20 上行，量能未見失控，回檔若維持量縮且不破前低，短線結構仍屬健康。
+
+---
+
+## 5.3 Consolidation
+
+### Definition
+
+Consolidation means price lacks directional conviction.
+
+### Possible v1 conditions
+
+- MA5 / MA10 / MA20 / MA60 are compressed or flat
+- price repeatedly crosses moving averages
+- volume contracts
+- range-bound trading
+- MACD / KD signals frequently reverse
+
+### Interpretation
+
+In consolidation, indicators produce more noise. Confidence must be lowered.
+
+Do not treat one-day movement above MA20 as confirmed strengthening.
+
+### Output language
+
+目前股價處於盤整狀態，均線糾結且方向尚未明確。單日站上或跌破均線的訊號可信度較低，需等待放量突破或跌破區間後再確認方向。
+
+---
+
+## 5.4 Early Strengthening
+
+### Definition
+
+Early strengthening means price is attempting to transition from weak / neutral to bullish, but confirmation is incomplete.
+
+### Possible v1 conditions
+
+- close reclaims MA20
+- MA20_slope improves from down to flat/up
+- RSI recovers above 50
+- MACD histogram improves
+- volume improves but may not yet be decisive
+- MA60 may still be flat/down
+
+### Interpretation
+
+This is a watchlist state, not aggressive confirmation.
+
+### Output language
+
+短線有轉強跡象，股價重新站上 MA20，動能指標改善。不過 MA60 尚未明確轉強，波段結構仍需後續量能與法人買盤確認。
+
+---
+
+## 5.5 Overheated High-Level Trend
+
+### Definition
+
+Overheated trend means bullish structure remains, but risk-reward for new entries is poor.
+
+### Possible v1 conditions
+
+- close far above MA20
+- RSI > 70
+- KD high-level dulling
+- Bollinger upper expansion
+- large volume spike
+- long upper shadow
+- high day-trading ratio
+- margin financing increases
+- sector or chip confirmation weakens
+
+### Interpretation
+
+Overheated does not mean immediate bearish reversal.
+
+It means:
+- trend may still be bullish
+- chasing risk is high
+- risk-reward for new entries is worse
+- wait for pullback or renewed confirmation
+
+### Output language
+
+趨勢仍偏多，但短線位階偏高，乖離與過熱風險上升。若未出現健康回檔或量能續航，追價風險偏高。
+
+---
+
+## 5.6 Early Weakening
+
+### Definition
+
+Early weakening means bullish structure is starting to fail but bearish trend is not fully confirmed.
+
+### Possible v1 conditions
+
+- close below MA20
+- MA20_slope flattens or turns down
+- RSI falls below 50
+- MACD histogram declines
+- uptrend support breaks
+- volume expands on down days
+
+### Interpretation
+
+Short-term bullish thesis must be reduced or invalidated.
+
+### Output language
+
+短線技術結構開始轉弱，股價跌破 MA20 且動能降溫。若反彈無法站回 MA20，短線偏多假設需下修。
+
+---
+
+## 5.7 Weak Rebound
+
+### Definition
+
+A weak rebound occurs inside a bearish or neutral structure.
+
+### Possible v1 conditions
+
+- price rebounds but remains below MA60
+- MA60_slope flat/down
+- volume weak on rebound
+- RSI fails to reclaim 50 or holds only slightly above
+- MACD golden cross occurs below major resistance
+
+### Interpretation
+
+A weak rebound is not a trend reversal.
+
+### Output language
+
+目前較像弱勢反彈，股價尚未站回 MA60，量能與結構仍不足以確認波段反轉。需等待 MA60 與前高壓力有效突破。
+
+---
+
+## 5.8 Downtrend Continuation
+
+### Definition
+
+Downtrend continuation means bearish structure is confirmed.
+
+### Possible v1 conditions
+
+- close < MA20
+- close < MA60
+- MA20_slope < 0
+- MA60_slope < 0
+- lower highs and lower lows
+- rebounds fail near MA20 / MA60
+- down days show stronger volume
+
+### Interpretation
+
+Short/mid-term technical risk is high. One or two rebound days should not be treated as a reversal.
+
+### Output language
+
+技術結構偏空，股價位於 MA20 與 MA60 下方，反彈無法有效站回主要均線。若低點持續下移，短中期風險仍高。
+
+---
+
+# 6. Trend Logic
+
+## 6.1 Bullish Trend
+
+Bullish trend =
+higher highs
++ higher lows
++ price above major moving averages
++ moving average slopes improving
++ volume supports upward movement
++ pullbacks remain controlled
+
+Bullish trend is not:
+- one green candle
+- one MA crossover
+- one MACD golden cross
+- one RSI recovery
+- one good news headline
+
+---
+
+## 6.2 Bearish Trend
+
+Bearish trend =
+lower highs
++ lower lows
++ price below major moving averages
++ moving average slopes weakening
++ rebounds fail
++ selling pressure expands
+
+Bearish trend is not:
+- one red candle
+- one RSI decline
+- one day of institutional selling
+- one minor pullback inside a strong uptrend
+
+---
+
+## 6.3 Bullish Trend Confirmation
+
+Bullish confirmation requires multiple signals:
+
+- close above resistance or MA20 / MA60
+- higher low forms
+- volume expands on breakout
+- pullback holds prior resistance or MA20
+- RSI > 50
+- MACD histogram improves
+- sector and market are not hostile
+- chip flow does not contradict
+
+---
+
+## 6.4 Bearish Trend Confirmation
+
+Bearish confirmation requires multiple signals:
+
+- close below support or MA20 / MA60
+- lower high forms
+- breakdown volume expands
+- rebound fails
+- RSI < 50
+- MACD histogram weakens
+- chip flow turns negative
+- sector weakens
+
+---
+
+## 6.5 Short-Term Bullish Thesis Failure
+
+Short-term bullish thesis fails when:
+
+- close below MA20 with volume expansion
+- breakout point fails
+- price falls back into previous range
+- previous short-term swing low breaks
+- institutional buying turns to selling
+- sector leadership breaks
+
+---
+
+## 6.6 Swing Bullish Thesis Failure
+
+Swing bullish thesis fails when:
+
+- close below MA60
+- MA60 turns flat/down
+- previous swing low breaks
+- rebound fails to reclaim MA60
+- foreign / investment trust flow turns into continuous selling
+- sector leadership breaks down
+
+---
+
+# 7. Moving Average System
+
+## 7.1 MA5
+
+Meaning:
+
+Very short-term trading rhythm.
+
+Use:
+- detect acceleration
+- detect short-term pullback
+- measure immediate momentum
+
+Warning:
+
+MA5 is noisy. Do not use alone.
+
+---
+
+## 7.2 MA10
+
+Meaning:
+
+Short-term rhythm smoother than MA5.
+
+Use:
+- short-term continuation
+- mild pullback tracking
+- fast trend quality
+
+Warning:
+
+MA10 is still short-term. It cannot define swing trend alone.
+
+---
+
+## 7.3 MA20
+
+Meaning:
+
+Short-term core line.
+
+Use:
+- short-term trend boundary
+- pullback support
+- short-term invalidation reference
+
+Common logic:
+
+close > MA20 and MA20_slope improving
+→ short-term structure improves
+
+close < MA20 with volume expansion
+→ short-term bullish thesis weakens
+
+---
+
+## 7.4 MA60
+
+Meaning:
+
+Swing / mid-term core line.
+
+Use:
+- swing trend validation
+- medium-term support / resistance
+- trend continuation filter
+
+Common logic:
+
+close > MA60 and MA60_slope flat-to-up
+→ swing structure improves
+
+close < MA60 with expanding volume
+→ swing bullish thesis risk rises
+
+---
+
+## 7.5 MA120 / MA240
+
+Meaning:
+
+Long-term technical structure.
+
+Use:
+- long-term market cost
+- long-term trend condition
+- timing filter for long-term holdings
+
+Warning:
+
+Long-term decisions must not rely only on MA120 / MA240. Fundamentals and valuation dominate long-term holdability.
+
+---
+
+## 7.6 Moving Average Bullish Alignment
+
+Bullish alignment:
+
+- MA5 > MA10 > MA20 > MA60
+- price above MA20 / MA60
+- MA20 and MA60 slopes positive
+
+Interpretation:
+
+Bullish alignment supports trend, but not necessarily entry.
+
+Risk:
+
+If price is far above MA20 / MA60:
+- trend remains bullish
+- chasing risk rises
+
+---
+
+## 7.7 Moving Average Bearish Alignment
+
+Bearish alignment:
+
+- MA5 < MA10 < MA20 < MA60
+- price below MA20 / MA60
+- MA20 and MA60 slopes negative
+
+Interpretation:
+
+Bearish alignment indicates market average cost is declining. Rebounds should be treated carefully until structure improves.
+
+---
+
+## 7.8 Moving Average Compression
+
+Definition:
+
+- MA5 / MA10 / MA20 / MA60 are close together
+- slopes are flat
+- price repeatedly crosses moving averages
+
+Interpretation:
+
+- direction unclear
+- indicators noisy
+- breakout / breakdown confirmation needed
+- confidence lower
+
+---
+
+# 8. Volume-Price Logic
+
+## 8.1 Baseline Volume
+
+Volume must be compared against a baseline.
+
+Suggested baselines:
+
+- volume_MA5
+- volume_MA20
+- volume_MA60
+- average volume during consolidation range
+- volume on prior breakout
+
+Suggested v1 thresholds:
+
+- mild expansion: volume > volume_MA20 * 1.2
+- clear expansion: volume > volume_MA20 * 1.5
+- extreme volume: volume > volume_MA20 * 2.0
+
+These thresholds are v1 hypotheses.
+
+---
+
+## 8.2 Price Up + Volume Up
+
+Healthy when:
+- near breakout from consolidation
+- not extremely extended
+- close near high
+- sector supportive
+- chip flow supportive
+
+Risky when:
+- high-level after large rally
+- long upper shadow
+- close weak
+- institutions sell
+- day-trading ratio high
+- margin financing increases aggressively
+
+Output language:
+
+價漲量增若發生在突破區且收盤站穩，可提高短線轉強可信度；若發生在高檔且伴隨長上影或籌碼轉弱，則需提高換手與出貨風險。
+
+---
+
+## 8.3 Price Up + Volume Down
+
+Healthy version:
+- steady uptrend
+- pullback ended
+- selling pressure light
+- price follows MA20 gradually
+
+Unhealthy version:
+- breakout without volume
+- near resistance
+- new high with weaker volume
+- sector does not confirm
+
+Output language:
+
+股價上漲但量能未同步放大，若處於壓力或突破階段，突破可信度不足；若是沿均線緩漲，則可視為賣壓不重，但仍需量能確認。
+
+---
+
+## 8.4 Price Down + Volume Up
+
+Risk version:
+- breaks MA20 / MA60
+- breaks prior swing low
+- close near low
+- sector weak
+- chip flow negative
+
+Possible absorption version:
+- low-level long lower shadow
+- support holds
+- selling pressure absorbed
+- next day does not break low
+
+Output language:
+
+價跌量增代表賣壓放大，若同時跌破支撐或均線，技術風險升高；若出現在低檔且收長下影，需觀察是否為恐慌出量後的承接。
+
+---
+
+## 8.5 Price Down + Volume Down
+
+Healthy pullback:
+- uptrend intact
+- pullback toward MA20
+- volume contracts
+- does not break prior low
+
+Weak demand:
+- downtrend
+- rebound failed
+- price drifts lower with weak buying
+
+Output language:
+
+價跌量縮在多頭趨勢中可能是健康回檔，但在空頭或弱勢反彈後，可能只是買盤不足，不能直接判斷為止跌。
+
+---
+
+# 9. Support and Resistance
+
+## 9.1 Support Sources
+
+Support may come from:
+
+- previous swing low
+- range lower boundary
+- MA20
+- MA60
+- MA120 / MA240
+- prior resistance after breakout
+- high-volume zone
+- gap lower edge
+- round number
+- previous day low
+- previous week low
+- previous month low
+
+---
+
+## 9.2 Resistance Sources
+
+Resistance may come from:
+
+- previous swing high
+- range upper boundary
+- historical high
+- MA20 / MA60 as overhead resistance
+- high-volume trapped zone
+- gap upper edge
+- round number
+- previous day high
+- previous week high
+- previous month high
+
+---
+
+## 9.3 Support / Resistance Strength Factors
+
+Strength depends on:
+
+- number of tests
+- volume traded at level
+- overlap with moving average
+- overlap with prior high / low
+- gap presence
+- sector confirmation
+- chip confirmation
+
+---
+
+## 9.4 Support-Resistance Flip
+
+Resistance broken and retested successfully:
+→ resistance becomes support
+
+Support broken and rebound fails:
+→ support becomes resistance
+
+---
+
+## 9.5 Effective Support
+
+Support is effective only if:
+
+- price holds support
+- or breakdown quickly recovers
+- volume does not lose control
+- rebound has buying support
+- chip flow does not strongly contradict
+
+---
+
+## 9.6 Failed Support
+
+Support likely fails when:
+
+- close below support
+- volume expands
+- rebound fails
+- price forms lower low
+- institutional flow weakens
+
+---
+
+# 10. Breakout / Breakdown / False Signals
+
+## 10.1 Healthy Breakout
+
+Conditions:
+
+- close above resistance
+- volume > volume_MA20
+- strong candle body
+- not a long upper shadow
+- no quick fall back into range
+- prior resistance holds on pullback
+- no major institutional selling
+- market / sector not hostile
+- liquidity quality acceptable
+- day-trading noise not excessive
+
+Output language:
+
+若股價放量站上前高並能回測不破，且法人籌碼未轉弱，短線突破可信度提高。
+
+---
+
+## 10.2 Breakout Pending Confirmation
+
+Conditions:
+
+- price closes slightly above resistance
+- volume only mildly expands
+- sector not clearly supportive
+- chip flow neutral
+
+Output language:
+
+股價雖突破壓力，但量能與籌碼確認不足，仍需後續 1～3 日確認是否站穩。
+
+---
+
+## 10.3 False Breakout Risk
+
+Conditions:
+
+- intraday breakout but close back below resistance
+- breakout volume weak
+- long upper shadow
+- next day falls back into range
+- institutions sell
+- margin financing rises
+- day-trading ratio high
+- sector peers do not confirm
+
+Output language:
+
+股價雖一度突破前高，但收盤未能站穩且量能不足，假突破風險升高，短線不宜追價。
+
+---
+
+## 10.4 Effective Breakdown
+
+Conditions:
+
+- close below support / MA20 / MA60
+- volume expands
+- rebound fails
+- lower low forms
+- chip flow turns negative
+- market or sector weakens
+
+Output language:
+
+股價跌破關鍵支撐且量能放大，若後續反彈無法站回，短線或波段結構需下修。
+
+---
+
+## 10.5 False Breakdown Possible
+
+Conditions:
+
+- intraday breakdown but close recovers
+- long lower shadow
+- volume spike at support
+- next day does not break low
+- chip flow does not worsen
+
+Output language:
+
+股價盤中跌破支撐但收盤收回，暫不宜判斷為有效跌破，需觀察後續是否站穩支撐。
+
+---
+
+# 11. Momentum Indicators
+
+## 11.1 RSI
+
+Interpretation:
+
+RSI > 70:
+- overheating risk
+- not automatic bearish
+
+RSI 50–70:
+- healthy bullish momentum zone
+
+RSI 40–50:
+- neutral weak
+
+RSI < 40:
+- bearish momentum stronger
+
+RSI < 30:
+- oversold
+- not automatic bullish
+
+Rules:
+
+RSI > 70 + strong uptrend:
+- trend strong
+- chasing risk rises
+
+RSI > 70 + resistance + long upper shadow:
+- short-term reversal risk rises
+
+RSI recovers above 50 + reclaim MA20:
+- short-term strengthening support
+
+RSI falls below 50 + break MA20:
+- short-term weakening support
+
+Important:
+
+RSI must be interpreted with price state.
+
+Strong uptrend + high RSI does not automatically mean bearish.
+
+Downtrend + low RSI does not automatically mean bullish.
+
+---
+
+## 11.2 MACD
+
+Use:
+
+MACD confirms trend momentum.
+
+Important rules:
+
+MACD golden cross below MA60:
+- often weak rebound
+- not swing reversal
+
+MACD golden cross + reclaim MA20 + volume improves:
+- short-term strengthening signal
+
+MACD death cross in strong uptrend:
+- momentum cooling
+- not automatic trend failure
+
+MACD histogram contraction:
+- momentum weakening
+- not necessarily reversal
+
+MACD histogram turning negative + support break:
+- short-term weakness confirmation
+
+---
+
+## 11.3 KD
+
+Use:
+
+KD is short-term rhythm and very noisy in strong trends.
+
+Rules:
+
+KD high-level dulling in strong uptrend:
+- not automatic bearish
+
+KD death cross near resistance:
+- short-term pullback risk
+
+KD golden cross near support:
+- possible short-term bounce
+
+KD golden cross below MA60:
+- weak rebound unless structure improves
+
+---
+
+## 11.4 Bollinger Bands
+
+Use:
+
+Bollinger bands help identify volatility compression and expansion.
+
+Rules:
+
+Band contraction:
+- volatility compression
+- wait for direction
+
+Band expansion upward + confirmed breakout:
+- possible trend start
+
+Upper band touch:
+- not automatic sell
+
+Lower band touch:
+- not automatic buy
+
+Bollinger contraction + declining volume:
+- direction unclear
+- wait for breakout / breakdown
+
+Bollinger expansion + close above upper band + volume expansion:
+- possible bullish volatility expansion
+
+Bollinger expansion + long upper shadow:
+- possible exhaustion / distribution risk
+
+---
+
+## 11.5 ATR
+
+Use:
+
+ATR measures volatility, not direction.
+
+Rules:
+
+ATR expansion + breakout:
+- possible trend start
+
+ATR expansion + breakdown:
+- risk rises
+
+ATR expansion + high-level upper shadow:
+- high volatility distribution risk
+
+ATR contraction:
+- waiting state / consolidation
+
+ATR should adjust risk, not direction.
+
+---
+
+# 12. Overheating, Deviation, and Divergence
+
+## 12.1 Overheating
+
+Overheating means new-entry risk is high.
+
+It does not mean immediate bearish reversal.
+
+Conditions:
+
+- price far above MA20
+- RSI > 70
+- KD high-level dulling
+- Bollinger upper expansion
+- volume spike
+- gap-up after rally
+- high-level long upper shadow
+- margin financing increase
+- day-trading ratio high
+- chip flow weakens
+
+Interpretation:
+
+- trend may not be broken
+- chasing risk rises
+- risk-reward deteriorates
+- wait for pullback or renewed confirmation
+
+Output language:
+
+短線位階偏高，雖然趨勢尚未破壞，但追價風險升高，較適合等待回檔或量能再次確認。
+
+---
+
+## 12.2 Deviation from MA20 / MA60
+
+Suggested fields:
+
+deviation_from_MA20_pct = (close / MA20 - 1) * 100
+
+deviation_from_MA60_pct = (close / MA60 - 1) * 100
+
+Interpretation:
+
+High deviation:
+- profit-taking risk rises
+- risk-reward deteriorates
+- new entries less attractive
+
+Low deviation in uptrend:
+- healthier pullback
+- potential support test
+
+Thresholds must be calibrated by stock volatility and sector.
+
+---
+
+## 12.3 Price-Momentum Divergence
+
+Bearish divergence:
+
+- price makes new high
+- RSI does not make new high
+- MACD histogram declines
+- volume does not expand
+
+Interpretation:
+
+Momentum is weakening, not immediate bearish confirmation.
+
+Output language:
+
+股價創高但動能指標未同步創高，代表上攻動能降溫，需降低追價信心並觀察是否出現量價失衡。
+
+---
+
+## 12.4 Price-Volume Divergence
+
+Conditions:
+
+- price breaks recent high
+- volume lower than volume_MA20
+- or volume lower than prior breakout volume
+
+Interpretation:
+
+Breakout credibility is weak.
+
+Output language:
+
+股價突破但量能未同步確認，突破可信度不足，需等待後續量能或回測支撐確認。
+
+---
+
+## 12.5 Price-Chip Divergence
+
+### Technical Strong, Chip Weak
+
+Conditions:
+
+- price rises
+- foreign / investment trust sells
+- margin rises
+- day-trading ratio high
+
+Output language:
+
+技術價格偏強，但籌碼品質不足，短線可觀察但不宜高信心追價。
+
+### Chip Strong, Price Weak
+
+Conditions:
+
+- foreign / investment trust buys
+- price flat or weak
+- volume not supportive
+
+Output language:
+
+法人買盤雖然偏正向，但股價尚未有效反應，可能仍有上方賣壓或籌碼吸收，需等待價格表態。
+
+---
+
+# 13. Volatility and Risk
+
+## 13.1 Volatility States
+
+Suggested states:
+
+- normal_volatility
+- compressed_volatility
+- expanding_volatility
+- high_risk_volatility
+
+---
+
+## 13.2 Expanding Volatility
+
+ATR expansion + breakout + volume + chip support:
+→ constructive
+
+ATR expansion + breakdown + weak chip:
+→ dangerous
+
+ATR expansion + high-level upper shadow:
+→ distribution / exhaustion risk
+
+---
+
+## 13.3 Volatility Risk Adjustment
+
+Technical risk should increase when:
+
+- ATR_ratio rises sharply
+- price breaks support with expanding ATR
+- price forms high-level upper shadow with high ATR
+- wide-range candle closes weak
+- gap-up fails
+- gap-down cannot recover
+
+---
+
+# 14. Candlestick and Gap Logic
+
+## 14.1 Long Bullish Candle
+
+Constructive when:
+
+- after consolidation
+- volume expands
+- close near high
+- breaks resistance
+- chip flow supportive
+
+Risky when:
+
+- after extended rally
+- extreme volume
+- gap-up
+- next day fails
+- long upper shadow appears
+
+---
+
+## 14.2 Long Bearish Candle
+
+Risky when:
+
+- at high level
+- volume expands
+- breaks MA20
+- breaks prior low
+- chip flow weakens
+
+Not necessarily bearish when:
+
+- after long decline
+- near support
+- followed by long lower shadow
+- next day stabilizes
+
+---
+
+## 14.3 Long Upper Shadow
+
+Meaning:
+
+Selling pressure appeared.
+
+High-risk when:
+
+- near resistance
+- high-level
+- volume spike
+- breakout failed
+- institutions sell
+- day-trading ratio high
+
+---
+
+## 14.4 Long Lower Shadow
+
+Meaning:
+
+Buying support appeared.
+
+Constructive only if:
+
+- near support
+- next day does not break low
+- price reclaims short MA
+- selling volume cools
+- chip flow does not worsen
+
+---
+
+## 14.5 Gap-Up
+
+Breakaway gap:
+
+- after consolidation
+- above resistance
+- volume confirms
+- does not fill quickly
+
+Exhaustion gap:
+
+- after long rally
+- opens high
+- huge volume
+- long upper shadow / black candle
+- fails to continue
+
+---
+
+## 14.6 Gap-Down
+
+Risky if:
+
+- breaks support
+- volume expands
+- cannot recover gap
+- chip flow weakens
+
+Possible exhaustion if:
+
+- after long decline
+- near major support
+- large lower shadow appears
+- volume spikes
+- next day stabilizes
+
+---
+
+# 15. Technical Invalidation Rules
+
+## 15.1 Short-Term Technical Invalidation
+
+Short-term technical bullish view invalidates when:
+
+- close below MA20 with volume expansion
+- breakout fails and price returns to range
+- high-level long upper shadow with volume spike
+- RSI loses 50 after failed breakout
+- MACD histogram turns negative after support break
+- day-trading noise leads to next-day selling
+- short-term institutional buying turns into selling
+
+---
+
+## 15.2 Swing Technical Invalidation
+
+Swing technical bullish view invalidates when:
+
+- close below MA60
+- MA60_slope turns negative
+- previous swing low breaks
+- rebound fails to reclaim MA60
+- volume expands on down days
+- sector leadership breaks
+- institutional buying turns into continuous selling
+
+---
+
+## 15.3 Long-Term Technical Invalidation
+
+Long-term technical support weakens when:
+
+- close below MA120 / MA240
+- MA120 / MA240 slopes deteriorate
+- long-term higher-low structure breaks
+- long-term volume distribution appears
+
+Long-term technical invalidation alone should not override fundamentals, but it should increase timing risk and monitoring priority.
+
+---
+
+# 16. Technical Scoring Framework
+
+## 16.1 Technical Score Components
+
+Technical scoring should include:
+
+- technical_trend_score
+- technical_ma_score
+- technical_volume_score
+- technical_momentum_score
+- technical_breakout_score
+- technical_risk_score
+- market_regime_adjustment
+- liquidity_adjustment
+- sector_confirmation_adjustment
+
+---
+
+## 16.2 Short-Term Technical Weighting v1
+
+Suggested v1 weighting:
+
+- price state / trend: 20%
+- moving averages: 15%
+- volume: 25%
+- breakout / support / resistance: 20%
+- momentum indicators: 10%
+- volatility / candle risk: 10%
+
+---
+
+## 16.3 Swing Technical Weighting v1
+
+Suggested v1 weighting:
+
+- trend / swing structure: 30%
+- MA20 / MA60: 25%
+- volume quality: 20%
+- breakout / retest: 15%
+- momentum: 5%
+- volatility risk: 5%
+
+---
+
+## 16.4 Long-Term Technical Weighting v1
+
+Suggested v1 weighting:
+
+- MA120 / MA240: 30%
+- long-term high-low structure: 30%
+- long-term volume structure: 15%
+- overheating risk: 15%
+- short-term technical state: 10%
+
+All weights are v1 hypotheses.
+
+---
+
+# 17. Technical Confidence Rules
+
+## 17.1 Confidence Increases When
+
+Technical confidence increases when:
+
+- price structure is clear
+- moving averages are aligned
+- volume confirms
+- breakout / breakdown is confirmed
+- momentum supports
+- market regime is supportive
+- sector confirms
+- liquidity is sufficient
+- traceability is complete
+
+---
+
+## 17.2 Confidence Decreases When
+
+Technical confidence decreases when:
+
+- moving averages are compressed
+- volume is weak
+- price is near midpoint of range
+- momentum indicators conflict
+- breakout lacks volume
+- high-level upper shadow appears
+- sector peers weaken
+- liquidity is thin
+- day-trading ratio is high
+- calendar distortion exists
+- data is missing or fallback
+- reason cannot be traced
+
+---
+
+## 17.3 Confidence Caps
+
+Mock / fallback data:
+- max confidence = medium_low
+
+Estimated data:
+- max confidence = medium
+
+Single indicator signal:
+- no high confidence
+
+No invalidation signal:
+- no high confidence
+
+Low liquidity:
+- no aggressive short-term strategy
+
+High day-trading noise:
+- reduce short-term confidence
+
+---
+
+# 18. Technical Risk Rules
+
+## 18.1 Risk Increases When
+
+Technical risk increases when:
+
+- price far above MA20
+- RSI > 70
+- high-level volume spike
+- long upper shadow
+- breakout lacks confirmation
+- close below MA20 / MA60 with volume
+- ATR expands against direction
+- support breaks
+- sector weakens
+- chip flow contradicts price
+- low liquidity
+- calendar distortion
+- day-trading noise
+
+---
+
+## 18.2 Risk Decreases When
+
+Technical risk decreases when:
+
+- pullback holds support
+- volume contracts on pullback
+- sector confirms
+- liquidity sufficient
+- chip flow supports
+- price not overextended
+
+---
+
+# 19. Technical Traceability Requirements
+
+Every technical reason must map to data.
+
+## 19.1 Trace Example: MA20
+
+Reason:
+
+股價站上 MA20。
+
+Trace:
+- source = OHLCV provider
+- field = close, MA20
+- timestamp = YYYY-MM-DD
+- calculation = close > MA20
+
+---
+
+## 19.2 Trace Example: Volume Breakout
+
+Reason:
+
+突破量能高於 20 日均量。
+
+Trace:
+- source = OHLCV provider
+- field = volume, volume_MA20
+- timestamp = YYYY-MM-DD
+- calculation = volume / volume_MA20
+
+---
+
+## 19.3 Trace Example: Overheating
+
+Reason:
+
+短線過熱。
+
+Trace:
+- source = indicator provider
+- field = RSI, close, MA20
+- timestamp = YYYY-MM-DD
+- calculation = RSI > 70 and close far above MA20
+
+---
+
+## 19.4 Untraceable Reasons
+
+Untraceable reasons must be:
+
+- removed
+- or marked as inference
+- or confidence must be downgraded
+
+Do not output unsupported technical claims.
+
+---
+
+# 20. Backtestable Technical Hypotheses
+
+These are initial v1 hypotheses.
+
+All rules must ship with:
+
+is_v1_hypothesis = true
+backtest_status = not_tested
+
+---
+
+## 20.1 Breakout Volume Confirmation
+
+rule_id:
+
+tech_breakout_volume_confirm
+
+hypothesis:
+
+A close above 20-day resistance with volume above volume_MA20 improves forward 20-day return.
+
+signal_condition:
+
+- close > recent_high_20d
+- volume / volume_MA20 >= 1.0
+
+invalidation:
+
+- close falls back below breakout level
+
+---
+
+## 20.2 Breakout Failure
+
+rule_id:
+
+tech_breakout_failure
+
+hypothesis:
+
+Intraday breakout that closes back inside the range increases 5-day downside risk.
+
+signal_condition:
+
+- high > resistance
+- close < resistance
+
+---
+
+## 20.3 MA20 Support Hold
+
+rule_id:
+
+tech_ma20_support_hold
+
+hypothesis:
+
+Pullback that holds MA20 with shrinking volume supports continuation.
+
+signal_condition:
+
+- low near MA20
+- close >= MA20
+- pullback volume declines
+
+invalidation:
+
+- close < MA20 with expanding volume
+
+---
+
+## 20.4 MA60 Swing Breakdown
+
+rule_id:
+
+tech_ma60_break_swing
+
+hypothesis:
+
+Close below MA60 on expanding volume invalidates swing-term bullish thesis.
+
+signal_condition:
+
+- close < MA60
+- volume / volume_MA20 >= 1.5
+
+---
+
+## 20.5 RSI Overheating Reversal Risk
+
+rule_id:
+
+tech_rsi_overheating
+
+hypothesis:
+
+RSI > 70 plus high-level long upper shadow increases short-term reversal risk.
+
+signal_condition:
+
+- RSI > 70
+- upper_shadow_ratio >= 0.5
+- price level near recent high
+
+---
+
+## 20.6 False Breakout After Low Volume
+
+rule_id:
+
+tech_false_breakout_low_volume
+
+hypothesis:
+
+Breakout without sufficient volume has higher false-breakout probability.
+
+signal_condition:
+
+- close > resistance
+- volume / volume_MA20 < 1.0
+
+---
+
+## 20.7 Healthy Pullback
+
+rule_id:
+
+tech_healthy_pullback
+
+hypothesis:
+
+In an uptrend, price pullback to MA20 with volume contraction has positive continuation probability.
+
+signal_condition:
+
+- close > MA60
+- MA20_slope > 0
+- low near MA20
+- volume < volume_MA20
+
+---
+
+## 20.8 High-Level Volume Exhaustion
+
+rule_id:
+
+tech_high_level_volume_exhaustion
+
+hypothesis:
+
+High-level extreme volume with weak close increases short-term reversal risk.
+
+signal_condition:
+
+- price near 60-day high
+- volume / volume_MA20 >= 2.0
+- close_position_in_range < 0.5
+
+---
+
+## 20.9 Early Strengthening Confirmation
+
+rule_id:
+
+tech_early_strengthening_confirm
+
+hypothesis:
+
+Reclaiming MA20 with RSI above 50 and improving MACD histogram increases short-term continuation probability.
+
+signal_condition:
+
+- close > MA20
+- RSI > 50
+- MACD_histogram improving over last 3 bars
+
+---
+
+## 20.10 Weak Rebound Failure
+
+rule_id:
+
+tech_weak_rebound_failure
+
+hypothesis:
+
+Rebounds below a declining MA60 with weak volume have poor swing continuation.
+
+signal_condition:
+
+- close < MA60
+- MA60_slope <= 0
+- rebound volume < volume_MA20
+
+---
+
+# 21. TechnicalAnalyzer v1 Minimal Scope
+
+First version should implement only:
+
+- price state classification
+- MA20 / MA60 structure
+- volume quality
+- breakout / false breakout
+- RSI state
+- MACD histogram state
+- ATR volatility state
+- basic support / resistance
+- technical invalidation signals
+- technical score bundle
+- traceability
+
+Do not implement in v1:
+
+- complex pattern recognition
+- Elliott wave logic
+- advanced chart pattern detection
+- automatic support/resistance optimization
+- full backtesting executor
+- price prediction
+- AI-generated final deterministic scores
+
+---
+
+# 22. Recommended Backend Implementation Steps
+
+## T0 — Audit Current Technical Data
+
+Goal:
+
+Understand what data already exists.
+
+Report:
+
+- where OHLCV / price history data is fetched
+- where K-line data is passed to frontend
+- whether MA5 / MA10 / MA20 / MA60 are already calculated
+- whether RSI / MACD / KD / Bollinger / ATR are already calculated
+- what technical fields currently exist in `/analyze/tw?symbol=2330`
+- which frontend components display technical data
+- what files would be modified later
+- what data is real, mock, fallback, or unavailable
+
+No code changes.
+
+---
+
+## T1 — TechnicalFeatureBuilder
+
+Goal:
+
+Compute technical features only. Do not produce conclusions yet.
+
+Features:
+
+- MA5
+- MA10
+- MA20
+- MA60
+- MA120
+- MA240
+- MA slopes
+- volume_MA20
+- volume_ratio_20d
+- turnover_value_ratio_20d
+- RSI
+- MACD histogram
+- ATR
+- upper_shadow_ratio
+- lower_shadow_ratio
+- body_ratio
+- close_position_in_range
+- recent_high_20d
+- recent_low_20d
+- recent_high_60d
+- recent_low_60d
+
+---
+
+## T2 — Price State Classifier
+
+Goal:
+
+Classify price state.
+
+States:
+
+- strong_uptrend
+- steady_uptrend
+- consolidation
+- early_strengthening
+- overheated_high_level
+- early_weakening
+- weak_rebound
+- downtrend_continuation
+
+---
+
+## T3 — Moving Average Structure Logic
+
+Goal:
+
+Implement MA-based structure logic.
+
+Logic:
+
+- MA20 short-term core
+- MA60 swing-term core
+- MA120 / MA240 long-term technical structure
+- bullish alignment
+- bearish alignment
+- MA compression
+- MA20 breakdown
+- MA60 swing risk
+
+---
+
+## T4 — Volume-Price Logic
+
+Goal:
+
+Implement volume-price four-quadrant logic.
+
+Logic:
+
+- price up + volume up
+- price up + volume down
+- price down + volume up
+- price down + volume down
+
+Outputs:
+
+- volume_quality
+- volume_confirmation
+- volume_risk
+
+---
+
+## T5 — Breakout / Breakdown Logic
+
+Goal:
+
+Classify breakout and breakdown states.
+
+States:
+
+- healthy_breakout
+- breakout_pending_confirmation
+- false_breakout_risk
+- no_breakout
+- effective_breakdown
+- false_breakdown_possible
+
+---
+
+## T6 — Momentum / Volatility Logic
+
+Goal:
+
+Add RSI / MACD / KD / Bollinger / ATR interpretation.
+
+Important:
+
+Momentum indicators are supporting signals only.
+
+Outputs:
+
+- momentum_status
+- volatility_status
+- overheating_flags
+- divergence_flags
+
+---
+
+## T7 — Technical Score + Invalidation
+
+Goal:
+
+Produce technical scores and invalidation signals.
+
+Outputs:
+
+- technical_signal_score
+- technical_confidence_score
+- technical_risk_score
+- technical_invalidation_signals
+- technical_observation_conditions
+- technical_reasons
+- traceability
+
+---
+
+## T8 — Frontend Technical Analysis Card
+
+Goal:
+
+Display technical analysis cleanly.
+
+Frontend should show:
+
+- technical_state
+- trend_direction
+- MA20 / MA60 status
+- volume_quality
+- breakout_status
+- momentum_status
+- volatility_status
+- technical_signal_score
+- technical_confidence_score
+- technical_risk_score
+- technical_reasons
+- invalidation_signals
+- observation_conditions
+
+Keep UI simple and clean.
+
+---
+
+# 23. Required Tests
+
+Tests should cover:
+
+- strong uptrend
+- steady uptrend
+- consolidation
+- early strengthening
+- overheated high-level trend
+- early weakening
+- weak rebound
+- downtrend continuation
+- healthy breakout
+- false breakout
+- MA20 support hold
+- MA60 breakdown
+- RSI overheating
+- low liquidity confidence reduction
+- high day-trading noise confidence reduction
+- missing data confidence cap
+
+---
+
+# 24. Example Technical Output
+
+technical_state:
+
+early_strengthening
+
+trend_direction:
+
+neutral_bullish
+
+technical_summary:
+
+股價重新站上 MA20，MA20 斜率由下彎轉為走平，RSI 回到 50 以上，短線有轉強跡象。不過 MA60 尚未明確上彎，且成交量尚未明顯高於 20 日均量，因此波段結構仍需確認。
+
+technical_reasons:
+
+- 收盤價站上 MA20
+- RSI 回到 50 以上
+- MACD histogram 改善
+- 量能尚未明顯放大
+- MA60 尚未轉強
+
+observation_conditions:
+
+- 放量突破前高
+- 回測 MA20 不破
+- MA60 走平轉上
+- 法人買盤未轉弱
+- 同族群未明顯轉弱
+
+invalidation_signals:
+
+- 跌回 MA20 下方且成交量放大
+- 突破後跌回整理區間
+- 高檔長上影伴隨爆量
+- 同族群轉弱且個股無法站穩
+
+risk_level:
+
+medium
+
+confidence_level:
+
+medium
+
+signal_score:
+
+62
+
+confidence_score:
+
+55
+
+risk_score:
+
+58
+
+strategy_language:
+
+可條件式觀察，等待放量突破或回測支撐確認，不宜直接追價。
+
+---
+
+# 25. Immediate Codex Prompt
+
+Use this first.
+
+Project reset.
+
+I restored the project to the earlier stable version. Do not modify sidebar, Research Center, System Development pages, routing, backend API routes, or unrelated UI.
+
+We will now focus only on the technical analysis module.
+
+Task T0:
+Audit the current project for technical-analysis-related data and code.
+
+Do not edit files yet.
+
+Please inspect and report:
+
+1. Where Taiwan stock OHLCV / price history data is fetched.
+2. Where K-line / candlestick data is stored or passed to frontend.
+3. Whether MA5 / MA10 / MA20 / MA60 are already calculated anywhere.
+4. Whether RSI / MACD / KD / Bollinger / ATR are already calculated anywhere.
+5. What technical-analysis fields currently exist in /analyze/tw?symbol=2330 response.
+6. Which frontend components currently display technical analysis.
+7. Which files would likely need to be modified for a future TechnicalFeatureBuilder.
+8. Which fields are real data, mock, fallback, or unavailable.
+9. A minimal implementation plan for TechnicalAnalyzer v1.
+
+Do not write code.
+Do not add files.
+Do not modify frontend.
+Do not modify backend logic.
+Do not change /analyze/tw.
+Only produce an audit report and recommended next steps.
+
+---
+
+# 26. Source Alignment
+
+This document is based on the previous technical-analysis planning discussion and should be used as the internal source of truth for TechnicalAnalyzer v1.
+
+It should not be exposed in the user-facing sidebar.
+
+Suggested file path:
+
+docs/research/technical_analysis_deep_logic.md
+
+Last synced: 2026-05-12

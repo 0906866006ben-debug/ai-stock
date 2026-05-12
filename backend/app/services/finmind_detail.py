@@ -144,18 +144,20 @@ def _build_institutional_summary(data: list[dict]) -> dict:
 
 
 def _build_chip_risk_summary(margin_data: list[dict], short_data: list[dict]) -> dict:
+    # Both margin and short come from TaiwanStockMarginPurchaseShortSale
+    # Fields: MarginPurchaseTodayBalance, ShortSaleTodayBalance
     margin_balance = None
     short_balance = None
 
     if margin_data:
         latest_m = sorted(margin_data, key=lambda r: r.get("date", ""))[-1]
-        raw = latest_m.get("MarginPurchaseBalance") or latest_m.get("margin_purchase_balance")
-        margin_balance = int(float(raw)) if raw else None
+        raw = latest_m.get("MarginPurchaseTodayBalance")
+        margin_balance = int(raw) if raw is not None else None
 
     if short_data:
         latest_s = sorted(short_data, key=lambda r: r.get("date", ""))[-1]
-        raw = latest_s.get("ShortSaleBalance") or latest_s.get("short_sale_balance")
-        short_balance = int(float(raw)) if raw else None
+        raw = latest_s.get("ShortSaleTodayBalance")
+        short_balance = int(raw) if raw is not None else None
 
     # Derive risk level from margin/short ratio
     risk_level = "unknown"
@@ -198,17 +200,14 @@ async def get_tw_detail(symbol: str) -> dict:
         _fetch_dataset("TaiwanStockPER", symbol, start_30d, token)
     )
     inst_task = asyncio.create_task(
-        _fetch_dataset("TaiwanStockInstitutionalInvestors", symbol, start_30d, token)
+        _fetch_dataset("TaiwanStockInstitutionalInvestorsBuySell", symbol, start_30d, token)
     )
     margin_task = asyncio.create_task(
-        _fetch_dataset("TaiwanStockMarginPurchaseSale", symbol, start_30d, token)
-    )
-    short_task = asyncio.create_task(
-        _fetch_dataset("TaiwanStockShortSale", symbol, start_30d, token)
+        _fetch_dataset("TaiwanStockMarginPurchaseShortSale", symbol, start_30d, token)
     )
 
-    revenue_data, per_data, inst_data, margin_data, short_data = await asyncio.gather(
-        revenue_task, per_task, inst_task, margin_task, short_task,
+    revenue_data, per_data, inst_data, margin_data = await asyncio.gather(
+        revenue_task, per_task, inst_task, margin_task,
         return_exceptions=True,
     )
 
@@ -220,7 +219,7 @@ async def get_tw_detail(symbol: str) -> dict:
         "valuation_summary": _build_valuation_summary(safe(per_data, [])),
         "institutional_summary": _build_institutional_summary(safe(inst_data, [])),
         "chip_risk_summary": _build_chip_risk_summary(
-            safe(margin_data, []), safe(short_data, [])
+            safe(margin_data, []), safe(margin_data, [])
         ),
     }
 

@@ -182,7 +182,28 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
     addMaLine(priceChart, candles, indicators?.ma120, toggles.ma120, COLORS.ma120);
     addMaLine(priceChart, candles, indicators?.ma240, toggles.ma240, COLORS.ma240);
 
-    // Add support/resistance lines
+    // Add Bollinger Bands as overlay on price chart
+    if (toggles.bb && indicators?.bollinger_bands) {
+      const bb = indicators.bollinger_bands;
+      const addBBLine = (key: 'upper' | 'middle' | 'lower', color: string, style: number) => {
+        const series = priceChart.addSeries(LineSeries, {
+          color,
+          lineWidth: 1,
+          lineStyle: style,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        const d = candles
+          .map((c, i) => ({ time: c.time, value: bb[key][i] ?? null }))
+          .filter((p) => p.value !== null) as { time: string; value: number }[];
+        if (d.length > 0) series.setData(d);
+      };
+      addBBLine('upper',  COLORS.bbUpper,  1);
+      addBBLine('middle', COLORS.bbMiddle, 2);
+      addBBLine('lower',  COLORS.bbLower,  1);
+    }
+
+    // Add support/resistance lines (axis label hidden to avoid colored blocks on scale)
     if (indicators?.support_resistance) {
       const sr = indicators.support_resistance;
       if (sr.support && sr.support.length > 0) {
@@ -192,8 +213,8 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
             color: COLORS.support,
             lineWidth: 1,
             lineStyle: 2,
-            axisLabelVisible: true,
-            title: `S: ${level.toFixed(2)}`,
+            axisLabelVisible: false,
+            title: `S ${level.toFixed(0)}`,
           });
         });
       }
@@ -204,8 +225,8 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
             color: COLORS.resistance,
             lineWidth: 1,
             lineStyle: 2,
-            axisLabelVisible: true,
-            title: `R: ${level.toFixed(2)}`,
+            axisLabelVisible: false,
+            title: `R ${level.toFixed(0)}`,
           });
         });
       }
@@ -327,8 +348,8 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
       syncTimeScale(priceChart, macdChart);
     }
 
-    // ── KD & Bollinger Bands pane ───────────────────────────────────────────────
-    if ((toggles.kd || toggles.bb) && kdBBContainerRef.current) {
+    // ── KD pane ──────────────────────────────────────────────────────────────
+    if (toggles.kd && kdBBContainerRef.current) {
       const kdBBChart = createChart(kdBBContainerRef.current, {
         ...baseOptions,
         width: kdBBContainerRef.current.clientWidth,
@@ -340,41 +361,8 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
       });
       chartsRef.current.push(kdBBChart);
 
-      // Bollinger Bands (shown as semi-transparent area)
-      if (toggles.bb && indicators?.bollinger_bands) {
-        const bbUpper = kdBBChart.addSeries(LineSeries, {
-          color: COLORS.bbUpper,
-          lineWidth: 1,
-          lineStyle: 1,
-        });
-        const bbUpperData = candles
-          .map((c, i) => ({ time: c.time, value: indicators.bollinger_bands!.upper[i] ?? null }))
-          .filter((p) => p.value !== null) as { time: string; value: number }[];
-        if (bbUpperData.length > 0) bbUpper.setData(bbUpperData);
-
-        const bbMiddle = kdBBChart.addSeries(LineSeries, {
-          color: COLORS.bbMiddle,
-          lineWidth: 1,
-          lineStyle: 2,
-        });
-        const bbMiddleData = candles
-          .map((c, i) => ({ time: c.time, value: indicators.bollinger_bands!.middle[i] ?? null }))
-          .filter((p) => p.value !== null) as { time: string; value: number }[];
-        if (bbMiddleData.length > 0) bbMiddle.setData(bbMiddleData);
-
-        const bbLower = kdBBChart.addSeries(LineSeries, {
-          color: COLORS.bbLower,
-          lineWidth: 1,
-          lineStyle: 1,
-        });
-        const bbLowerData = candles
-          .map((c, i) => ({ time: c.time, value: indicators.bollinger_bands!.lower[i] ?? null }))
-          .filter((p) => p.value !== null) as { time: string; value: number }[];
-        if (bbLowerData.length > 0) bbLower.setData(bbLowerData);
-      }
-
       // KD (Stochastic)
-      if (toggles.kd && indicators?.kd) {
+      if (indicators?.kd) {
         const kLineSeries = kdBBChart.addSeries(LineSeries, {
           color: COLORS.kdK,
           lineWidth: 2,
@@ -446,7 +434,7 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
           toggles.volume ? volumeContainerRef.current : null,
           toggles.rsi ? rsiContainerRef.current : null,
           toggles.macd ? macdContainerRef.current : null,
-          (toggles.kd || toggles.bb) ? kdBBContainerRef.current : null,
+          toggles.kd ? kdBBContainerRef.current : null,
           toggles.atr ? atrContainerRef.current : null,
         ].filter(Boolean) as HTMLElement[];
         if (containers[idx]) {
@@ -555,13 +543,9 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
               <div ref={macdContainerRef} className="w-full" />
             </div>
           )}
-          {(toggles.kd || toggles.bb) && (
+          {toggles.kd && (
             <div>
-              <div className="text-xs text-zinc-400 mt-2">
-                {toggles.kd && 'KD (9,3,3)'}
-                {toggles.kd && toggles.bb && ' / '}
-                {toggles.bb && 'Bollinger Bands (20,2)'}
-              </div>
+              <div className="text-xs text-zinc-400 mt-2">KD (9,3,3)</div>
               <div ref={kdBBContainerRef} className="w-full" />
             </div>
           )}

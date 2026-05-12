@@ -83,7 +83,6 @@ def macd(
         for f, s in zip(ema_fast, ema_slow)
     ]
 
-    # EMA of the (non-None tail of) macd_line, then re-align
     valid_start = next((i for i, v in enumerate(macd_line) if v is not None), n)
     tail = [v for v in macd_line[valid_start:] if v is not None]
     signal_tail = ema(tail, signal_period) if tail else []
@@ -102,17 +101,23 @@ def macd(
 
 # ── Convenience: build indicator bundle from candles ─────────────────────────
 
-INDICATOR_KEYS = {"ma5", "ma20", "ma60", "rsi", "macd", "volume"}
+INDICATOR_KEYS = {
+    "ma5", "ma20", "ma60", "ma120", "ma240",
+    "rsi", "macd", "volume",
+    "kd", "bb", "bollinger_bands", "atr", "support_resistance",
+}
 
 
 def build_indicators(candles: list[dict], requested: set[str] | None = None) -> dict:
     """Compute requested indicators from a candle list.
 
-    Each candle is a dict with `open`, `high`, `low`, `close`, `volume`, `time`.
-    Returns a dict keyed by indicator name. Unknown keys are ignored.
+    Each candle is a dict with open, high, low, close, volume, time.
+    Returns a dict keyed by indicator name.
     """
-    keys = requested or INDICATOR_KEYS
+    keys = requested or {"ma5", "ma20", "ma60", "rsi", "macd", "volume"}
     closes = [float(c.get("close", 0.0)) for c in candles]
+    highs  = [float(c.get("high",  0.0)) for c in candles]
+    lows   = [float(c.get("low",   0.0)) for c in candles]
     out: dict = {}
 
     if "ma5" in keys:
@@ -121,6 +126,10 @@ def build_indicators(candles: list[dict], requested: set[str] | None = None) -> 
         out["ma20"] = sma(closes, 20)
     if "ma60" in keys:
         out["ma60"] = sma(closes, 60)
+    if "ma120" in keys:
+        out["ma120"] = sma(closes, 120)
+    if "ma240" in keys:
+        out["ma240"] = sma(closes, 240)
     if "rsi" in keys:
         out["rsi"] = rsi(closes, 14)
     if "macd" in keys:
@@ -128,21 +137,43 @@ def build_indicators(candles: list[dict], requested: set[str] | None = None) -> 
     if "volume" in keys:
         out["volume"] = [int(c.get("volume", 0)) for c in candles]
 
+    # Extended indicators (imported lazily to avoid circular imports)
+    if "kd" in keys:
+        from .tw_technical_extended import kd_indicator
+        out["kd"] = kd_indicator(highs, lows, closes)
+
+    if "bb" in keys or "bollinger_bands" in keys:
+        from .tw_technical_extended import bollinger_bands as bb_func
+        out["bollinger_bands"] = bb_func(closes)
+
+    if "atr" in keys:
+        from .tw_technical_extended import atr as atr_func
+        out["atr"] = atr_func(highs, lows, closes)
+
+    if "support_resistance" in keys:
+        from .tw_technical_extended import support_resistance as sr_func
+        out["support_resistance"] = sr_func(highs, lows)
+
     return out
 
 
 def parse_indicator_query(raw: str | None) -> set[str] | None:
     """Parse a comma-separated indicator list from the query string.
 
-    Accepts: "ma,rsi,macd,volume" → expands "ma" to ma5/ma20/ma60.
-    Returns None if no indicators are requested (caller skips computation).
+    Expansions:
+      ma  → ma5, ma20, ma60, ma120, ma240
+      bb  → bollinger_bands
+    Returns None if no valid indicators are requested.
     """
     if not raw:
         return None
     parts = {p.strip().lower() for p in raw.split(",") if p.strip()}
     if "ma" in parts:
         parts.discard("ma")
-        parts.update({"ma5", "ma20", "ma60"})
+        parts.update({"ma5", "ma20", "ma60", "ma120", "ma240"})
+    if "bb" in parts:
+        parts.discard("bb")
+        parts.add("bollinger_bands")
     if "all" in parts:
         return set(INDICATOR_KEYS)
     return parts & INDICATOR_KEYS or None

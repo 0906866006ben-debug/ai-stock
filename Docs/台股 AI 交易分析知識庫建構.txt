@@ -1,0 +1,345 @@
+﻿台股 AI 交易分析與決策支援平台：技術分析深度邏輯與系統架構研究規範報告
+A. 技術分析核心哲學：多因子共振與系統化決策之辯證
+在構建針對台股市場的 AI 交易決策系統時，首要確立的哲學基礎在於將市場視為一個複雜適應系統（Complex Adaptive System），而非單純的隨機行走模型 1。傳統技術分析往往陷入單一指標的決定論，例如迷信移動平均線（MA）的黃金交叉或相對強弱指標（RSI）的超買超賣值，這類做法在量化實證中已被證明具備極高的不穩定性與滯後性 3。系統化交易的靈魂在於「多因子共振」（Multi-factor Resonance），即技術分析不應產出單一的買賣指令，而應作為一種證據收集與權重評估的過程，旨在回答價格結構是否具備可交易性、趨勢是否具備延續性，以及當前位置是否具備良好的風險報酬比 3。
+單一指標的問題核心在於「維度缺失」。一個移動平均線訊號僅捕捉了趨勢的平均化方向，卻忽略了達成該價格路徑時的動能品質（Momentum Quality）、波動率背景（Volatility Regime）以及成交量所反映的參與者意願 3。在台股這類受監管制度（如 10% 漲跌停限制、處置股機制）與特定法人行為（如投信季末作帳）高度干擾的市場中，單一指標的失真率會隨市場熱度非線性上升 9。因此，AI 系統的邏輯設計必須強制執行「證據融合」規則：一個有效的技術觀點必須由價格狀態、市場結構、均線斜率、量價品質、支撐壓力位及動能指標等至少五個維度共同支撐 3。指標僅是證據，並非結論；系統的任務是透過數學與統計方法，如資訊係數（IC）的滾動計算，來動態評估各項技術因子在不同市場環境下的預測能力，從而構建出一套具備魯棒性的共振模型 12。
+B. 多週期技術分析框架：時序分層與衝突處理邏輯
+市場波動呈現分形特徵（Fractal Nature），不同週期的參與者在同一時間點可能持有截然相反的操作邏輯 13。台股 AI 系統必須具備時序感知能力（Horizon-Aware Interpretation），將技術分析分層為短線（Tradability）、波段（Continuity）與長線（Timing Filter）三個層級 3。
+
+
+週期層次
+	主要時間框架
+	核心命題
+	關鍵技術變量
+	短線層級
+	15分鐘 / 60分鐘 / 日線
+	當前是否具備高勝率的入場點？
+	MA5, MA10, ATR, 分時量價, 盤中當沖比 15
+	波段層級
+	日線 / 週線
+	既有趨勢是否健康且能延續？
+	MA20, MA60, 波段高低點, 法人連續買賣超 14
+	長線層級
+	週線 / 月線
+	價格在長期歷史評價中處於何種位階？
+	MA120, MA240, 長期成交量能階 15
+	週期衝突處理是 AI 決策中最具挑戰性的部分。例如，當日線圖顯示強勢上漲（Strong Uptrend），但 60 分鐘圖出現嚴重頂背離時，系統應如何產出結論？專業交易員的啟發式規則通常遵循「長線保護短線，短線觸發長線」的原則 3。AI 系統的內部權重分配應如下設計：
+1. 趨勢優先級：高階週期的趨勢方向（如 MA60 斜率）決定了交易的基本偏見（Bias）。若高階週期為空頭，低階週期的買入訊號僅被視為「弱勢反彈」，其訊號得分（Signal Score）必須被強制打折，且信心指數（Confidence Score）上限設為中低級別 3。
+2. 時序比例聯動：建議採用 1:4:16 的時序比例鏈進行數據對齊。當低階週期出現轉強訊號，且中階週期正好回測關鍵支撐位，同時高階週期處於起漲點時，共振權重達到最大 16。
+3. 衝突標註邏輯：當各週期訊號完全矛盾時，系統必須產出「中性觀望」狀態，並明確提示衝突來源，防止模型在混沌狀態下強制輸出確定性結論 17。
+C. 價格狀態分類：擴充至 10 種精細化狀態之定義
+為了讓 AI 能更細膩地捕捉台股市場的動態變化，將原始的狀態模型擴充為 10 種狀態。每一種狀態都對應著特定的心理背景與量化邊界 2。
+1. 極端噴發態 (Parabolic Overheat)
+價格遠高於 MA20，乖離率（BIAS）達到歷史 95 分位以上，且 RSI 常駐 80 以上。此時通常伴隨著極高的成交金額與當沖比，顯示投機情緒極度亢奮。AI 行動邏輯應標註為「風險極高」，建議減碼而非追價 3。
+2. 強勢多頭態 (Strong Uptrend)
+價格穩定在 MA20 與 MA60 之上，且均線斜率呈正向發散。波段高低點呈現典型的 Higher High (HH) 與 Higher Low (HL) 結構。成交量在價格創新高時有效放大 1。
+3. 穩健增長態 (Steady Uptrend)
+價格沿著 MA20 緩步爬升，未見極端乖離，量能溫和。這種狀態的趨勢永續性最強，通常由中長線法人籌碼支撐，而非短線投機客 3。
+4. 高位派發態 (High-Level Distribution)
+價格在高檔區間震盪，雖然未明顯跌破均線，但成交量頻繁出現「價平量增」或「價跌量增」的特徵。RSI 與 MACD 出現明顯頂背離，顯示內在動能衰竭 26。
+5. 早期轉強態 (Early Strengthening)
+價格在長期下跌或盤整後，首次帶量站回 MA20，且 MA20 斜率由負轉平。MACD 柱狀體收縮並轉正，顯示空頭慣性已被打破 3。
+6. 窄幅整理態 (Tight Consolidation / VCP)
+價格波動範圍逐漸收窄，ATR 指標持續下降，均線高度糾結。這通常是 VCP（波動收縮型態）的最後階段，系統應高度關注此時的放量突破方向 30。
+7. 初步轉弱態 (Early Weakening)
+價格收盤跌破 MA20，或在高檔出現長上影線伴隨極端放量。MA5 與 MA10 出現死亡交叉，顯示短線支撐結構受損 3。
+8. 弱勢反彈態 (Weak Rebound)
+價格位於 MA60 之下，反彈受阻於下彎的 MA20 或 MA60。反彈過程量能萎縮，指標僅是從超賣區修正，不具備翻轉特徵 3。
+9. 空頭延續態 (Downtrend Continuation)
+價格、MA20、MA60 呈空頭排列，斜率皆負。任何短暫的盤整後皆出現更低的新低點 (Lower Low)。賣壓在破位時顯著放大 24。
+10. 恐慌衰竭態 (Selling Climax)
+價格出現斷頭式下跌，BIAS 呈極大負乖離，RSI 跌破 20。成交量因恐慌性拋售而暴增，出現長下影線或低檔跳空缺口，代表跌勢進入末端 27。
+D. 趨勢結構與市場結構：道氏理論與 Wyckoff 相位深度整合
+市場結構（Market Structure）是技術分析的骨架，而指標僅是依附其上的血肉。AI 系統必須能自動識別波段的節奏，區分噪聲與結構性轉變 1。
+1. 道氏理論的量化標註
+系統應透過演算法識別波段的高低點（Swings）。
+* 多頭確認：必須具備    且價格維持在    支撐之上。
+* 結構斷裂 (BOS - Break of Structure)：當原本的多頭結構出現第一個   （跌破前波低點），系統應立即將交易信心下修為「謹慎」，即使此時價格仍在均線之上 7。
+2. 市場相位循環（Wyckoff 理論）
+台股的大波段往往遵循 Wyckoff 定義的四階段模型，這對於 AI 識別「大資金足跡」至關重要 26。
+   * 吸籌期 (Accumulation)：關注「彈簧」（Spring）現象，即價格短暫跌破支撐區吸引恐慌盤後，迅速帶量收回。這是最高等級的多頭訊號 33。
+   * 主升段 (Markup)：關注「強勢訊號」（SOS）與「最後支撐點」（LPS）。AI 應在每次回測 LPS 時產出加碼建議 28。
+   * 派發期 (Distribution)：關注「上衝回落」（UTAD）。當股價創新高後無量跌回區間，是結構轉空的終極預警 27。
+   * 主跌段 (Markdown)：關注「弱勢訊號」（SOW），任何支撐位的無力反彈皆為逃命機會 28。
+E. 均線系統：台股扣抵值預測模型與斜率邏輯
+均線系統是台股技術分析的中流砥柱，但絕大多數系統忽略了均線的動態物理特性 25。
+1. 均線扣抵值 (Moving Average Back-calculation) 的預測力
+均線的核心在於其「方向」而非「數值」。扣抵值決定了未來均線彎曲的方向 25。
+   * 斜率反轉邏輯：以 20 日均線（MA20）為例，今日的均線是過去 20 天價格的平均。到了明天，系統會剔除「20 天前的價格」（扣抵值）並加入「明天的價格」。
+   * AI 預演規則：若扣抵值處於「高價區」，除非股價強勢噴發，否則均線必然下彎，形成沉重的下行引力；若扣抵值進入「低價區」，均線極易轉向上彎，產生「助漲」效果 25。
+   * 系統建議：AI 必須產出一個「斜率穩定度」指標，計算未來 3-5 日內，價格維持在當前區間時，均線斜率的預期變動百分比 25。
+2. 均線排列與斜率標準化
+   * 多頭排列：   且所有均線斜率均為正。這代表市場在所有週期層級的平均成本都在上移 3。
+   * 均線壓縮 (Compression)：當    到    的最大乖離度小於 3% 時，系統應定義為「能量壓縮」。根據「橫有多長，豎有多高」的經驗規則，此時的突破訊號權重應加倍 3。
+   * 斜率公式：  。斜率大於某個閾值（需回測校準）時，視為「趨勢加速」 3。
+F. 量價分析：成交張數與金額之差異及其四象限邏輯
+成交量是台股最真實的語言，但在高價權值股主導的加權指數下，傳統的「張數」分析必須被「成交金額」修正 47。
+1. 成交金額 (Turnover Value) 的權重優勢
+      * 張數失真：一檔 10 元的低價股成交一萬張，與一檔 1000 元的高價股成交一萬張，背後代表的資金力量完全不同 47。
+      * 流動性層級：系統應根據「成交金額」將個股分為：
+      * 巨型流動性標的（金額前 5%）：技術分析可信度最高，不易被單一主力操控 3。
+      * 低流動性標的（殭屍股）：成交量零星，技術指標失真，AI 應降低其信心分 51。
+2. 量價四象限分類 (The Four-Quadrant Logic)
+系統對每一根日 K 棒的量價關係應自動進行標註，並結合前 20 日均量（VMA20）進行強弱判定 3。
+
+
+分類名稱
+	價格行為
+	量能行為
+	技術含義
+	健康的擴張 (Healthy Expansion)
+	價漲
+	量增 (> 1.2x VMA20)
+	資金進場，趨勢得到確認。 3
+	惜售或追價疲弱 (Divergent Rise)
+	價漲
+	量縮 (< 0.8x VMA20)
+	多頭末端或高度鎖碼。需結合位階判斷。 3
+	主動式殺盤 (Active Selling)
+	價跌
+	量增 (> 1.2x VMA20)
+	賣壓噴發，若跌破支撐則為重大利空。 3
+	良性回檔 (Healthy Pullback)
+	價跌
+	量縮 (< 0.8x VMA20)
+	籌碼安定，通常為多頭中的修正。 3
+	3. 週轉率 (Turnover Rate) 與當沖噪聲
+台股的「當沖比率」經常成為量價分析的噪聲。若一檔股票成交量暴增，但當沖比率超過 60%，其量能的支撐力道應予打折 55。系統應計算「淨流入量」（依據成交筆數與外盤成交比率估算）來修正真實量能 3。
+G. 支撐與壓力來源：幾何、心理與籌碼的三位一體
+支撐與壓力並非精確的線，而是價格容易產生反應的「供給/需求區間」 58。
+      1. 結構支撐壓力 (Structural S/R)：前波高低點、區間邊界、缺口回補位置。這是市場參與者集體記憶最深刻的地方 37。
+      2. 均線浮動支撐 (Dynamic S/R)：MA20（月線）被視為台股的「生命線」，MA60（季線）則為「波段線」。當價格第一次回測這些均線時，具備極高的反應概率 60。
+      3. 心理整數關卡 (Psychological Levels)：如「萬六」、「千金股」、「百元股」等關卡。這些價位往往累積大量的預設賣單或買單 7。
+      4. 籌碼密集區 (Volume Profile)：透過「分價量表」找出在過去一段時間內，成交量最集中的價格區間。這些區間代表了最強的引力（套牢盤）或支撐（換手盤） 41。
+H. 突破、跌破與假訊號邏輯：有效性評估體系
+突破交易在台股中極易遭遇「假突破」 25。系統必須建立一套過濾機制來提升訊號品質。
+1. 有效突破 (Effective Breakout) 的多維度標準
+      * 幅度規則：價格必須收在阻力位之上 3% 且站穩超過 1 日 61。
+      * 量能確認：成交量必須達到 20 日均量的 1.5 倍以上，或高於前波突破時的量能 61。
+      * K 棒品質：實體長度佔日內波動 70% 以上，不應有超過 15% 的上影線 3。
+      * 籌碼協同：三大法人（尤其是投信）在突破當日應呈淨買超 41。
+2. 假訊號 (False Signal) 的偵測與反應
+      * 回測失效：突破後 1-3 日內，價格跌回突破點之下。AI 應立即觸發「假設失效」警告 3。
+      * 量價背離突破：價格過高但 OBV 指標下降，顯示突破僅由少數大單帶動，缺乏廣泛參與 3。
+      * 上影線陷阱：日內突破但收盤收低，留下長上影線（墓碑線）。系統應給予「假突破風險」評分 80 以上 3。
+I. 動能指標深度解析：RSI, MACD, KD 之場景化應用
+動能指標不是獨立的指揮官，而是趨勢的輔助官 3。
+      * RSI (相對強弱指標)：
+      * 50 中軸原則：RSI 在 50 以上是強勢區，50 以下是弱勢區。系統應偵測 RSI 在 50 附近的「擺動失敗」作為趨勢加速的訊號 3。
+      * 高位鈍化：在強勁趨勢中，RSI > 70 可能持續數週。AI 不應盲目喊空，而應結合 MA10 判斷趨勢是否斷裂 3。
+      * MACD (平滑異同移動平均線)：
+      * 零軸之上：MACD 快慢線在零軸之上時，所有的「死亡交叉」僅視為回檔，而非反轉 3。
+      * 柱狀體 (Histogram) 變換：柱狀體的長短變化（二階動能）是領先價格變化的重要參考 3。
+      * KD (隨機指標)：
+      * 短線節奏：KD 適合捕捉 1-3 日的波動點。在台股中，KD 頻繁在超買區「鈍化」是飆股的基本屬性 3。
+J. 過熱、乖離與背離：極端風險與轉折預警
+背離是技術分析中最具價值的訊號之一，因為它揭示了「價格與動能的不一致」 3。
+      1. 頂背離 (Bearish Divergence)：價格創下新高，但 RSI 或 MACD 柱狀體未能同步創高。這代表上攻的「內部力量」正在萎縮，是趨勢即將終結的先兆 3。
+      2. 底背離 (Bullish Divergence)：價格創下新低，但指標已開始低點墊高。這是主力資金「偷偷承接」的信號 3。
+      3. 乖離率風險 (BIAS Risk)：當價格偏離 MA20 超過 15-20% 時（依個股 Beta 值動態調整），回歸均線的重力會急劇增加。AI 系統應將此標註為「過熱警報」 1。
+K. K 棒與缺口：微觀心理與市場裂縫
+K 棒的結構是日內多空搏弈的終極縮影 21。
+      * 實體與影線比例：  。實體大於 70% 代表單向共識強；實體小於 10% 且具備長影線（Doji, Hammer）代表轉折機率高 33。
+      * 影線邏輯：台股中，高檔連續三根長上影線且成交金額巨大，通常代表主力正在「換手失敗」或「高檔出貨」 3。
+      * 跳空缺口 (Gaps)：
+         * 突破缺口：不應被回補，否則視為假突破。
+         * 衰竭缺口：出現在連續三、四個缺口之後，伴隨極端爆量（成交金額為均值 3 倍以上），通常代表最後一波追價力量的耗盡 3。
+L. 型態學系統化建議：從視覺感知到演算法量化
+型態分析不應是隨意的畫線，必須建立嚴謹的幾何特徵規則 1。
+         1. VCP (Volatility Contraction Pattern)：
+         * 量化條件：連續 3-4 次回撤，回撤幅度呈現典型的    收縮路徑 30。
+            * 量能特徵：回撤底部的成交量必須顯著萎縮（Dry-up），代表浮額已清 30。
+            2. 杯柄型態 (Cup and Handle)：
+            * 量化條件：柄部（Handle）的深度不應超過杯身深度的 1/3，且柄部成交量必須呈下降趨勢 30。
+            3. 雙底/頭肩底 (Reversal Bases)：
+            * 量化條件：第二個底部的 RSI 應高於第一個底部的 RSI（底背離確認），且成交量在底部反彈時逐波放大 7。
+M. 台股市場特殊規則：漲跌停、處置股與法人的干擾
+台股的微觀結構深受交易所規則影響，這會導致純技術指標發生嚴重扭曲 9。
+1. 漲跌停限制 (Price Limits) 的「磁吸效應」
+            * 現象：當價格接近 10% 漲停位時，交易者會因擔心買不到而搶進，導致價格非線性加速觸及限制 78。
+            * 指標失真：觸及漲停當日，RSI 無法反映其潛在噴發力，MACD 柱狀體會被「切平」。系統應標註為「限制狀態指標無效」 78。
+2. 注意股與處置股 (Attention/Disposition Stocks)
+            * 交易限制：進入處置股後，撮合改為 5 分鐘或 20 分鐘一次，且可能禁止信用交易、現股當沖 10。
+            * AI 邏輯修正：處置期間流動性極低，任何技術指標（尤其是基於成交量的）皆不可信。處置期間的 K 棒往往呈現「鋸齒狀」，系統應暫停技術得分產出，僅保留位階觀察 54。
+3. 三大法人籌碼交互
+台股是一個「籌碼主導技術」的市場 9。
+            * 投信作帳 (Window Dressing)：每季末（3、6、9、12月）前兩週，投信重倉股的技術面往往會強於大盤。AI 應掃描「投信持股比率 10-15% 且股價沿 MA5 上行」的標的 41。
+            * 外資連續性：外資的買盤具備慣性。技術突破若伴隨外資連續 3 日買超，成功率顯著提升 41。
+N. 籌碼技術交互：數據驅動的共振特徵模型
+將技術指標與籌碼指標融合，構建 AI 的特徵矩陣，旨在捕捉「聰明錢」的動向 9。
+
+
+交互訊號類別
+	觸發條件
+	系統設計建議
+	黃金共振 (Golden Confluence)
+	帶量長紅突破 + 投信/外資雙買
+	設定為「一類買入訊號」，信心評分給予 85+。 41
+	虛漲背離 (Hollow Breakout)
+	股價創新高 + 散戶融資大增 + 法人反向賣超
+	標註為「出貨風險」，風險評級提升至 High。 3
+	底部吸籌 (Quiet Accumulation)
+	價格橫盤整理 + 籌碼集中度（前 15 大券商）上升
+	列入追蹤名單，等待放量突破觸發。 57
+	法人護盤 (Institutional Support)
+	股價回測 MA20 + 價格下跌但法人持續買超
+	技術得分打折但信心指數維持，視為左側機會。 41
+	O. 條件式交易訊號分類 (Taxonomy)
+AI 系統的訊號輸出應具備階層性，而非單一的「Buy/Sell」 8。
+            1. 直接觸發訊號 (Deterministic Triggers)：符合所有共振因子。例如：   86。
+            2. 觀察性訊號 (Contingent Alerts)：單一條件達成，需等待後續確認。例如：「價格突破，等待成交量補足」 86。
+            3. 過濾性訊號 (Negative Filters)：排除不適合交易的情況。例如：「成交金額低於 500 萬」、「處置股第二階段」 5。
+            4. 失效/止損訊號 (Invalidation Signals)：核心假設被破壞。例如：「收盤跌破 MA20 且法人由買轉賣」 3。
+P. 分數、信心、風險三軸決策框架
+為了解決「強訊號但不可信」或「低風險但無動能」的決策困境，AI 系統必須輸出三維評分 3。
+               * 技術訊號得分 (Signal Score, 0-100)：衡量當前技術型態的「攻擊性」。100 代表完美的多頭共振，0 代表極端的空頭結構 3。
+               * 決策信心指數 (Confidence Score, 0-100)：衡量底層數據的「可靠性」。資料齊全、流動性充裕、週期方向一致、籌碼支持時，信心指數高。若訊號強但量能萎縮且當沖比高，信心應降至 50 以下 3。
+               * 操作風險評級 (Risk Score, 0-100)：衡量當前的「追價回撤風險」。基於乖離率、過熱度（RSI）與大盤環境。強勢股在噴發段訊號分可能 90，但風險評級也會同步達到 80 3。
+Q. 資料品質、信心上限與盲區管理
+系統必須對數據的不確定性進行硬編碼保護 3。
+               * 信心上限 (Confidence Caps)：
+               * 估計/預測數據參與計算時：Max Confidence = 60%。
+               * 單一技術因子觸發時：Max Confidence = 40%。
+               * 成交金額低於流動性閾值時：Max Confidence = 30% 3。
+               * 盲區標註：當市場進入非理性暴漲跌（如全市場跌停）或交易所系統延遲時，AI 應產出「Data Unreliable」標籤，暫停決策輸出 3。
+R. 可回測的技術假設 (Rule Hypotheses)
+每一條寫入 AI 知識庫的規則都應視為「v1 假設」，待後端引擎驗證其期望值 3。
+               * 假設 1（VCP 突破）：在    斜率為正的前提下，股價帶量突破    且   ，未來 20 日勝率應超過 60%。
+               * 假設 2（乖離修正）：當    且 RSI 出現 5 日內的頂背離，價格回測    的概率超過 75% 97。
+               * 假設 3（處置股出關）：處置股首日解除限制，若成交金額大於處置期間均值 3 倍且收盤站上處置期間最高價，則具備新一波升浪動能 55。
+S. 系統必要資料欄位規格
+為支撐上述深度邏輯，後端 TechnicalFeatureBuilder 必須提供以下欄位 3。
+
+
+資料類別
+	核心欄位名稱
+	衍生邏輯說明
+	量價特徵
+	turnover_value, vwap, body_ratio, shadow_ratio
+	區分張數與金額，計算日內多空共識。 3
+	均線動態
+	ma_slopes, kou_di_indices, ma_compression_ratio
+	預測斜率轉向，偵測能量壓縮程度。 25
+	結構節奏
+	swing_hh_hl, wyckoff_phase_id, volume_profile_peak
+	識別道氏趨勢與大資金吸籌/派發相位。 1
+	波動風險
+	atr_ratio, bias_20_zscore, historical_vol_regime
+	標準化波動度，評估價格是否過度延伸。 3
+	市場微結構
+	day_trading_ratio, institutional_consecutive_days, disposition_status
+	過濾短線噪聲，偵測法人慣性與監管干擾。 10
+	T. 最終輸出格式與人機交互建議
+AI 系統不應僅輸出一個百分比，而應產出一個具備可解釋性的「技術診斷卡」。
+                  1. 狀態診斷 (Status)：例如「處於累積期尾端的 VCP 能量壓縮態」。
+                  2. 信心-風險雷達圖 (Radar)：展示 Signal、Confidence、Risk 三軸。
+                  3. 核心支撐證據 (Evidence)：列出導致得分的三個共振因子（如：成交金額連 3 日放大、均線即將扣抵低價、投信買超佔比上升）。
+                  4. 動態觀察清單 (Scenarios)：
+                  * 觸發條件：突破    且成交量達    86。
+                     * 失效條件：跌破    或法人賣盤擴大至特定閾值 89。
+                        5. 自然語言行動建議：例如「波段趨勢良好，但短線乖離已高，建議等待回測 MA20 且量縮後再行介入」 3。
+________________
+結論與系統演化建議
+本規範將技術分析從單純的線性運算提升為多維度的行為經濟學特徵提取過程。在台股市場中，AI 的優勢不在於預測股價明天跌或漲，而在於其能同時監控上千檔個股的量價、均線扣抵、法人籌碼與監管狀態，並在「非效率視窗」（如處置股出關、投信作帳、MSCI 調整）出現共振時精確捕捉 9。
+系統架構師應注意，技術分析規則在 AI 中應以「特徵工程」的形式存在，而非硬性的「邏輯跳轉」。透過對歷史數據的機器學習（如 Random Forest 或 LSTM），系統應能自發地發現某些技術特徵的隱含權重 12。例如，在半導體板塊中，成交金額的權重可能遠大於成交張數；而在小型題材股中，當沖比率的權重則是核心過濾器。最終，台股 AI 平台應演化為一個能根據市場 regime 自動調整權重的「動態決策矩陣」 12。
+引用的著作
+                        1. Technical analysis - Wikipedia, 檢索日期：5月 12, 2026， https://en.wikipedia.org/wiki/Technical_analysis
+                        2. (PDF) Fundamental framework for “technical analysis” of market prices - ResearchGate, 檢索日期：5月 12, 2026， https://www.researchgate.net/publication/225674930_Fundamental_framework_for_technical_analysis_of_market_prices
+                        3. Tecnical_analysis.txt
+                        4. Technical Analysis Strategies: A Practical Guide for Traders - TrendSpider, 檢索日期：5月 12, 2026， https://trendspider.com/learning-center/technical-analysis-strategies/
+                        5. Systematic Trading: Strategies, Concepts & Quantitative Approach - QuantInsti, 檢索日期：5月 12, 2026， https://www.quantinsti.com/articles/systematic-trading/
+                        6. Understanding Quantitative Analysis (2025): Definition, Mechanics - The Trading Analyst, 檢索日期：5月 12, 2026， https://thetradinganalyst.com/quantitative-analysis/
+                        7. Technical Analysis: Getting Started, 檢索日期：5月 12, 2026， https://www.babson.edu/media/babson/assets/cutler-center/Introduciton-to-Technical-Analysis.pdf
+                        8. What Are Trading Signals? Types, Examples & How to Use Them | Audacity Capital, 檢索日期：5月 12, 2026， https://audacity.capital/trading-guides/what-are-trading-signals/
+                        9. Stock Market Forecasting in Taiwan: A Radius Neighbors Regressor Approach - MDPI, 檢索日期：5月 12, 2026， https://www.mdpi.com/2504-2289/10/4/109
+                        10. 注意股是什麼？一篇搞懂台股警示機制、交易限制與4大投資策略 - PressPlay, 檢索日期：5月 12, 2026， https://www.pressplay.cc/project/2667A183130728C4AE30928EF3CFF4DD/articles/0ADF73BE8DD04285A1AD1246FBFD96D6
+                        11. Strength of Signal – An Important Consideration for Traders?, 檢索日期：5月 12, 2026， https://www.gomarkets.com/en-au/articles/strength-of-signal-an-important-consideration-for-traders
+                        12. Factor-Scoring Ranking Strategy in S&P 500: A Quantitative Approach to Stock Selection and Performance Optimization - Atlantis Press, 檢索日期：5月 12, 2026， https://www.atlantis-press.com/article/126013142.pdf
+                        13. Multi-Timeframe Analysis: A Practical Systems Approach - GO Markets, 檢索日期：5月 12, 2026， https://www.gomarkets.com/en-au/articles/multi-timeframe-analysis
+                        14. Multi-Time Frame Trading Analysis: A Guide for Traders - Bookmap, 檢索日期：5月 12, 2026， https://bookmap.com/blog/multi-time-frame-analysis-a-guide-for-traders
+                        15. Multi-Timeframe Analysis: Basics and Benefits - LuxAlgo, 檢索日期：5月 12, 2026， https://www.luxalgo.com/blog/multi-timeframe-analysis-basics-and-benefits/
+                        16. Multi-Timeframe Analysis: The Key to Better Trading Decisions, 檢索日期：5月 12, 2026， https://tradewiththepros.com/multi-timeframe-analysis/
+                        17. How To Perform A Multi TimeFrame Analysis + 5 Strategies - Tradeciety, 檢索日期：5月 12, 2026， https://tradeciety.com/how-to-perform-a-multiple-time-frame-analysis
+                        18. Multi-Timeframe Analysis Explained for Traders: Picking The Best Combination - Gotrade, 檢索日期：5月 12, 2026， https://www.heygotrade.com/en/blog/multi-timeframe-analysis-explained-for-traders/
+                        19. Technical Analysis Using Multiple Timeframes: A Step-by-Step Guide for Traders - en, 檢索日期：5月 12, 2026， https://www.markets4you.com/en/blog/trading-basics/technical-analysis-using-multiple-timeframes-a-step-by-step-guide-for-traders/
+                        20. A Framework for Market State Prediction with Ontological Asset Selection: A Multimodal Approach - MDPI, 檢索日期：5月 12, 2026， https://www.mdpi.com/2076-3417/15/3/1034
+                        21. Candlestick Patterns: The Updated Complete Guide (2025) - Morpher, 檢索日期：5月 12, 2026， https://www.morpher.com/blog/candlestick-patterns
+                        22. The 10 most popular trading indicators and how to use them - Saxo Bank, 檢索日期：5月 12, 2026， https://www.home.saxo/learn/guides/trading-strategies/a-guide-to-the-10-most-popular-trading-indicators
+                        23. The Four Stages of the Stock Market Cycle | Charles Schwab, 檢索日期：5月 12, 2026， https://www.schwab.com/learn/story/four-stages-stock-market-cycles
+                        24. Wyckoff Method Theory & Patterns of Accumulation and Distribution - LiteFinance, 檢索日期：5月 12, 2026， https://www.litefinance.org/blog/for-professionals/wyckoff-method/
+                        25. 掌握均線扣抵值：從算術邏輯看均線翻轉與假象上攻, 檢索日期：5月 12, 2026， https://readmo.cmoney.tw/article/765fa44d-06f8-40cd-9ca7-dc069ace45e8
+                        26. Wyckoff Method Explained: Rules, Distribution, and Accumulation - Bullish Bears, 檢索日期：5月 12, 2026， https://bullishbears.com/wyckoff-method/
+                        27. Wyckoff Distribution Pattern: Smart Money Signals & Reversals - TrendSpider, 檢索日期：5月 12, 2026， https://trendspider.com/learning-center/chart-patterns-wyckoff-distribution/
+                        28. Wyckoff Trading Explained: Cycles, Schematics, and Strategy | Market Pulse - FXOpen UK, 檢索日期：5月 12, 2026， https://fxopen.com/blog/en/the-wyckoff-trading-method/
+                        29. What is the Wyckoff Strategy and How is it Applied in Financial Markets? - Mondfx, 檢索日期：5月 12, 2026， https://mondfx.com/what-is-the-wyckoff
+                        30. Volatility Contraction Pattern (VCP): How to Trade It - XS.com, 檢索日期：5月 12, 2026， https://www.xs.com/en/blog/vcp-pattern/
+                        31. Volatility Contraction Pattern (VCP): Complete Guide — Mark Minervini - Finer Market Points, 檢索日期：5月 12, 2026， https://www.finermarketpoints.com/post/what-is-a-vcp-pattern-mark-minervini-s-volatility-contraction-pattern-explained
+                        32. Volatility Contraction Pattern (VCP): A Rule-Based Screener Built for High Quality Breakouts | sharpely.in, 檢索日期：5月 12, 2026， https://sharpely.in/blog/volatility-contraction-pattern-(vcp):-a-rule-based-screener-built-for-high-quality-breakouts
+                        33. Accumulation, Manipulation, and Distribution in Wyckoff Theory - QuantVPS, 檢索日期：5月 12, 2026， https://www.quantvps.com/blog/wyckoff-accumulation-and-distribution
+                        34. Wyckoff Theory: Accumulation, Distribution & Markdown Phases Explained - Mudrex, 檢索日期：5月 12, 2026， https://mudrex.com/learn/wyckoff-theory/
+                        35. Wyckoff Accumulation Trading Strategy Understanding Market Cycles - Bookmap, 檢索日期：5月 12, 2026， https://bookmap.com/blog/wyckoff-trading-strategy-understanding-market-cycles
+                        36. Wyckoff Method & Chart Patterns Explained: Accumulation, Distribution & Schematics (2026), 檢索日期：5月 12, 2026， https://margex.com/en/blog/wyckoff-chart-patterns-explained/
+                        37. Technical Analysis: Features, Objectives, Limitations and How It Works - QuantifiedStrategies.com, 檢索日期：5月 12, 2026， https://www.quantifiedstrategies.com/technical-analysis/
+                        38. Wyckoff Method, 檢索日期：5月 12, 2026， https://www.wyckoffanalytics.com/wyckoff-method/
+                        39. 均線扣抵值怎麼看？從平均價格讀懂多空趨勢與風險控管心法 - Readmo.ai - 投資網誌- 理財寶, 檢索日期：5月 12, 2026， https://readmo.cmoney.tw/article/84e31f88-caeb-4ac9-92a7-da6d4bcc6d5b
+                        40. 江湖一點訣，一說就明白：論均線扣抵 - 方格子, 檢索日期：5月 12, 2026， https://vocus.cc/article/62fe4db4fd8978000167f088
+                        41. 籌碼K線小三角形與均線扣抵值：看懂技術訊號背後的關鍵邏輯 - 延伸閱讀文章, 檢索日期：5月 12, 2026， https://readmo.cmoney.tw/article/d003e370-a1c3-4062-9605-72ffbd0a920a
+                        42. 籌碼K線電腦版「均線扣抵值」完整解析：顯示方式、實務應用與風險思考, 檢索日期：5月 12, 2026， https://readmo.cmoney.tw/article/674a948d-617b-4563-b019-7044719e9894
+                        43. The Ultimate Guide to Candlestick Patterns | TrendSpider Blog, 檢索日期：5月 12, 2026， https://trendspider.com/blog/the-ultimate-guide-to-candlestick-patterns/
+                        44. What is a Breakout in a Technical Chart? - GTF, 檢索日期：5月 12, 2026， https://www.gettogetherfinance.com/blog/breakout-in-a-technical-chart/
+                        45. Algorithmic Trading Signals: Indicators That Work - TradersPost, 檢索日期：5月 12, 2026， https://traderspost-blog-x.webflow.io/article/technical-indicators-algo-trading
+                        46. Quantitative Breakout Strategy: First Hour ATR Stop-Loss with EMA Slope Optimization | by Sword Red | Medium, 檢索日期：5月 12, 2026， https://medium.com/@redsword_23261/quantitative-breakout-strategy-first-hour-atr-stop-loss-with-ema-slope-optimization-869ffde701ef
+                        47. Taiwan Stock Exchange (TWSE): Turnover Value and Volume - CEIC, 檢索日期：5月 12, 2026， https://www.ceicdata.com/en/taiwan/taiwan-stock-exchange-twse-turnover-value-and-volume
+                        48. 成交量什麼？一分鐘看懂量價關係的意義 - 市場先生, 檢索日期：5月 12, 2026， https://rich01.com/what-is-trading-volume/
+                        49. Taiwan - Industry Index Turnover Share | TAIEX | Collection - MacroMicro, 檢索日期：5月 12, 2026， https://en.macromicro.me/collections/46/tw-stock-relative/149381/taiwan-sector-index-trading-value-share
+                        50. Taiwan Stock Market Rises in Price and Volume, Inclusive Finance Achievements Shine - TWSE｜Market Insights, 檢索日期：5月 12, 2026， https://www.twse.com.tw/market_insights/en/detail/8a8216d69c37647f019cbcfcff03016a
+                        51. An Overview of the Market-Making Mechanisms for Listed Stocks - TWSE｜Market Insights, 檢索日期：5月 12, 2026， https://www.twse.com.tw/market_insights/en/detail/8a8216d6993bf15101999e9aebc8019e
+                        52. 3 Core Principles of Technical Analysis Every Beginner Should Know [With Examples], 檢索日期：5月 12, 2026， https://bravosresearch.com/blog/technical-analysis/core-principles-of-technical-analysis/
+                        53. Trading Signals and Technical Indicators for Effective Market Scanning - Kavout, 檢索日期：5月 12, 2026， https://www.kavout.com/market-lens/trading-signals-and-technical-indicators-for-effective-market-scanning
+                        54. 股票被處置會造成哪些影響？處置股是什麼？ - 玉山證券, 檢索日期：5月 12, 2026， https://www.esunsec.com.tw/article/post/63
+                        55. 處置股常見問題｜分盤是什麼？幾點公布？預收券款操作 - 處置王, 檢索日期：5月 12, 2026， https://www.stockwarden.com/faq
+                        56. Empirical Analysis of Retail Investors Trading Behavior in the Taiwan Stock Market - TEJ, 檢索日期：5月 12, 2026， https://www.tejwin.com/en/insight/analysis-of-retail-investors-trading-in-taiwan-stock-market/
+                        57. The Relation Between Trading Volume Concentration and Stock Returns - Academic Research Publishing Group, 檢索日期：5月 12, 2026， https://arpgweb.com/pdf-files/ijefr7(3)82-89.pdf
+                        58. A brief introduction to technical analysis | Kraken, 檢索日期：5月 12, 2026， https://www.kraken.com/learn/introduction-to-technical-analysis
+                        59. 分價量表是什麼？如何從分價表查詢壓力區/支撐區？注意事項有哪些? - 市場先生, 檢索日期：5月 12, 2026， https://rich01.com/what-is-volume-profile-0/
+                        60. John Murphy's 10 Laws of Technical Trading - ChartSchool - StockCharts.com, 檢索日期：5月 12, 2026， https://chartschool.stockcharts.com/table-of-contents/overview/john-murphys-10-laws-of-technical-trading
+                        61. Technical Breakout Patterns: A Guide to Trading Success, 檢索日期：5月 12, 2026， https://tradewiththepros.com/technical-breakout-patterns/
+                        62. 檢索日期：1月 1, 1970， https://www.twse.com.tw/zh/page/trading/rules/announcement.html
+                        63. Basic technical signals for trading - CFI Trading, 檢索日期：5月 12, 2026， https://cfi.trade/en/educational-articles/what-is-technical-analysis/basic-technical-signals-for-trading
+                        64. How to Identify Breakout Patterns with Technical Analysis - QuantVPS, 檢索日期：5月 12, 2026， https://www.quantvps.com/blog/how-to-identify-breakout-patterns-with-technical-analysis
+                        65. Candlestick Pattern Recognition (CPR) | Linn Software, 檢索日期：5月 12, 2026， https://www.linnsoft.com/techind/candlestick-pattern-recognition-cpr
+                        66. MSCI是什麼？成分股、調整日期、行情影響與投資全解析| EBC金融集團, 檢索日期：5月 12, 2026， https://www.ebc.com/zh/jinrong/276609.html
+                        67. TRADE SIGNALS - BiG, 檢索日期：5月 12, 2026， https://www.big.pt/pdf/BiGlobalTrade/Sinais_de_Transaccao_guia_de_utilizador.pdf
+                        68. ADX Indicator Trading Strategies - AvaTrade, 檢索日期：5月 12, 2026， https://www.avatrade.com/education/technical-analysis-indicators-strategies/adx-indicator-trading-strategies
+                        69. Market Scan Filter Definitions - Stockscores, 檢索日期：5月 12, 2026， https://www.stockscores.com/trader-training/getting-started/2436/lesson/Market-Scan-Filter-Definitions/
+                        70. Technical Analysis for Investors: Indicators, Patterns & Real-World Applications - McCracken, 檢索日期：5月 12, 2026， https://www.mccrackenalliance.com/blog/technical-analysis-for-investors-indicators-patterns-real-world-applications
+                        71. 16 Candlestick Patterns Every Trader Should Know | IG International, 檢索日期：5月 12, 2026， https://www.ig.com/en/trading-strategies/16-candlestick-patterns-every-trader-should-know-180615
+                        72. Candlestick Patterns Explained - Investing.com, 檢索日期：5月 12, 2026， https://www.investing.com/academy/analysis/candlestick-patterns-explained/
+                        73. Trading Candlestick Patterns 101: Introduction and Common Candlesticks & Patterns | TrendSpider Blog, 檢索日期：5月 12, 2026， https://trendspider.com/blog/trading-candlestick-patterns-101-intro-common-candlesticks-patterns/
+                        74. Candlestick Pattern Dictionary - ChartSchool - StockCharts.com, 檢索日期：5月 12, 2026， https://chartschool.stockcharts.com/table-of-contents/chart-analysis/candlestick-charts/candlestick-pattern-dictionary
+                        75. Taxonomy - Technical Analysis, 檢索日期：5月 12, 2026， http://www.technicalanalysis.org.uk/taxonomy.html
+                        76. Quantitative Insights into Breakout and Reversal Trading Strategies: A Comprehensive Analysis for Algorithmic Trading in Financial Markets | Semantic Scholar, 檢索日期：5月 12, 2026， https://www.semanticscholar.org/paper/Quantitative-Insights-into-Breakout-and-Reversal-A-Kapri-Dimri/f5b11c18bbb87121daccf141712113f79cdeb87f
+                        77. Mark Minervini's VCP Criteria: The Complete 7-Point Checklist, 檢索日期：5月 12, 2026， https://www.finermarketpoints.com/post/vcp-criteria-complete-checklist
+                        78. Is the Daily Price Limit of the Taiwan Stock Exchange Effective? Fundamentals of Listed Stocks and Investors' Perception of Fa, 檢索日期：5月 12, 2026， https://www.e-kjfs.org/upload/pdf/kjfs-2008-37-4-675.pdf
+                        79. Daily price limits and stock price behavior: Evidence from the ..., 檢索日期：5月 12, 2026， https://www.researchgate.net/publication/4930280_Daily_price_limits_and_stock_price_behavior_Evidence_from_the_Taiwan_Stock_Exchange
+                        80. Price discovery and volatility spillover with price limits in Chinese A-shares market: a truncated GARCH approach - White Rose Research Online, 檢索日期：5月 12, 2026， https://eprints.whiterose.ac.uk/id/eprint/138465/1/Shuxing%20Yin%20AYYZ-Price-Limits-Paper-181013.pdf
+                        81. 小散戶必讀：股票被列為處置股時的風險檢視與交易策略思維, 檢索日期：5月 12, 2026， https://readmo.cmoney.tw/article/80a30155-599e-4e39-ad74-36c4d6731c32
+                        82. 處置股是什麼？｜處置股票定義・交易限制・處置條件完整指南, 檢索日期：5月 12, 2026， https://www.stockwarden.com/what-is-disposition-stock
+                        83. Systematic trading strategies: From concept to execution - ThinkMarkets, 檢索日期：5月 12, 2026， https://www.thinkmarkets.com/en/trading-academy/technical-analysis/systematic-trading-strategies-from-concept-to-execution/
+                        84. How Different Types of AI Agents Work: A Comprehensive Taxonomy and Guide, 檢索日期：5月 12, 2026， https://www.xcubelabs.com/blog/how-different-types-of-ai-agents-work-a-comprehensive-taxonomy-and-guide/
+                        85. Signal Indicator Classification - StrategyQuant, 檢索日期：5月 12, 2026， https://strategyquant.com/shared/signal-indicator-classification/
+                        86. What Is A Conditional Order? - Fidelity Investments, 檢索日期：5月 12, 2026， https://www.fidelity.com/learning-center/trading-investing/trading/conditional-order-types
+                        87. Conditional Order: Definition, Overview, Examples - The Trading Analyst, 檢索日期：5月 12, 2026， https://thetradinganalyst.com/conditional-order/
+                        88. What is a Conditional Order? | Coinstash Help Center - Intercom, 檢索日期：5月 12, 2026， https://intercom.help/coinstashau/en/articles/13481029-what-is-a-conditional-order
+                        89. From Guessing to System: A Practical Decision Framework for Traders | by David - Medium, 檢索日期：5月 12, 2026， https://medium.com/@saeedepp/from-guessing-to-system-a-practical-decision-framework-for-traders-eccabe7d9dc3
+                        90. Risk Scores and Confidence Levels Compared, 檢索日期：5月 12, 2026， https://ftpdocs.broadcom.com/cadocs/0/CA%20SiteMinder%20r6%200%20SP6-ENU/Bookshelf_Files/HTML/1705806.html
+                        91. Using Confidence Scoring to Reduce Risk in AI-Driven Decisions - multimodal.dev, 檢索日期：5月 12, 2026， https://www.multimodal.dev/post/using-confidence-scoring-to-reduce-risk-in-ai-driven-decisions
+                        92. The PERP Prediction Framework: Signals, Simulation, and Forecast Analysis - Medium, 檢索日期：5月 12, 2026， https://medium.com/@gwrx2005/the-perp-prediction-framework-signals-simulation-and-forecast-analysis-9e69edf8b55e
+                        93. NIST Cyber Risk Scoring - ZenGRC, 檢索日期：5月 12, 2026， https://www.zengrc.com/blog/nist-cyber-risk-scoring/
+                        94. Signal-to-Noise Ratio (SNR) in Trading, 檢索日期：5月 12, 2026， https://arongroups.co/forex-articles/signal-to-noise-ratio/
+                        95. QuantSys:A Stock Breakout Value Prediction System using an Algorithmic Approach, 檢索日期：5月 12, 2026， https://www.ijcaonline.org/archives/volume187/number16/mavani-2025-ijca-925163.pdf
+                        96. No-Code Algorithmic Trading Strategy | Risk-Adjusted System Design - ChartFanatics, 檢索日期：5月 12, 2026， https://www.chartfanatics.com/strategies/algorithmic-strategy
+                        97. Beyond the Perimeter Mastering Identity Centric Security in Microsoft Azure Advanced Identity Security Patterns for Transformation - Scribd, 檢索日期：5月 12, 2026， https://www.scribd.com/document/1022756267/Beyond-the-Perimeter-Mastering-Identity-Centric-Security-in-Microsoft-Azure-Advanced-Identity-Security-Patterns-for-Transformation
+                        98. Task 1 FinRL-DeepSeek for Crypto Trading - Read the Docs, 檢索日期：5月 12, 2026， https://finrl-contest.readthedocs.io/en/latest/finai2025/task1.html
+                        99. Intelligent Optimization Based Multi-Factor Deep Learning Stock Selection Model and Quantitative Trading Strategy - MDPI, 檢索日期：5月 12, 2026， https://www.mdpi.com/2227-7390/10/4/566
+                        100. Value investing and technical analysis in Taiwan stock market - ResearchGate, 檢索日期：5月 12, 2026， https://www.researchgate.net/publication/259136527_Value_investing_and_technical_analysis_in_Taiwan_stock_market
+                        101. Increase Alpha: Performance and Risk of an AI-Driven Trading Framework - arXiv, 檢索日期：5月 12, 2026， https://arxiv.org/html/2509.16707v1

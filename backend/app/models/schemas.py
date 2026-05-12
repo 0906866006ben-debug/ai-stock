@@ -205,6 +205,10 @@ class TaiwanStockAnalysisResponse(BaseModel):
     next_dividend: Optional["DividendEvent"] = None
     etf_holdings: Optional["ETFHoldingsResponse"] = None
     # Phase 3: 4-pillar comprehensive analysis (backward-compatible — nullable)
+    fundamental: Optional["FundamentalAnalysis"] = None
+    technical: Optional["TechnicalAnalysis"] = None
+    chip: Optional["ChipAnalysis"] = None
+    news: Optional["NewsAnalysis"] = None
     comprehensive_analysis: Optional["ComprehensiveAnalysis"] = None
     # Phase 4: elite equity research framework (backward-compatible — nullable)
     equity_research: Optional["EquityResearch"] = None
@@ -322,9 +326,15 @@ class IndicatorsBundle(BaseModel):
     ma5: Optional[list[Optional[float]]] = None
     ma20: Optional[list[Optional[float]]] = None
     ma60: Optional[list[Optional[float]]] = None
+    ma120: Optional[list[Optional[float]]] = None
+    ma240: Optional[list[Optional[float]]] = None
     rsi: Optional[list[Optional[float]]] = None
     macd: Optional[MACDBundle] = None
     volume: Optional[list[int]] = None
+    kd: Optional[dict] = None               # {"%K": [...], "%D": [...]}
+    bollinger_bands: Optional[dict] = None  # {"upper": [...], "middle": [...], "lower": [...]}
+    atr: Optional[list[Optional[float]]] = None
+    support_resistance: Optional[dict] = None  # {"support": [...], "resistance": [...]}
 
 
 # ── TW Calendar ───────────────────────────────────────────────────────────────

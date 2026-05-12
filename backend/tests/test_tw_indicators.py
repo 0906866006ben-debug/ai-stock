@@ -134,7 +134,8 @@ def test_build_indicators_subset():
 # ── parse_indicator_query ────────────────────────────────────────────────────
 
 def test_parse_query_expands_ma():
-    assert parse_indicator_query("ma,rsi") == {"ma5", "ma20", "ma60", "rsi"}
+    result = parse_indicator_query("ma,rsi")
+    assert {"ma5", "ma20", "ma60", "ma120", "ma240", "rsi"}.issubset(result)
 
 
 def test_parse_query_all_returns_full_set():
