@@ -241,6 +241,90 @@ ________________
 結論與系統演化建議
 本規範將技術分析從單純的線性運算提升為多維度的行為經濟學特徵提取過程。在台股市場中，AI 的優勢不在於預測股價明天跌或漲，而在於其能同時監控上千檔個股的量價、均線扣抵、法人籌碼與監管狀態，並在「非效率視窗」（如處置股出關、投信作帳、MSCI 調整）出現共振時精確捕捉 9。
 系統架構師應注意，技術分析規則在 AI 中應以「特徵工程」的形式存在，而非硬性的「邏輯跳轉」。透過對歷史數據的機器學習（如 Random Forest 或 LSTM），系統應能自發地發現某些技術特徵的隱含權重 12。例如，在半導體板塊中，成交金額的權重可能遠大於成交張數；而在小型題材股中，當沖比率的權重則是核心過濾器。最終，台股 AI 平台應演化為一個能根據市場 regime 自動調整權重的「動態決策矩陣」 12。
+
+2026-05-13 實作同步檢查
+本文件的 A-T 規格已大致落地到 backend/technical_analyzer/v1，以下為目前狀態與補強清單。
+
+已落地模組
+	1. A-E：contracts、classifiers、features、horizons 已建立基礎合約、價格結構、趨勢狀態、均線扣抵、失效條件與多週期輸出。
+	2. F-H：volume_price_quadrant、support_resistance、breakout_quality 已納入量價四象限、支撐壓力、突破品質、假突破與量能確認。
+	3. I-J：momentum_contextual、divergence_overheat 已納入 RSI、MACD、KD、布林頻寬、乖離、背離與過熱判讀。
+	4. K-O：candle_patterns、chart_patterns、taiwan_market_rules、chip_resonance、signal_aggregator 已納入 K 棒、型態、台股處置/流動性 gate、籌碼共振與統一訊號分類。
+	5. P-Q：decision/score_engine.py 與 decision/confidence_cap_engine.py 已實作 Signal、Confidence、Risk 三軸評分，以及 mock data、低流動性、處置股、當沖比、缺失效條件等信心上限。
+	6. R：hypothesis/hypothesis_backtest_v1.yaml 已登錄 67 條 v1 假設，所有假設目前以 not_tested 標記，等待正式回測器驗證。
+	7. S：data/data_pipeline_config.yaml 已登錄 98 個必要資料欄位，包含來源、fallback、v1 實作狀態與缺資料降級行為。
+	8. T：orchestration/ai_analysis_result_builder.py 已產出統一 AIAnalysisResult contract；backend/app/main.py 已提供 GET /ai-analysis/tw?symbol=2330 作為技術分析 v1 的後端輸出口。
+
+仍需補強或保持降級的項目
+	1. 大戶、分點、TEJ 等進階籌碼欄位目前以資料盤點與降級邏輯保留，尚未完整接入即時資料源。
+	2. hypothesis registry 已完成假設登錄，但正式歷史回測 executor、勝率/期望值/最大回撤統計尚未完成。
+	3. 短線、波段、長線三週期目前以日 OHLCV 衍生，尚未完整導入 15 分鐘與 60 分鐘 intraday K 線。
+	4. /ai-analysis/tw 已可輸出後端 contract；前端仍可依現有轉換器顯示 AI 分析，後續可再切換成直接消費單一後端 contract。
+	5. 台股處置、注意股、漲跌停、除權息事件已具備 gate 與欄位位置，但若即時資料源缺失，必須維持 confidence cap 與風險提示。
+
+驗證紀錄
+	1. backend/tests/technical_analyzer/v1：40 passed。
+	2. backend/tests：134 passed，僅保留 LangGraph 既有 deprecation warning。
+	3. GET /ai-analysis/tw?symbol=2330 已驗證可回傳 symbol、overall_scores、horizons、data_quality 等核心欄位。
+
+台股量化交易架構 v2.0：多因子共振、時空推演與極端結構捕捉
+v2.0 的定位不是取代 v1 技術分析，而是在 v1 的多週期、量價、扣抵、籌碼、風險框架上，再加上一層「基本面可交易性過濾」與「極端結構捕捉」。核心哲學是先用財務硬指標排除結構性缺陷企業，再用均線扣抵的數學必然性、Volume Profile 的市場平均成本、2B 假跌破結構與硬性風控，捕捉具有清楚盈虧邊界的交易機會。
+
+v2.0 升級模組 1：戰略基本面過濾層
+此層作為交易標的的第一道防線，用來排除僅有題材、缺乏財務支撐或流動性不足的標的。
+	1. 營收規模：年營收需大於約 32 億台幣（約 1 億美元），避免過小型股票被單一資金影響，導致量化訊號失真。
+	2. 營收增速：理想年增速為 15% 到 20%。低於 15% 代表成長性不足；高於 30% 需標記高基期或一次性收入風險，避免把短期爆發誤判為可持續趨勢。
+	3. 利潤率門檻：EBIT Margin 必須大於 0，並與同業平均比較。若企業在同業內具備正向 Z-Score，技術面 2B、突破或均線拐頭的可信度可提高。
+	4. 現金流雙正法則：Operating Cash Flow 與 Free Cash Flow 皆需為正。若淨利為正但 OCF 或 FCF 為負，需標記為盈餘品質風險。
+	5. 動量淘汰：過去 60 日報酬需優於加權指數。若基本面分數高但價格長期弱於大盤，表示市場可能正在反映尚未揭露的庫存、客戶、產業或法人風險。
+
+同業 EBIT Margin 參考門檻
+	產業類別	平均 EBIT Margin	相對強度門檻	核心洞察
+	IC 設計	20% - 40%	Z-Score > +0.5	反映技術專利與定價權
+	電子零組件	8% - 15%	Z-Score > +0.2	反映供應鏈管理效率
+	系統集成與代工	3% - 6%	Z-Score > 0	反映規模經濟與成本控制
+
+v2.0 升級模組 2：時空推演與精準盈虧比模型
+v1 已納入均線扣抵概念；v2.0 需把扣抵值進一步轉為「時間方框」與「臨界價格」。
+	1. 均線扣抵公式：MA_today = MA_yesterday + (P_today - P_deduction) / N。只要 P_today 大於被扣除的舊價格，均線就具備上彎條件。
+	2. 時間方框：掃描未來 20 日與 60 日扣抵序列，找出扣抵值即將走低的時間區間。若股價在該區間站穩臨界價格 P_crit，系統發布「均線加速」預警。
+	3. 臨界價格：P_crit 可先以未來扣抵序列高點乘以 1.01 作為 v2 假設，後續需回測修正。
+	4. Volume Profile：以 60 日固定窗口計算 POC、VAH、VAL。POC 代表市場平均成本密集區，VAH 是上方壓力，VAL 是下方支撐。
+	5. 強制盈虧比：停損以 MA20、MA60、POC 或 ATR 1.5 倍緩衝決定；獲利目標指向下一個均線密集區、VAH 或歷史高壓區。若預期盈虧比低於 3:1，訊號需自動過濾。
+
+v2.0 升級模組 3：2B 假跌破與極端偏離捕捉
+2B 結構用於捕捉恐慌破底後的流動性回歸，本質是辨識「跌破前低引發停損，卻快速收回關鍵價位」的洗盤型反轉。
+	1. 極端偏離：股價長期低於 MA120，且 BIAS120 低於 -40% 到 -50%，代表非理性恐慌賣壓可能接近臨界點。
+	2. 新低誘空：價格跌破前一個顯著低點 L1，形成新低 L2。
+	3. 反轉確認：L2 出現後 3 到 5 個交易日內，收盤價重新站回 L1 之上。
+	4. 扣抵共振：若 2B 反轉同時遇到 MA20 或 MA60 扣抵值由高位轉向低位，會形成「價格上行 + 扣抵下移」的雙重斜率翻轉力量。
+	5. 籌碼解讀：2B 常出現在融資斷頭或散戶停損後，若同時伴隨法人回補、成交金額放大、籌碼峰收復，反轉可信度提高。
+
+v2.0 升級模組 4：無條件風險底線與三有加一
+v2.0 的最高優先級不是預測，而是確保錯誤時能被系統性切斷。
+	1. POC 硬停損：若收盤價低於近 60 日 POC 的 3%，表示市場平均成本共識失守，需觸發離場或大幅降級。
+	2. 趨勢硬停損：若跌破 MA60 且 MA60 斜率由正轉負，代表中期趨勢結構已改變。
+	3. 強制執行：滿足 POC 失效或趨勢失效任一條件時，系統應在下一個開盤時點輸出平倉/降曝險訊號，不允許因主觀敘事延後。
+	4. 三有加一：每個交易訊號都必須具備有預期（TP）、有底線（SL）、有計劃（資金配置）、一執行（嚴格依計劃處理）。
+	5. 倉位管理：Kelly Criterion 可作為 v2 倉位建議的候選方法，但需搭配最大曝險上限，避免因假設勝率過高而過度槓桿。
+
+v2.0 待實作模組與資料欄位
+以下項目應列為下一輪後端升級的候選模組，並加入 hypothesis registry 與 data inventory。
+	1. fundamental_gate_v2：annual_revenue、revenue_growth、ebit_margin、industry_ebit_zscore、operating_cash_flow、free_cash_flow、relative_strength_vs_taiex。
+	2. time_box_projection_v2：deduction_series_ma20、deduction_series_ma60、p_crit、projection_date、ma_acceleration_flag。
+	3. volume_profile_v2：poc_price、vah_price、val_price、poc_distance_pct、poc_breakdown_flag。
+	4. two_b_reversal_v2：prior_low_l1、false_break_low_l2、reclaim_days、bias_120、two_b_confirmed、two_b_rr_ratio。
+	5. risk_execution_v2：take_profit_price、stop_loss_price、rr_ratio、kelly_fraction、position_cap、forced_exit_reason。
+	6. data_source_v2：FinMind TaiwanStockPrice、InstitutionalInvestorsBuySell、FinancialStatements、CashFlows；若資料缺失，必須產生 confidence cap 而不是靜默忽略。
+
+v2.0 實作限制
+	1. 掃描台股大量標的時，禁止使用 DataFrame iterrows；需使用向量化運算、rolling、groupby、numpy 或可批次處理的資料結構。
+	2. 所有閾值都需以 v2 hypothesis 登錄，包含 32 億營收門檻、15% 到 20% 成長區間、3:1 盈虧比、POC 3% 失效、BIAS120 -40% 到 -50%、2B 3 到 5 日收復。
+	3. 所有交易輸出都必須同時包含 signal_score、confidence_score、risk_score、TP、SL、RR、position_sizing 與 forced_exit 條件。
+	4. v2 僅提供決策支援與策略驗證，不應在未回測前宣稱具備穩定勝率。
+
+v2.0 缺口確認
+目前 v1 已涵蓋扣抵值、量價、支撐壓力、突破品質、過熱、籌碼共振、風險分數與信心上限；尚缺的 v2 重點是：基本面硬過濾、營收/EBIT/現金流資料接入、POC 硬停損、2B 假跌破偵測、時間方框臨界價格、3:1 盈虧比過濾、Kelly 倉位建議，以及 FinMind 財務資料管線。上述項目應作為下一輪 backend/technical_analyzer/v2 或 v1.1 擴充的主要方向。
 引用的著作
                         1. Technical analysis - Wikipedia, 檢索日期：5月 12, 2026， https://en.wikipedia.org/wiki/Technical_analysis
                         2. (PDF) Fundamental framework for “technical analysis” of market prices - ResearchGate, 檢索日期：5月 12, 2026， https://www.researchgate.net/publication/225674930_Fundamental_framework_for_technical_analysis_of_market_prices

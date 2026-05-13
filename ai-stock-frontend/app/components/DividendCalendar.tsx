@@ -33,16 +33,27 @@ export default function DividendCalendar({ symbol }: Props) {
   const [days, setDays] = useState(90);
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
     const start = todayPlus(0);
     const end = todayPlus(days);
     getDividendCalendar({ symbol, start, end })
       .then((r) => {
+        if (cancelled) return;
         setEvents(r.events);
         setDataSource(r.data_source);
       })
-      .catch(() => setEvents([]))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setEvents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [symbol, days]);
 
   return (

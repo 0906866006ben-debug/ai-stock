@@ -42,7 +42,7 @@ function HorizontalVariant({ scores, size }: { scores: ThreeAxisScore; size: 'lg
   );
 }
 
-function StackedVariant({ scores, size: _size }: { scores: ThreeAxisScore; size: 'lg' | 'md' | 'sm' }) {
+function StackedVariant({ scores }: { scores: ThreeAxisScore; size: 'lg' | 'md' | 'sm' }) {
   return (
     <div className="flex justify-between gap-1.5">
       <CompactScore axis="signal" value={scores.signal} />

@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Request
 
@@ -53,6 +54,8 @@ from .services.tw_calendar import (
 )
 from .services.tw_etf_holdings import get_etf_holdings
 from .services.fmp_price_history import get_us_price_history
+from backend.technical_analyzer.v1.contracts.input_contract import ContextBundle, OHLCVBar, OHLCVSeries
+from backend.technical_analyzer.v1.orchestration import AIAnalysisResultBuilder
 
 app = FastAPI(title="AI Stock Analysis API", version="3.0.0")
 
@@ -71,6 +74,31 @@ _tw_price_cache: dict[str, tuple[dict, float]] = {}
 _stocks_cache: tuple[dict | None, float] = (None, 0.0)
 _PRICE_CACHE_TTL = 300
 _STOCKS_CACHE_TTL = 86400
+
+
+def _ohlcv_series_from_tw_candles(symbol: str, candles: list[dict], is_mock: bool) -> OHLCVSeries:
+    bars: list[OHLCVBar] = []
+    previous_close: Decimal | None = None
+    source = "mock" if is_mock else "live"
+    for raw in candles:
+        close = Decimal(str(raw["close"]))
+        volume = int(raw.get("volume") or 0)
+        bars.append(OHLCVBar(
+            date=date.fromisoformat(str(raw["time"])),
+            open=Decimal(str(raw["open"])),
+            high=Decimal(str(raw["high"])),
+            low=Decimal(str(raw["low"])),
+            close=close,
+            volume=volume,
+            turnover_value=close * Decimal(volume),
+            is_adjusted=True,
+            data_source=source,
+            previous_close=previous_close,
+        ))
+        previous_close = close
+    if not bars:
+        raise ValueError("empty TW candle list")
+    return OHLCVSeries(symbol, bars)
 
 
 def _tw_news_items_from_analysis(news_analysis: object | None) -> list[NewsItem]:
@@ -337,6 +365,48 @@ async def analyze_tw(
         comprehensive_analysis=comprehensive_analysis,
         equity_research=equity_research,
     )
+
+
+@app.get("/ai-analysis/tw")
+async def ai_analysis_tw(
+    symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)")
+) -> dict:
+    """Return the unified technical-analyzer v1 AIAnalysisResult contract."""
+    symbol = symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
+        )
+
+    candles, is_mock = await get_tw_price_history(symbol, 220)
+    try:
+        ohlcv = _ohlcv_series_from_tw_candles(symbol, candles, is_mock)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail="No candle data available for AI analysis.") from exc
+
+    stock_name = symbol
+    try:
+        stock_list = await get_tw_stocks(q=symbol, limit=10)
+        exact = next((stock for stock in stock_list.get("stocks", []) if stock.get("stock_code") == symbol), None)
+        if exact:
+            stock_name = exact.get("company_name") or symbol
+    except Exception:
+        stock_name = symbol
+
+    context = ContextBundle(
+        market_cap_bucket="large",
+        liquidity_bucket="high",
+        disposition_status="normal",
+    )
+    result = AIAnalysisResultBuilder().build(
+        symbol,
+        ohlcv,
+        context,
+        symbol_name=stock_name,
+        sector_tag="TWSE",
+    )
+    return result.to_dict()
 
 
 # ── Taiwan stock directory ────────────────────────────────────────────────────

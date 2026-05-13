@@ -1,0 +1,655 @@
+version: "v1.0.0"
+last_updated: "2026-05-13"
+is_v1_hypothesis: true
+backtest_status: "not_tested"
+
+horizons:
+  short_term:
+    swing_pivot_lookback: 3
+    overextension_deviation_threshold_pct: 12.0
+    rsi_overheated_threshold: 75
+    max_deviation_breakout_pct: 10.0
+  swing:
+    swing_pivot_lookback: 5
+    overextension_deviation_threshold_pct: 18.0
+    rsi_overheated_threshold: 72
+    max_deviation_breakout_pct: 15.0
+  long_term:
+    swing_pivot_lookback: 10
+    overextension_deviation_threshold_pct: 25.0
+    rsi_overheated_threshold: 70
+    max_deviation_breakout_pct: 25.0
+
+confidence_penalties:
+  zero_range_bar: -10
+  missing_context: -5
+  mock_data: -25
+  fallback_data: -20
+  low_liquidity: -8
+
+confidence_caps:
+  mock_data_max: 50
+  estimated_data_max: 65
+  low_liquidity_max_short_term: 50
+
+candle_features:
+  long_shadow_ratio_threshold: 0.5
+  doji_body_ratio_threshold: 0.1
+  marubozu_body_ratio_threshold: 0.9
+
+state_thresholds:
+  strong_uptrend:
+    min_ma20_slope_pct: 1.5
+    min_ma60_slope_pct: 0.5
+    rsi_min: 55
+    rsi_max: 78
+    min_categories_fired: 3
+  steady_uptrend:
+    min_ma20_slope_pct: 0.3
+    max_ma20_slope_pct: 1.5
+    max_leg_size_pct: 8.0
+    min_categories_fired: 3
+  tight_consolidation:
+    ma20_slope_abs_max_pct: 0.3
+    ma60_slope_abs_max_pct: 0.2
+    volume_ratio_majority_max: 1.0
+    atr_percentile_max: 40
+    min_categories_fired: 3
+  early_strengthening:
+    reclaim_lookback_bars: 3
+    ma20_transition_floor_pct: -0.1
+    reclaim_volume_ratio_min: 1.1
+    ma60_slope_guardrail_min_pct: -0.5
+    min_categories_fired: 3
+  overheated_high_level:
+    rsi_min: 75
+    atr_percentile_min: 75
+    upper_shadow_ratio_min: 0.4
+    close_position_weak_max: 0.4
+    min_categories_fired: 3
+  early_weakening:
+    breakdown_lookback_bars: 3
+    breakdown_volume_ratio_min: 1.2
+    min_categories_fired: 3
+  weak_rebound:
+    rsi_reclaim_fail_max: 55
+    min_categories_fired: 3
+  downtrend_continuation:
+    max_ma20_slope_pct: -0.5
+    max_ma60_slope_pct: -0.2
+    min_categories_fired: 3
+
+support_resistance:
+  clustering_distance:
+    below_50: "absolute_0.5"
+    50_to_200: "relative_1.0"
+    200_to_500: "relative_1.0"
+    500_to_1000: "relative_0.7"
+    above_1000: "relative_0.5"
+  max_levels_per_side: 8
+  strength_per_confluence_source: 10
+  strength_per_test: 5
+  strength_max_tests: 4
+  volume_profile_strength:
+    top_5_percentile: 20
+    top_10_percentile: 12
+    top_20_percentile: 6
+  ma_overlap_strength: 15
+  ma_overlap_min_count: 2
+  psychological_round_strength: 5
+  age_decay_per_30_days: -3
+  age_decay_max: -15
+  break_count_penalty_threshold: 3
+  break_count_penalty: -15
+  strength_tier:
+    strong: 70
+    medium: 40
+  psychological_round:
+    below_50: 5
+    50_to_200: 10
+    200_to_500: 50
+    500_to_1000: 100
+    above_1000: 100
+  volume_profile:
+    lookback_days: 60
+    bins_per_bar: 20
+    top_levels_to_extract: 5
+  flip_confirmation_days: 3
+  flip_retest_proximity_pct: 0.5
+  flip_bonus: 10
+  effective_recovery_days: 3
+  effective_max_volume_ratio: 1.3
+  failed_break_volume_ratio: 1.5
+  failed_lower_low_window: 5
+  near_level_threshold_pct: 2.0
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+volume_price_quadrant:
+  use_turnover_value_as_baseline: true
+  day_trading_offset_coefficient: 0.7
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+  price_change_flat_threshold_pct: 0.3
+  volume_increase_ratio: 1.2
+  volume_explosion_ratio: 1.5
+  volume_extreme_explosion_ratio: 2.0
+  volume_decline_ratio: 0.8
+  day_trading_notice_threshold: 0.30
+  day_trading_warning_threshold: 0.50
+  day_trading_distortion_threshold: 0.60
+  distorted_strength_multiplier: 0.5
+  distorted_vote_neutral_threshold: 0.3
+  distorted_confidence_cap: 50
+  healthy_breakout:
+    max_deviation_short_term_pct: 10
+    max_deviation_swing_pct: 15
+    min_close_position_in_range: 0.7
+    max_upper_shadow_ratio: 0.3
+    max_day_trading_ratio: 0.50
+  distribution_volume_risk:
+    near_60d_high_threshold_pct: 3
+    long_upper_shadow_threshold: 0.4
+    weak_close_position_threshold: 0.4
+    extreme_volume_for_distribution: 1.8
+    extreme_deviation_short_term_pct: 15
+    extreme_deviation_swing_pct: 25
+  absorption_candidate:
+    near_60d_low_threshold_pct: 5
+    bias_zscore_threshold: -1.5
+    min_lower_shadow_ratio: 0.4
+    min_close_position: 0.6
+    min_volume_ratio: 1.5
+
+breakout_quality:
+  magnitude_threshold_pct: 3.0
+  volume_ratio_threshold: 1.5
+  body_ratio_threshold: 0.7
+  upper_shadow_max_ratio: 0.15
+  enforce_t1_confirmation: true
+  t1_recovery_proximity_pct: 1.0
+  long_upper_shadow_threshold: 0.5
+  weak_close_position_threshold: 0.5
+  no_volume_threshold: 1.0
+  day_trading_high_threshold: 0.60
+  warnings_pending_max: 1
+  warnings_risk_min: 2
+  warnings_risk_max: 3
+  warnings_high_confidence_min: 4
+  modifier_confirmed_healthy: 15
+  modifier_pending: 5
+  modifier_false_intraday: -10
+  modifier_false_t1: -15
+  modifier_false_high_confidence: -20
+  modifier_confirmed_breakdown: -15
+  cap_pending: 70
+  cap_false_intraday: 60
+  cap_false_t1: 55
+  cap_false_high_confidence: 50
+  cap_limit_distorted: 50
+  downgrade_targets:
+    strong_uptrend: steady_uptrend
+    steady_uptrend: early_strengthening
+    early_strengthening: mixed_signals
+  event_history_retention_days: 30
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+momentum_contextual:
+  rsi_thresholds:
+    extreme_oversold: 20
+    oversold: 30
+    weak_zone: 50
+    healthy_bullish_zone: 70
+    momentum_hot_zone: 80
+  rsi_50_axis:
+    crossover_recency_days: 3
+    held_min_days: 5
+  macd:
+    histogram_consecutive_change_days: 3
+    compression_max_dif_dea_diff: 0.1
+    compression_min_days: 5
+  kd:
+    high_dulling_threshold: 80
+    low_dulling_threshold: 20
+    dulling_min_days: 3
+    horizon_weights:
+      short_term: 1.0
+      swing: 0.5
+      long_term: 0.0
+  bollinger:
+    bandwidth_compression_percentile: 25
+    bandwidth_expansion_percentile: 75
+    lookback_days: 120
+    upper_band_rejection_shadow_threshold: 0.4
+    lower_band_absorption_shadow_threshold: 0.4
+  vote_weights:
+    rsi: 0.35
+    macd: 0.30
+    kd_short_term: 0.25
+    kd_swing: 0.20
+    kd_long_term: 0.0
+    bollinger: 0.10
+  critical_warning_min_strength: 0.8
+  contextual_vote_mapping:
+    momentum_hot_zone_in_uptrend: {direction: bullish, strength: 0.5}
+    momentum_breakout_attempt: {direction: bullish, strength: 0.4}
+    momentum_resistance_test_in_downtrend: {direction: bearish, strength: 0.5}
+    momentum_distribution_warning: {direction: bearish, strength: 0.7}
+    extreme_overbought: {direction: bearish, strength: 0.6}
+    parabolic_top_warning: {direction: bearish, strength: 0.85, critical: true}
+    healthy_momentum_supporting_trend: {direction: bullish, strength: 0.6}
+    momentum_rebound_unconfirmed: {direction: bearish, strength: 0.4}
+    momentum_divergence_warning: {direction: bearish, strength: 0.6}
+    momentum_aligned_bearish: {direction: bearish, strength: 0.6}
+    oversold_in_downtrend: {direction: bearish, strength: 0.3}
+    oversold_climax_candidate: {direction: neutral, strength: 0.5}
+    panic_oversold_climax: {direction: neutral, strength: 0.6}
+    macd_aligned_bullish_with_trend: {direction: bullish, strength: 0.6}
+    macd_momentum_cooling_in_uptrend: {direction: bearish, strength: 0.3}
+    macd_weak_rebound_below_zero: {direction: bearish, strength: 0.5}
+    macd_zero_axis_crossed_up: {direction: bullish, strength: 0.5}
+    macd_zero_axis_crossed_down: {direction: bearish, strength: 0.6}
+    macd_aligned_bearish_with_trend: {direction: bearish, strength: 0.6}
+    macd_histogram_weakening_in_uptrend: {direction: bearish, strength: 0.3}
+    macd_histogram_rebounding_from_weak: {direction: bullish, strength: 0.4}
+    macd_compression_pending_direction: {direction: neutral, strength: 0.4}
+    weak_golden_cross: {direction: bullish, strength: 0.3}
+    confirmation_golden_cross: {direction: bullish, strength: 0.6}
+    momentum_cooling_not_reversal: {direction: bearish, strength: 0.3}
+    confirmation_death_cross: {direction: bearish, strength: 0.6}
+    kd_high_dulling_healthy: {direction: bullish, strength: 0.4}
+    kd_high_dulling_breakout_candidate: {direction: bullish, strength: 0.4}
+    kd_high_dulling_distribution_warning: {direction: bearish, strength: 0.7}
+    kd_low_dulling_bearish_continuation: {direction: bearish, strength: 0.5}
+    kd_low_dulling_climax_candidate: {direction: neutral, strength: 0.4}
+    kd_golden_cross_low_level: {direction: bullish, strength: 0.5}
+    kd_golden_cross_redundant: {direction: bullish, strength: 0.2}
+    kd_death_cross_distribution: {direction: bearish, strength: 0.7}
+    kd_death_cross_weak_rebound_fail: {direction: bearish, strength: 0.6}
+    volatility_squeeze_pending_breakout: {direction: neutral, strength: 0.4}
+    volatility_expansion_upward: {direction: bullish, strength: 0.5}
+    volatility_expansion_downward: {direction: bearish, strength: 0.5}
+    upper_band_rejection: {direction: bearish, strength: 0.5}
+    lower_band_absorption: {direction: bullish, strength: 0.5}
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+divergence_overheat:
+  overheat_dimensions:
+    bias_extreme:
+      threshold_zscore_mild: 1.0
+      threshold_zscore_moderate: 1.5
+      threshold_zscore_severe: 2.0
+      threshold_zscore_parabolic: 2.5
+    momentum_extreme:
+      rsi_threshold: 75
+      kd_dulling_days: 3
+    volatility_expanding:
+      atr_ratio_percentile: 0.75
+      lookback_days: 60
+    volume_abnormal:
+      consecutive_high_volume_days: 3
+      volume_ratio_threshold: 1.5
+    chip_overheat:
+      day_trading_threshold: 0.60
+      margin_balance_3d_change_pct: 15.0
+  overheat_level_thresholds:
+    mild: 2
+    moderate: 3
+    severe: 4
+    parabolic: 5
+  beta_adjustment:
+    beta_factor_min: 0.5
+    beta_factor_max: 2.0
+    default_beta_when_missing: 1.0
+    is_beta_estimated_when_missing: true
+  bias:
+    ma_window: 20
+    zscore_lookback_days: 252
+    percentile_lookback_days: 252
+  divergence:
+    use_confirmed_swing_pivots: true
+    use_fixed_lookback: false
+    pivot_distance_max_days_swing: 90
+    pivot_distance_too_large_strength_multiplier: 0.5
+    intensity_tier:
+      strong: 0.5
+      moderate: 0.2
+    confirmation_levels:
+      light_required_indicators: 1
+      confirmed_required_indicators: 2
+      triple_confirmed_required_indicators: 3
+    indicators_to_check:
+      - RSI
+      - MACD_histogram
+      - KD_K
+    volume_divergence_weight_multiplier: 0.7
+  state_modifier:
+    parabolic_overheat_modifier: -25
+    parabolic_overheat_cap: 40
+    severe_with_divergence_modifier: -20
+    severe_with_divergence_cap: 50
+    moderate_modifier: -10
+    moderate_cap: 60
+    mild_modifier: -5
+    mild_cap: 70
+    triple_confirmed_divergence_modifier: -15
+    triple_confirmed_divergence_cap: 55
+    confirmed_divergence_modifier: -10
+    confirmed_divergence_cap: 65
+    bullish_divergence_low_modifier: 5
+  state_override:
+    parabolic_to_parabolic_overheat: true
+    severe_with_divergence_to_distribution: true
+  consistency_check:
+    parabolic_a_e_must_match_j_severe_or_above: true
+    inconsistency_confidence_cap: 40
+    tight_consolidation_max_overheat: mild
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+candle_patterns:
+  long_body_ratio_threshold: 0.7
+  marubozu_body_ratio_threshold: 0.9
+  doji_body_ratio_threshold: 0.1
+  long_shadow_ratio_threshold: 0.5
+  short_shadow_ratio_threshold: 0.15
+  hammer_lower_shadow_min: 0.5
+  hammer_body_max: 0.3
+  atr_range_multiplier: 1.2
+  doji_min_atr_multiplier: 0.3
+  gap_lookback_days: 30
+  gap_exhaustion_min_count: 3
+  position_thresholds:
+    near_n_day_high_pct: 2.0
+    near_ma_pct: 1.0
+    near_sr_level_pct: 2.0
+  volume_context_thresholds:
+    extreme_high: 2.0
+    high: 1.5
+    low: 0.8
+    extreme_low: 0.5
+  contextual_mapping:
+    long_upper_shadow|near_60d_high|high_volume: {label: distribution_at_high, warning: high}
+    long_upper_shadow|near_60d_high|extreme_high_volume: {label: distribution_at_high, warning: high}
+    long_upper_shadow|near_resistance|normal_volume: {label: resistance_rejection, warning: medium}
+    long_upper_shadow|near_resistance|high_volume: {label: resistance_rejection, warning: medium}
+    long_upper_shadow|near_ma20|low_volume: {label: healthy_pullback_attempt, warning: low}
+    long_upper_shadow|midrange|low_volume: {label: noise_no_signal, warning: low}
+    long_lower_shadow|near_60d_low|high_volume: {label: selling_climax_candidate, warning: low}
+    long_lower_shadow|near_60d_low|extreme_high_volume: {label: selling_climax_candidate, warning: low}
+    long_lower_shadow|near_support|normal_volume: {label: support_absorption, warning: low}
+    long_lower_shadow|near_support|high_volume: {label: support_absorption, warning: low}
+    hammer|near_60d_low|high_volume: {label: selling_climax_candidate, warning: low}
+    hammer|near_60d_low|extreme_high_volume: {label: selling_climax_candidate, warning: low}
+    hammer|near_support|normal_volume: {label: support_absorption, warning: low}
+    hammer|near_support|high_volume: {label: support_absorption, warning: low}
+    hammer|near_ma20|low_volume: {label: healthy_pullback_completion, warning: low}
+    shooting_star|near_60d_high|high_volume: {label: distribution_at_high, warning: high}
+    shooting_star|near_resistance|normal_volume: {label: resistance_rejection, warning: medium}
+    hanging_man|near_60d_high|high_volume: {label: distribution_at_high, warning: high}
+    long_bearish_candle|near_60d_high|extreme_high_volume: {label: distribution_dump, warning: high}
+    long_bearish_candle|near_ma20|high_volume: {label: panic_pullback_at_support_test, warning: medium}
+    long_bearish_candle|midrange|high_volume: {label: bearish_continuation_confirmed, warning: low}
+    long_bullish_candle|near_resistance|high_volume: {label: breakout_bullish_candle, warning: low}
+    marubozu_bullish|near_resistance|high_volume: {label: breakout_bullish_candle, warning: low}
+    bullish_engulfing|near_ma20|normal_volume: {label: healthy_pullback_completion, warning: low}
+    bullish_engulfing|near_support|normal_volume: {label: support_absorption, warning: low}
+    bearish_engulfing|near_60d_high|high_volume: {label: distribution_at_high, warning: high}
+    doji|midrange|normal_volume: {label: noise_no_signal, warning: low}
+    doji|midrange|low_volume: {label: noise_no_signal, warning: low}
+    spinning_top|midrange|normal_volume: {label: noise_no_signal, warning: low}
+    morning_star|near_60d_low|normal_volume: {label: selling_climax_candidate, warning: low}
+    evening_star|near_60d_high|normal_volume: {label: distribution_at_high, warning: high}
+    piercing_line|near_support|normal_volume: {label: support_absorption, warning: low}
+    dark_cloud_cover|near_60d_high|normal_volume: {label: resistance_rejection, warning: medium}
+    gap_up_breakaway|midrange|high_volume: {label: gap_up_breakaway, warning: low}
+    gap_up_continuation|midrange|normal_volume: {label: gap_up_continuation, warning: low}
+    gap_up_exhaustion|near_60d_high|high_volume: {label: gap_up_exhaustion, warning: high}
+    gap_down_breakaway|midrange|high_volume: {label: gap_down_breakaway, warning: low}
+    gap_down_continuation|midrange|normal_volume: {label: gap_down_continuation, warning: low}
+    gap_down_exhaustion|near_60d_low|high_volume: {label: gap_down_exhaustion, warning: high}
+    gap_filled|midrange|normal_volume: {label: gap_filled, warning: low}
+  state_modifier_table:
+    distribution_at_high: {modifier: -10, cap: 60}
+    distribution_dump: {modifier: -15, cap: 50}
+    resistance_rejection: {modifier: -5, cap: 65}
+    selling_climax_candidate: {modifier: 5, cap: null}
+    support_absorption: {modifier: 5, cap: null}
+    healthy_pullback_completion: {modifier: 5, cap: null}
+    bearish_continuation_confirmed: {modifier: -5, cap: null}
+    panic_pullback_at_support_test: {modifier: -5, cap: 65}
+    noise_no_signal: {modifier: 0, cap: null}
+    gap_up_breakaway: {modifier: 10, cap: null}
+    gap_up_exhaustion: {modifier: -15, cap: 55}
+    gap_down_breakaway: {modifier: -10, cap: null}
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+chart_patterns:
+  double_top:
+    max_high_price_diff_pct: 3.0
+    min_interval_days: 10
+    require_volume_divergence: true
+    neckline_break_volume_ratio: 1.3
+    target_multiplier: 0.8
+  head_and_shoulders:
+    max_shoulder_diff_pct: 2.0
+    min_head_above_shoulders_pct: 3.0
+    max_neckline_slope_pct: 2.0
+    require_volume_pattern: true
+    neckline_break_volume_ratio: 1.3
+  triangle:
+    swing_lookback_days: 60
+    max_resistance_diff_pct: 2.0
+    min_support_rise_pct: 1.0
+  vcp:
+    min_pullback_count: 3
+    pullback_contraction_ratio: 0.7
+    volume_dryup_required: true
+    range_contraction_ratio: 0.5
+  state_modifier_table:
+    confirmed_double_top: {modifier: -20, cap: 50, override: high_level_distribution}
+    confirmed_head_and_shoulders: {modifier: -25, cap: 45, override: high_level_distribution}
+    confirmed_double_bottom: {modifier: 15, cap: null, override: null}
+    confirmed_inverse_head_and_shoulders: {modifier: 20, cap: null, override: null}
+    confirmed_vcp: {modifier: 25, cap: null, override: strong_uptrend}
+    pending_double_top: {modifier: -10, cap: 65, override: null}
+    pending_head_and_shoulders: {modifier: -12, cap: 60, override: null}
+    vcp_forming: {modifier: 5, cap: null, override: null}
+    ascending_triangle: {modifier: 5, cap: null, override: null}
+    descending_triangle: {modifier: -5, cap: null, override: null}
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+taiwan_market_rules:
+  disposition:
+    attention_confidence_cap: 70
+    stage_1_suppress_all: true
+    stage_2_confidence_cap: 30
+  limit:
+    limit_pct: 10.0
+    tolerance: 0.01
+    consecutive_2_days_cap: 50
+    consecutive_3_days_cap: 30
+  liquidity:
+    high_threshold_value: 500000000
+    medium_threshold_value: 100000000
+    low_threshold_value: 10000000
+    short_term_thin_cap: 60
+    swing_thin_cap: 50
+  ex_rights:
+    confidence_cap: 60
+    adjacent_window_days: 5
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+chip_resonance:
+  golden_resonance:
+    require_foreign_buy: true
+    require_trust_buy: true
+    min_foreign_consecutive_days: 3
+    strong_foreign_5d_value_threshold: 100000000
+    strong_trust_consecutive_days: 5
+  false_rally:
+    margin_balance_3d_change_pct: 15.0
+    require_foreign_sell: true
+    high_confidence_5d_value_threshold: 50000000
+  accumulation:
+    min_institutional_consecutive_days: 5
+    require_atr_dryup: true
+    forbidden_distance_from_60d_high_pct: 8.0
+    confirmed_foreign_20d_value_threshold: 100000000
+  institutional_defense:
+    near_ma20_pct: 2.0
+    require_5d_net_buy: true
+  three_majors_alignment:
+    foreign_weight: 0.5
+    trust_weight: 0.3
+    dealer_weight: 0.2
+  partial_data_strength_multiplier: 0.7
+  partial_data_confidence_cap: 70
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+signal_aggregator:
+  priority_order:
+    - disposition_suspended
+    - data_insufficient
+    - limit_distorted
+    - parabolic_overheat_warning
+    - false_breakout_high_risk
+    - distribution_detected
+    - bearish_pattern_confirmed
+    - breakdown_confirmed
+    - healthy_breakout_confirmed
+    - bottom_reversal_candidate
+    - breakout_pending_confirmation
+    - breakdown_pending_confirmation
+    - pullback_to_support
+    - accumulation_detected
+    - institutional_defense
+    - volatility_squeeze
+    - consolidation_pending_direction
+    - mixed_signals
+  unified_signal_zh:
+    healthy_breakout_confirmed: {label: "健康突破確認", description: "突破壓力位且通過量能、實體、籌碼四維品質驗證"}
+    breakout_pending_confirmation: {label: "突破待確認", description: "突破訊號出現但需 T+1 站穩驗證"}
+    pullback_to_support: {label: "回測支撐", description: "多頭趨勢中健康回檔，等待支撐確認"}
+    bottom_reversal_candidate: {label: "底部反轉候選", description: "出現底背離、雙底或吸收訊號，需後續確認"}
+    accumulation_detected: {label: "籌碼吸籌", description: "法人連續買超且波動收斂，潛在建倉"}
+    institutional_defense: {label: "法人護盤", description: "回測 MA20 附近仍有法人買盤"}
+    consolidation_pending_direction: {label: "盤整待方向", description: "因子分歧，等待方向明朗"}
+    volatility_squeeze: {label: "波動壓縮", description: "能量積聚，密切關注突破方向"}
+    mixed_signals: {label: "訊號混雜", description: "多個方向訊號並存，建議觀望"}
+    distribution_detected: {label: "派發訊號", description: "高位、頂背離或籌碼背離等派發特徵出現"}
+    breakdown_confirmed: {label: "破位確認", description: "跌破支撐並通過量能、實體、籌碼驗證"}
+    breakdown_pending_confirmation: {label: "破位待確認", description: "跌破訊號出現但需 T+1 確認"}
+    false_breakout_high_risk: {label: "假突破高風險", description: "突破伴隨無量、長上影或籌碼背離"}
+    parabolic_overheat_warning: {label: "極端過熱警報", description: "乖離、動能與資金過熱，追價風險高"}
+    bearish_pattern_confirmed: {label: "空方型態確認", description: "雙頂或頭肩頂等型態完成且頸線跌破"}
+    disposition_suspended: {label: "處置股暫停", description: "該股處於處置期間，技術分析暫停輸出"}
+    data_insufficient: {label: "資料不足", description: "K 棒資料不滿足分析需求"}
+    limit_distorted: {label: "漲跌停失真", description: "漲跌停使價格發現失效，建議等待恢復正常交易"}
+  is_v1_hypothesis: false
+
+score_engine:
+  factor_weights:
+    default:
+      price_position: 0.18
+      ma_geometry: 0.18
+      volume_quality: 0.18
+      structure: 0.15
+      momentum: 0.13
+      volatility: 0.08
+      chip_flow: 0.10
+  signal:
+    base_score: 50
+    modifier_clip_abs: 30
+    long_bearish_short_bullish_discount: 0.6
+    triple_resonance_multiplier: 1.1
+  confidence:
+    base_confidence: 60
+    agreement_bonus:
+      ge_6: 15
+      eq_5: 10
+      eq_4: 5
+      lt_3: -15
+    cross_horizon:
+      aligned: 10
+      triple_resonance_confluence: 15
+      mixed_uncertain: -10
+    data_source_penalty:
+      mock: -25
+      fallback: -15
+      partial_chip_fields: -10
+  risk:
+    base_risk: 30
+    deviation_risk:
+      z_gt_2_5: 25
+      z_2_0_to_2_5: 18
+      z_1_5_to_2_0: 12
+      z_1_0_to_1_5: 6
+    support_distance:
+      gt_10_pct: 10
+      gt_15_pct: 18
+      lt_2_pct: -10
+      strong_lt_3_pct: -5
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+confidence_cap_engine:
+  data_quality:
+    mock: 50
+    fallback: 60
+    estimated: 70
+    score_lt_60: 65
+    score_lt_40: 50
+  single_factor_dominance:
+    categories_lt_3: 50
+    dominant_strength_gt: 0.9
+    other_strength_lt: 0.4
+    cap: 60
+  missing_invalidation:
+    none: 60
+    lt_2: 70
+  liquidity:
+    low_short_term: 60
+    very_low_short_term: 50
+    very_low_swing: 50
+  day_trading_noise:
+    ratio_gt_0_60: 50
+    ratio_gt_0_50: 65
+  disposition:
+    attention: 70
+    stage_1: 30
+    stage_2: 25
+  limit_distortion:
+    single_limit: 60
+    consecutive_2: 50
+    consecutive_3: 30
+  cross_horizon_conflict:
+    mixed_uncertain: 60
+  is_v1_hypothesis: true
+  backtest_status: not_tested
+
+result_builder:
+  contract_name: AIAnalysisResult
+  next_update_minutes: 30
+  evidence_sort: absolute_weight_desc
+  include_admin_audit: true
+  frontend_single_contract: true
+  stage_failure_behavior:
+    F_failure: "VOLUME_QUALITY neutral; continue"
+    G_failure: "STRUCTURE fallback; continue"
+    H_failure: "BREAKOUT_QUALITY neutral; continue"
+    I_failure: "MOMENTUM fallback; continue"
+    J_failure: "VOLATILITY fallback; continue"
+    K_failure: "no candle modifier; continue"
+    L_failure: "no chart modifier; continue"
+    N_failure: "CHIP_FLOW neutral; continue"
+    O_failure: "primary_signal mixed_signals; continue"
+    P_Q_failure: "abort pipeline"
+  is_v1_hypothesis: true
+  backtest_status: not_tested

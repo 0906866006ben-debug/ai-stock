@@ -14,14 +14,25 @@ export default function EarningsCalendar({ symbol }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
     getEarningsCalendar(symbol)
       .then((r) => {
+        if (cancelled) return;
         setEvents(r.events);
         setDataSource(r.data_source);
       })
-      .catch(() => setEvents([]))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setEvents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [symbol]);
 
   const past = events.filter((e) => !e.is_upcoming);

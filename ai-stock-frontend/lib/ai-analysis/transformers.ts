@@ -10,6 +10,9 @@ import type {
   KouDiAnalysis,
   ReasonTrace,
   TechnicalState,
+  CrossHorizonState,
+  DowTrendStructure,
+  WyckoffPhase,
 } from '@/types/aiAnalysis';
 import { TECHNICAL_STATE_LABELS } from './i18n';
 
@@ -23,8 +26,16 @@ function normalizedConfidence(confidence: number): number {
 }
 
 function directionFromTrend(trend: string, pct: number): Direction {
-  if (trend.includes('漲') || pct >= 2) return 'bullish';
-  if (trend.includes('跌') || pct <= -2) return 'bearish';
+  const normalized = trend.toLowerCase();
+  const bullishTerms = ['bullish', 'uptrend', 'strong_uptrend', '看多', '多頭', '強勢', '上漲', '上升'];
+  const bearishTerms = ['bearish', 'downtrend', 'downtrend_continuation', '看空', '空頭', '弱勢', '下跌', '下降'];
+  const neutralBullishTerms = ['neutral_bullish', '偏多', '轉強', '穩健'];
+  const neutralBearishTerms = ['neutral_bearish', '偏空', '轉弱', '承壓'];
+
+  if (bullishTerms.some((term) => normalized.includes(term)) || pct >= 2) return 'bullish';
+  if (bearishTerms.some((term) => normalized.includes(term)) || pct <= -2) return 'bearish';
+  if (neutralBullishTerms.some((term) => normalized.includes(term))) return 'neutral_bullish';
+  if (neutralBearishTerms.some((term) => normalized.includes(term))) return 'neutral_bearish';
   if (pct > 0.3) return 'neutral_bullish';
   if (pct < -0.3) return 'neutral_bearish';
   return 'neutral';
@@ -36,13 +47,75 @@ function evidenceDirectionFromWeight(weight: number): EvidenceDirection {
   return 'neutral';
 }
 
-function technicalStateFromDirection(direction: Direction, risk: number): TechnicalState {
+function technicalStateFromDirection(direction: Direction, risk: number, absPct: number): TechnicalState {
   if (risk >= 85 && (direction === 'bullish' || direction === 'neutral_bullish')) return 'parabolic_overheat';
   if (direction === 'bullish') return 'strong_uptrend';
-  if (direction === 'neutral_bullish') return 'steady_uptrend';
+  if (direction === 'neutral_bullish') return absPct <= 1 ? 'early_strengthening' : 'steady_uptrend';
   if (direction === 'neutral_bearish') return 'early_weakening';
   if (direction === 'bearish') return 'downtrend_continuation';
+  if (absPct <= 1 && risk <= 45) return 'tight_consolidation';
   return 'mixed_signals';
+}
+
+function directionalEvidence(direction: Direction): EvidenceDirection {
+  if (direction === 'bullish' || direction === 'neutral_bullish') return 'bullish';
+  if (direction === 'bearish' || direction === 'neutral_bearish') return 'bearish';
+  return 'neutral';
+}
+
+function horizonStructure(direction: Direction): {
+  dow: DowTrendStructure;
+  wyckoff: WyckoffPhase;
+  label: string;
+  agreement: FactorCategory[];
+} {
+  if (direction === 'bullish') {
+    return {
+      dow: 'bullish_intact',
+      wyckoff: 'markup',
+      label: '偏多',
+      agreement: ['PRICE_VS_MA', 'MA_GEOMETRY', 'STRUCTURE'],
+    };
+  }
+  if (direction === 'neutral_bullish') {
+    return {
+      dow: 'bullish_intact',
+      wyckoff: 'accumulation_d',
+      label: '中性偏多',
+      agreement: ['PRICE_VS_MA', 'STRUCTURE'],
+    };
+  }
+  if (direction === 'neutral_bearish') {
+    return {
+      dow: 'bullish_at_risk',
+      wyckoff: 'distribution_a',
+      label: '中性偏空',
+      agreement: ['PRICE_VS_MA', 'VOLUME_QUALITY'],
+    };
+  }
+  if (direction === 'bearish') {
+    return {
+      dow: 'bearish_intact',
+      wyckoff: 'markdown',
+      label: '偏空',
+      agreement: ['PRICE_VS_MA', 'MA_GEOMETRY', 'STRUCTURE'],
+    };
+  }
+  return {
+    dow: 'undefined',
+    wyckoff: 'unclear',
+    label: '中性',
+    agreement: [],
+  };
+}
+
+function crossHorizonStateFromDirection(direction: Direction, risk: number): CrossHorizonState {
+  if (risk >= 85 && (direction === 'bullish' || direction === 'neutral_bullish')) return 'distribution_warning';
+  if (direction === 'bullish') return 'aligned_bullish';
+  if (direction === 'neutral_bullish') return 'bull_pullback_in_uptrend';
+  if (direction === 'neutral_bearish') return 'distribution_warning';
+  if (direction === 'bearish') return 'aligned_bearish';
+  return 'mixed_uncertain';
 }
 
 function reason(
@@ -92,28 +165,68 @@ function buildHorizon(
   const absPct = Math.abs(data.price_change_percent);
   const signal = clamp(55 + absPct * 5 + signalOffset + (direction.includes('bullish') ? 8 : 0));
   const risk = clamp(38 + absPct * 7 + riskOffset);
-  const technicalState = technicalStateFromDirection(direction, risk);
-  const isBearish = direction === 'bearish' || direction === 'neutral_bearish';
-  const directionLabel = isBearish ? '偏空' : direction === 'neutral' ? '中性' : '偏多';
+  const technicalState = technicalStateFromDirection(direction, risk, absPct);
+  const structure = horizonStructure(direction);
+  const directionalVote = directionalEvidence(direction);
+  const maVote = direction === 'bullish' || direction === 'bearish'
+    ? directionalVote
+    : direction === 'neutral' ? 'neutral' : directionalVote;
+  const invalidationConditions = direction === 'neutral'
+    ? [
+        {
+          description: '放量站回 MA20，整理區轉為偏多觀察',
+          trigger_expression: 'close > ma20 AND volume >= vma20',
+          monitored_fields: ['close', 'ma20', 'volume', 'vma20'],
+          severity: 'soft' as const,
+        },
+        {
+          description: '跌破 MA20 且量能放大，整理區轉為偏空風險',
+          trigger_expression: 'close < ma20 AND volume > vma20 * 1.3',
+          monitored_fields: ['close', 'ma20', 'volume', 'vma20'],
+          severity: 'hard' as const,
+        },
+      ]
+    : [
+        {
+          description: directionalVote === 'bearish'
+            ? '重新站回 MA20 且量能溫和放大，偏空假設失效'
+            : '收盤跌破 MA20，且成交量放大到 VMA20 的 1.5 倍以上',
+          trigger_expression: directionalVote === 'bearish'
+            ? 'close > ma20 AND volume > vma20'
+            : 'close < ma20 AND volume > vma20 * 1.5',
+          monitored_fields: ['close', 'ma20', 'volume', 'vma20'],
+          severity: 'hard' as const,
+        },
+        {
+          description: '連續兩個交易日與主方向相反，降低該時序信心',
+          trigger_expression: 'direction_mismatch_for_2_sessions',
+          monitored_fields: ['close', 'trend_state'],
+          severity: 'soft' as const,
+        },
+      ];
 
   return {
     horizon,
     technical_state: technicalState,
     state_label_zh: TECHNICAL_STATE_LABELS[technicalState],
-    state_detail: `${directionLabel}結構，漲跌幅 ${data.price_change_percent.toFixed(2)}%，AI 信心 ${Math.round(confidence)} 分。`,
+    state_detail: `${structure.label}結構，漲跌幅 ${data.price_change_percent.toFixed(2)}%，AI 信心 ${Math.round(confidence)} 分。`,
     direction,
     factor_votes: [
       {
         category: 'PRICE_VS_MA',
-        direction: isBearish ? 'bearish' : 'bullish',
+        direction: directionalVote,
         strength: clamp(signal / 100, 0, 1),
-        evidence_text: isBearish ? '價格相對短均線偏弱' : '價格相對短均線偏強',
+        evidence_text: directionalVote === 'bearish'
+          ? '價格相對短均線偏弱'
+          : directionalVote === 'bullish'
+            ? '價格相對短均線偏強'
+            : '價格與短均線方向未明顯偏離',
       },
       {
         category: 'MA_GEOMETRY',
-        direction: isBearish ? 'neutral' : 'bullish',
-        strength: 0.66,
-        evidence_text: data.technical?.summary ?? '均線結構由目前趨勢推估',
+        direction: maVote,
+        strength: maVote === 'neutral' ? 0.4 : 0.66,
+        evidence_text: data.technical?.summary ?? (maVote === 'neutral' ? '均線結構尚未形成明確方向' : '均線結構由目前趨勢推估'),
       },
       {
         category: 'VOLUME_QUALITY',
@@ -128,35 +241,16 @@ function buildHorizon(
         evidence_text: data.institutional_summary?.direction ?? '法人方向資料有限',
       },
     ],
-    categories_in_agreement: isBearish
-      ? ['PRICE_VS_MA', 'VOLUME_QUALITY']
-      : ['PRICE_VS_MA', 'MA_GEOMETRY', 'STRUCTURE'],
-    dow_structure: isBearish ? 'bullish_at_risk' : 'bullish_intact',
-    wyckoff_phase: isBearish ? 'distribution_a' : 'markup',
+    categories_in_agreement: structure.agreement,
+    dow_structure: structure.dow,
+    wyckoff_phase: structure.wyckoff,
     scores: {
       signal,
       confidence: clamp(confidence - Math.max(0, riskOffset / 2)),
       risk,
       confidence_cap_reason: confidence < 60 ? '資料完整度不足，信心分數自動保守' : undefined,
     },
-    invalidation_conditions: [
-      {
-        description: isBearish
-          ? '重新站回 MA20 且量能溫和放大，偏空假設失效'
-          : '收盤跌破 MA20，且成交量放大到 VMA20 的 1.5 倍以上',
-        trigger_expression: isBearish
-          ? 'close > ma20 AND volume > vma20'
-          : 'close < ma20 AND volume > vma20 * 1.5',
-        monitored_fields: ['close', 'ma20', 'volume', 'vma20'],
-        severity: 'hard',
-      },
-      {
-        description: '連續兩個交易日與主方向相反，降低該時序信心',
-        trigger_expression: 'direction_mismatch_for_2_sessions',
-        monitored_fields: ['close', 'trend_state'],
-        severity: 'soft',
-      },
-    ],
+    invalidation_conditions: invalidationConditions,
     reasons: [
       reason('AI 綜合趨勢判讀', 'trend', 'trend + price_change_percent', `${data.trend} / ${data.price_change_percent.toFixed(2)}%`, data.analyzed_at),
       reason('後端四面向摘要', 'comprehensive_analysis.summary', 'summary exists', data.comprehensive_analysis?.summary ?? data.summary, data.analyzed_at),
@@ -239,6 +333,7 @@ export function transformTaiwanAnalysisToAI(data: TaiwanStockAnalysisResponse): 
   const priceChange = data.current_price * (data.price_change_percent / 100);
   const nextUpdateAt = new Date(new Date(data.analyzed_at).getTime() + 30 * 60 * 1000).toISOString();
   const isBearish = overallDirection === 'bearish' || overallDirection === 'neutral_bearish';
+  const overallStructure = horizonStructure(overallDirection);
 
   return {
     symbol: data.symbol,
@@ -249,7 +344,7 @@ export function transformTaiwanAnalysisToAI(data: TaiwanStockAnalysisResponse): 
     price_change: Number(priceChange.toFixed(2)),
     price_change_pct: data.price_change_percent,
     overall_direction: overallDirection,
-    cross_horizon_state: isBearish ? 'distribution_warning' : 'bull_pullback_in_uptrend',
+    cross_horizon_state: crossHorizonStateFromDirection(overallDirection, risk),
     overall_scores: {
       signal,
       confidence,
@@ -300,8 +395,8 @@ export function transformTaiwanAnalysisToAI(data: TaiwanStockAnalysisResponse): 
     },
     evidence_ledger: buildEvidence(data),
     structure_panel: {
-      dow_structure: isBearish ? 'bullish_at_risk' : 'bullish_intact',
-      wyckoff_phase: isBearish ? 'distribution_a' : 'markup',
+      dow_structure: overallStructure.dow,
+      wyckoff_phase: overallStructure.wyckoff,
       recent_pivots: buildPivots(data),
       kou_di_ma20: buildKouDi(20, data.current_price),
       kou_di_ma60: buildKouDi(60, data.current_price),

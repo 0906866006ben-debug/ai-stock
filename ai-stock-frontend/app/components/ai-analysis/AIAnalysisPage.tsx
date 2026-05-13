@@ -7,6 +7,7 @@ import { ThreeHorizonView } from './horizons/ThreeHorizonView';
 import { ScenarioPlaybook } from './scenarios/ScenarioPlaybook';
 import { EvidenceLedger } from './evidence/EvidenceLedger';
 import { WyckoffStructurePanel } from './structure/WyckoffStructurePanel';
+import { V2QuantPreviewPanel } from './v2/V2QuantPreviewPanel';
 import { DeepResearchReport } from './report/DeepResearchReport';
 import { ProvenanceFooter } from './provenance/ProvenanceFooter';
 import { LoadingSkeleton } from './states/LoadingSkeleton';
@@ -41,6 +42,7 @@ export function AIAnalysisPage({ symbol, sourceData }: AIAnalysisPageProps) {
       <ScenarioPlaybook data={data} />
       <EvidenceLedger data={data} />
       <WyckoffStructurePanel data={data.structure_panel} />
+      <V2QuantPreviewPanel data={data.v2_quant_analysis} />
       <DeepResearchReport data={data} />
       <ProvenanceFooter data={data} onRecompute={refetch} />
     </div>

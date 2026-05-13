@@ -92,12 +92,69 @@ export interface FundamentalMetrics {
   cf_trend?: string;
 }
 
+type AnalysisScalar = string | number | boolean | null | undefined;
+type AnalysisDetail = Record<string, AnalysisScalar>;
+
+export interface ProfitabilityDetail extends AnalysisDetail {
+  trend?: string;
+  quality?: string;
+}
+
+export interface ValuationDetail extends AnalysisDetail {
+  level?: string;
+}
+
+export interface TechnicalMomentumDetail extends AnalysisDetail {
+  rsi?: string | number;
+  rsi_signal?: string;
+}
+
+export interface TechnicalKeyLevelsDetail extends AnalysisDetail {
+  support?: string | number;
+  resistance?: string | number;
+}
+
+export interface InstitutionalFlowDetail extends AnalysisDetail {
+  trend?: string;
+}
+
+export interface ChipInstitutionalSentiment {
+  foreign?: InstitutionalFlowDetail | null;
+  domestic_fund?: InstitutionalFlowDetail | null;
+  [key: string]: InstitutionalFlowDetail | AnalysisScalar | null;
+}
+
+export interface ChipPositionDetail extends AnalysisDetail {
+  overall_trend?: string;
+}
+
+export interface NewsHeadlineDetail extends AnalysisDetail {
+  title?: string;
+  source?: string;
+  date?: string;
+  published_at?: string;
+  url?: string;
+}
+
+export interface SentimentAggregateDetail extends AnalysisDetail {
+  bullish_count?: number;
+  neutral_count?: number;
+  bearish_count?: number;
+  overall_score?: number;
+  trend?: string;
+}
+
+export interface NewsCatalystDetail extends AnalysisDetail {
+  event?: string;
+  date?: string;
+}
+
 export interface FundamentalAnalysis {
   summary: string;
   revenue_trend: string;
-  profitability?: Record<string, any> | null;
-  valuation?: Record<string, any> | null;
-  financial_health?: Record<string, any> | null;
+  profitability?: ProfitabilityDetail | null;
+  valuation?: ValuationDetail | null;
+  financial_health?: AnalysisDetail | null;
   risks: string[];
   catalysts: string[];
   metrics?: FundamentalMetrics | null;
@@ -108,9 +165,9 @@ export interface FundamentalAnalysis {
 export interface TechnicalAnalysis {
   summary: string;
   trend: string;
-  momentum?: Record<string, any> | null;
-  volatility?: Record<string, any> | null;
-  key_levels?: Record<string, any> | null;
+  momentum?: TechnicalMomentumDetail | null;
+  volatility?: AnalysisDetail | null;
+  key_levels?: TechnicalKeyLevelsDetail | null;
   risks: string[];
   opportunities: string[];
   confidence: number;
@@ -119,10 +176,10 @@ export interface TechnicalAnalysis {
 
 export interface ChipAnalysis {
   summary: string;
-  institutional_sentiment?: Record<string, any> | null;
-  chip_position?: Record<string, any> | null;
-  risk_indicators?: Record<string, any> | null;
-  liquidity?: Record<string, any> | null;
+  institutional_sentiment?: ChipInstitutionalSentiment | null;
+  chip_position?: ChipPositionDetail | null;
+  risk_indicators?: AnalysisDetail | null;
+  liquidity?: AnalysisDetail | null;
   risks: string[];
   signals: string[];
   confidence: number;
@@ -131,10 +188,10 @@ export interface ChipAnalysis {
 
 export interface NewsAnalysis {
   summary: string;
-  recent_headlines: Record<string, any>[];
-  sentiment_aggregate?: Record<string, any> | null;
-  key_catalysts: Record<string, any>[];
-  macro_impact?: Record<string, any> | null;
+  recent_headlines: NewsHeadlineDetail[];
+  sentiment_aggregate?: SentimentAggregateDetail | null;
+  key_catalysts: NewsCatalystDetail[];
+  macro_impact?: AnalysisDetail | null;
   risks: string[];
   opportunities: string[];
   confidence: number;
@@ -533,4 +590,5 @@ export interface Position {
   cost_per_share: number;
   purchase_date: string;
   current_price?: number;
+  current_price_updated_at?: string;
 }

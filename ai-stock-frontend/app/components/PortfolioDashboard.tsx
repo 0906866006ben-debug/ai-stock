@@ -9,6 +9,9 @@ interface Props {
   positions: Position[];
   onDelete: (id: string) => void;
   onSelect: (code: string, name: string) => void;
+  onRefreshPrices?: () => void;
+  refreshingPrices?: boolean;
+  priceRefreshError?: string | null;
 }
 
 function calcValue(pos: Position): number {
@@ -33,13 +36,36 @@ function fmt(n: number, d = 0): string {
   return n.toLocaleString('zh-TW', { maximumFractionDigits: d });
 }
 
-export default function PortfolioDashboard({ positions, onDelete, onSelect }: Props) {
+function latestUpdatedAt(positions: Position[]): string | null {
+  const timestamps = positions
+    .map((p) => p.current_price_updated_at)
+    .filter((v): v is string => Boolean(v))
+    .map((v) => new Date(v).getTime())
+    .filter((v) => Number.isFinite(v));
+  if (timestamps.length === 0) return null;
+  return new Date(Math.max(...timestamps)).toLocaleString('zh-TW', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export default function PortfolioDashboard({
+  positions,
+  onDelete,
+  onSelect,
+  onRefreshPrices,
+  refreshingPrices = false,
+  priceRefreshError = null,
+}: Props) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const totalValue = positions.reduce((s, p) => s + calcValue(p), 0);
   const totalCost = positions.reduce((s, p) => s + calcCost(p), 0);
   const totalPnl = totalValue - totalCost;
   const totalReturn = totalCost ? (totalPnl / totalCost) * 100 : 0;
+  const updatedAt = latestUpdatedAt(positions);
 
   if (positions.length === 0) {
     return (
@@ -52,6 +78,30 @@ export default function PortfolioDashboard({ positions, onDelete, onSelect }: Pr
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-100">投資組合</h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            {refreshingPrices
+              ? '現價更新中...'
+              : updatedAt
+                ? `現價更新：${updatedAt}`
+                : '尚未更新現價'}
+            {priceRefreshError ? `，${priceRefreshError}` : ''}
+          </p>
+        </div>
+        {onRefreshPrices && (
+          <button
+            type="button"
+            onClick={onRefreshPrices}
+            disabled={refreshingPrices}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            {refreshingPrices ? '更新中' : '更新現價'}
+          </button>
+        )}
+      </div>
+
       {/* Summary strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[

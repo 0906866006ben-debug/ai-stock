@@ -90,10 +90,12 @@ export default function StockChart({ chartData: initialCandles, symbol }: Props)
   }, [symbol]);
 
   useEffect(() => {
-    fetchHistory(range, toggles);
+    queueMicrotask(() => {
+      fetchHistory(range, toggles);
+    });
   }, [fetchHistory, range, toggles]);
 
-  const candles = data?.candles ?? initialCandles ?? [];
+  const candles = useMemo(() => data?.candles ?? initialCandles ?? [], [data?.candles, initialCandles]);
   const indicators = data?.indicators ?? null;
 
   useEffect(() => {

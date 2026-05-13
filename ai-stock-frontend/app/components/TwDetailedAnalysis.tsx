@@ -84,9 +84,6 @@ function RevenueCard({ data }: { data: RevenueSummary }) {
 // ── Valuation ─────────────────────────────────────────────────────────────────
 
 function ValuationCard({ data }: { data: ValuationSummary }) {
-  const statusLabels: Record<string, string> = {
-    cheap: '便宜', fair: '合理', expensive: '昂貴', no_data: '無資料',
-  };
   return (
     <Card title="估值指標">
       <Row label="本益比 (PER)" value={fmt(data.per, 1)} />

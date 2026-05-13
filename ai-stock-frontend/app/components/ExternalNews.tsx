@@ -23,7 +23,9 @@ export default function ExternalNews() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
     getExternalNews()
       .then((result) => {
         if (!cancelled) {

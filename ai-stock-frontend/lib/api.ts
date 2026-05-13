@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { AIAnalysisResult } from '@/types/aiAnalysis';
 import type {
   TaiwanStockAnalysisResponse,
   FundamentalsData,
@@ -55,6 +56,13 @@ export async function analyzeStock(symbol: string): Promise<StockAnalysisRespons
 
 export async function analyzeTW(symbol: string): Promise<TaiwanStockAnalysisResponse> {
   const { data } = await axios.get<TaiwanStockAnalysisResponse>(`${API_BASE}/analyze/tw`, {
+    params: { symbol: symbol.trim() },
+  });
+  return data;
+}
+
+export async function getTwAIAnalysisContract(symbol: string): Promise<Partial<AIAnalysisResult>> {
+  const { data } = await axios.get<Partial<AIAnalysisResult>>(`${API_BASE}/ai-analysis/tw`, {
     params: { symbol: symbol.trim() },
   });
   return data;

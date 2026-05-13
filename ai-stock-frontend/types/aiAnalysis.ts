@@ -193,11 +193,81 @@ export interface StructurePanelData {
 }
 
 export interface ReportSection {
-  key: 'narrative' | 'fundamentals' | 'technical_chips' | 'scenarios' | 'rating';
+  key: 'narrative' | 'fundamentals' | 'technical_chips' | 'scenarios' | 'rating' | 'quant_v2';
   title: string;
   icon: string;
   preview: string;
   body_markdown: string;
+}
+
+export type DecimalLike = number | string;
+
+export interface V2FundamentalGate {
+  status: 'pass' | 'fail' | 'unknown';
+  passed: boolean;
+  score: number;
+  failed_rules: string[];
+  missing_fields: string[];
+  warnings: string[];
+}
+
+export interface V2TimeBoxProjection {
+  ma_window: number;
+  status: 'ready' | 'insufficient_data';
+  p_crit?: DecimalLike | null;
+  projection_date?: string | null;
+  deduction_min?: DecimalLike | null;
+  deduction_max?: DecimalLike | null;
+  current_close: DecimalLike;
+  distance_to_p_crit_pct?: DecimalLike | null;
+  ma_acceleration_flag: boolean;
+  warning?: string | null;
+}
+
+export interface V2VolumeProfile {
+  status: 'ready' | 'insufficient_data';
+  lookback_days: number;
+  poc_price?: DecimalLike | null;
+  vah_price?: DecimalLike | null;
+  val_price?: DecimalLike | null;
+  poc_distance_pct?: DecimalLike | null;
+  poc_breakdown_flag: boolean;
+  bins_used: number;
+  value_area_pct: DecimalLike;
+}
+
+export interface V2TwoBReversal {
+  status: 'confirmed' | 'watch' | 'none' | 'insufficient_data';
+  confirmed: boolean;
+  prior_low_l1?: DecimalLike | null;
+  false_break_low_l2?: DecimalLike | null;
+  reclaim_days?: number | null;
+  bias_120_pct?: DecimalLike | null;
+  reasons: string[];
+}
+
+export interface V2RiskExecution {
+  take_profit_price?: DecimalLike | null;
+  stop_loss_price?: DecimalLike | null;
+  rr_ratio?: DecimalLike | null;
+  rr_pass: boolean;
+  kelly_fraction: DecimalLike;
+  position_cap: DecimalLike;
+  forced_exit: boolean;
+  forced_exit_reason?: string | null;
+  bottom_line_fields: string[];
+}
+
+export interface V2QuantAnalysisResult {
+  version: string;
+  fundamental_gate: V2FundamentalGate;
+  time_boxes: Record<string, V2TimeBoxProjection>;
+  volume_profile: V2VolumeProfile;
+  two_b_reversal: V2TwoBReversal;
+  risk_execution: V2RiskExecution;
+  implemented_modules: string[];
+  missing_data_fields: string[];
+  hypothesis_ids: string[];
 }
 
 export interface AIAnalysisResult {
@@ -221,6 +291,7 @@ export interface AIAnalysisResult {
   bearish_scenario: Scenario;
   evidence_ledger: EvidenceItem[];
   structure_panel: StructurePanelData;
+  v2_quant_analysis?: V2QuantAnalysisResult;
   report_sections: ReportSection[];
   data_sources: string[];
   models_used: string[];

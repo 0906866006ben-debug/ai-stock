@@ -30,21 +30,33 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
 
   useEffect(() => {
     const code = stockCode.trim();
+    let cancelled = false;
+
+    const updateLookup = (next: typeof companyLookupState, nextName?: string) => {
+      queueMicrotask(() => {
+        if (cancelled) return;
+        setCompanyLookupState(next);
+        if (nextName && (!companyNameTouched || !companyName.trim())) {
+          setCompanyName(nextName);
+        }
+      });
+    };
+
     if (!/^\d{4,6}$/.test(code)) {
-      setCompanyLookupState('idle');
-      return;
+      updateLookup('idle');
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (currentAnalyzedStock && currentAnalyzedStock.stock_code === code) {
-      setCompanyLookupState('found');
-      if (!companyNameTouched || !companyName.trim()) {
-        setCompanyName(currentAnalyzedStock.company_name);
-      }
-      return;
+      updateLookup('found', currentAnalyzedStock.company_name);
+      return () => {
+        cancelled = true;
+      };
     }
 
-    let cancelled = false;
-    setCompanyLookupState('loading');
+    updateLookup('loading');
 
     const timer = setTimeout(async () => {
       try {

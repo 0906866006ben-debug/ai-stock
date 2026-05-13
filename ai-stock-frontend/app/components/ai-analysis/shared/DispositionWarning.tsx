@@ -6,7 +6,7 @@ interface DispositionWarningProps {
 }
 
 /**
- * Topic M placeholder: clearly downgrades technical interpretation when Taiwan
+ * Topic M status banner: clearly downgrades technical interpretation when Taiwan
  * market disposition rules distort trading mechanics.
  */
 export function DispositionWarning({ status }: DispositionWarningProps) {

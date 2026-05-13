@@ -1,6 +1,6 @@
-import { analyzeTW } from '@/lib/api';
+import { analyzeTW, getTwAIAnalysisContract } from '@/lib/api';
 import type { TaiwanStockAnalysisResponse } from '@/lib/types';
-import type { AIAnalysisResult } from '@/types/aiAnalysis';
+import type { AIAnalysisResult, ReportSection } from '@/types/aiAnalysis';
 import { parabolicOverheatAnalysis, springEventAnalysis, tsmc2330Analysis, vcpConsolidationAnalysis } from './mock-data';
 import { transformTaiwanAnalysisToAI } from './transformers';
 
@@ -26,7 +26,7 @@ export async function fetchAIAnalysis(symbol: string): Promise<AIAnalysisResult>
 
   try {
     const twData = await analyzeTW(symbol);
-    return transformTaiwanAnalysisToAI(twData);
+    return fetchAIAnalysisV2Overlay(symbol, transformTaiwanAnalysisToAI(twData));
   } catch {
     return getMockAIAnalysis(symbol);
   }
@@ -34,4 +34,29 @@ export async function fetchAIAnalysis(symbol: string): Promise<AIAnalysisResult>
 
 export function fromTaiwanAnalysis(data: TaiwanStockAnalysisResponse): AIAnalysisResult {
   return transformTaiwanAnalysisToAI(data);
+}
+
+export async function fetchAIAnalysisV2Overlay(symbol: string, base: AIAnalysisResult): Promise<AIAnalysisResult> {
+  try {
+    const contract = await getTwAIAnalysisContract(symbol);
+    return mergeV2Overlay(base, contract);
+  } catch {
+    return base;
+  }
+}
+
+function mergeV2Overlay(base: AIAnalysisResult, contract: Partial<AIAnalysisResult>): AIAnalysisResult {
+  if (!contract.v2_quant_analysis) return base;
+
+  const quantSection = contract.report_sections?.find((section): section is ReportSection => section.key === 'quant_v2');
+  const reportSections = quantSection && !base.report_sections.some((section) => section.key === 'quant_v2')
+    ? [...base.report_sections, quantSection]
+    : base.report_sections;
+
+  return {
+    ...base,
+    v2_quant_analysis: contract.v2_quant_analysis,
+    report_sections: reportSections,
+    models_used: Array.from(new Set([...base.models_used, ...(contract.models_used ?? [])])),
+  };
 }

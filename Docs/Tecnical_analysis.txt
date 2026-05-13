@@ -5,15 +5,44 @@ This document defines the detailed technical-analysis logic for the Taiwan Stock
 This file is intended for:
 - Claude Code
 - Codex
-- future `TechnicalFeatureBuilder`
-- future `TechnicalAnalyzer`
-- future `TechnicalAnalysisResult`
-- future technical-analysis frontend cards
-- future technical-rule backtesting registry
+- current `backend/technical_analyzer/v1` implementation
+- current `/ai-analysis/tw` backend contract
+- current and future technical-analysis frontend cards
+- current and future technical-rule backtesting registry
 
 This is a v1 specification.
 
 Every threshold, score weight, rule, and state definition is a v1 hypothesis until historical backtesting validates it.
+
+---
+
+# 0.1 Implementation Sync (2026-05-13)
+
+The A-T implementation pass is now represented in `backend/technical_analyzer/v1`.
+
+Implemented:
+
+1. A-E contracts, feature builders, classifiers, horizon output, MA / structure / invalidation logic.
+2. F-H volume-price quadrant, support/resistance, breakout quality, fake-breakout and confirmation logic.
+3. I-J contextual momentum, RSI / MACD / KD / Bollinger / BIAS / divergence / overheat logic.
+4. K-O candlestick patterns, chart patterns, Taiwan market gates, chip resonance, and unified signal aggregation.
+5. P-Q three-axis scoring and hard confidence-cap logic.
+6. R hypothesis registry with 67 v1 hypotheses in `hypothesis/hypothesis_backtest_v1.yaml`.
+7. S data inventory with 98 fields in `data/data_pipeline_config.yaml`.
+8. T unified `AIAnalysisResult` output builder and `GET /ai-analysis/tw?symbol=2330`.
+
+Known v1 gaps:
+
+1. Intraday 15-minute and 60-minute K-line horizons are not fully wired; v1 currently derives horizons mostly from daily OHLCV.
+2. Large-holder / broker-branch / TEJ style chip data is inventoried but not fully sourced, so chip-related confidence must degrade when missing.
+3. The hypothesis registry is ready, but the historical backtest executor and measured win-rate / expectancy / drawdown metrics are still future work.
+4. The frontend can display AI analysis through its existing transform path; a later cleanup can switch it to consume `/ai-analysis/tw` directly as the single contract.
+
+Verification:
+
+1. `pytest backend/tests/technical_analyzer/v1 -q`: 40 passed.
+2. `pytest backend/tests -q`: 134 passed, with one existing LangGraph deprecation warning.
+3. `GET /ai-analysis/tw?symbol=2330` returns the expected `symbol`, `overall_scores`, `horizons`, and `data_quality` keys.
 
 ---
 
@@ -2483,9 +2512,11 @@ strategy_language:
 
 ---
 
-# 25. Immediate Codex Prompt
+# 25. Historical Immediate Codex Prompt
 
-Use this first.
+Historical note: this prompt was used for the first audit pass. It is kept for traceability, but the v1 implementation status is now tracked in section 0.1.
+
+Use this first only when starting from the pre-implementation baseline.
 
 Project reset.
 
@@ -2529,4 +2560,4 @@ Suggested file path:
 
 docs/research/technical_analysis_deep_logic.md
 
-Last synced: 2026-05-12
+Last synced: 2026-05-13

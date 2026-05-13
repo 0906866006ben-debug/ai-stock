@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  analyzeStock, analyzeTW, getCompetitors, syncTelegramWatchlist,
+  analyzeStock, analyzeTW, getCompetitors, getTwPriceHistory, syncTelegramWatchlist,
   StockAnalysisResponse,
 } from '@/lib/api';
 import {
@@ -118,28 +118,17 @@ export default function DashboardPage() {
 
   // Portfolio
   const [positions, setPositions] = useState<Position[]>([]);
+  const [priceRefreshing, setPriceRefreshing] = useState(false);
+  const [priceRefreshError, setPriceRefreshError] = useState<string | null>(null);
+  const positionsRef = useRef<Position[]>([]);
+  const portfolioRefreshSeq = useRef(0);
 
   // Watchlist / recents
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [recents, setRecents] = useState<FavoriteItem[]>([]);
 
-  // Load persisted state
-  useEffect(() => {
-    try {
-      const p = localStorage.getItem(STORAGE_POSITIONS);
-      if (p) setPositions(JSON.parse(p));
-    } catch { /* empty */ }
-    try {
-      const f = localStorage.getItem(STORAGE_FAVORITES);
-      if (f) setFavorites(JSON.parse(f));
-    } catch { /* empty */ }
-    try {
-      const r = localStorage.getItem(STORAGE_RECENTS);
-      if (r) setRecents(JSON.parse(r));
-    } catch { /* empty */ }
-  }, []);
-
   function savePositions(next: Position[]) {
+    positionsRef.current = next;
     setPositions(next);
     localStorage.setItem(STORAGE_POSITIONS, JSON.stringify(next));
   }
@@ -153,6 +142,112 @@ export default function DashboardPage() {
     setRecents(next);
     localStorage.setItem(STORAGE_RECENTS, JSON.stringify(next));
   }
+
+  const refreshPortfolioPrices = useCallback(async (sourcePositions?: Position[]) => {
+    const basePositions = sourcePositions ?? positionsRef.current;
+    const codes = Array.from(
+      new Set(
+        basePositions
+          .map((p) => p.stock_code.trim())
+          .filter((code) => TW_RE.test(code))
+      )
+    );
+
+    if (codes.length === 0) return;
+
+    const seq = portfolioRefreshSeq.current + 1;
+    portfolioRefreshSeq.current = seq;
+    setPriceRefreshing(true);
+    setPriceRefreshError(null);
+
+    try {
+      const results = await Promise.allSettled(
+        codes.map(async (code) => {
+          const history = await getTwPriceHistory(code, 'D');
+          const latest = history.candles.at(-1);
+          if (!latest || typeof latest.close !== 'number') return null;
+          return [code, latest.close] as const;
+        })
+      );
+
+      if (portfolioRefreshSeq.current !== seq) return;
+
+      const priceMap = new Map<string, number>();
+      let failed = 0;
+      results.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value) {
+          priceMap.set(result.value[0], result.value[1]);
+        } else {
+          failed += 1;
+        }
+      });
+
+      if (priceMap.size > 0) {
+        const updatedAt = new Date().toISOString();
+        setPositions((prev) => {
+          const next = prev.map((pos) => {
+            const price = priceMap.get(pos.stock_code.trim());
+            return price == null
+              ? pos
+              : { ...pos, current_price: price, current_price_updated_at: updatedAt };
+          });
+          positionsRef.current = next;
+          localStorage.setItem(STORAGE_POSITIONS, JSON.stringify(next));
+          return next;
+        });
+      }
+
+      if (failed > 0) {
+        setPriceRefreshError(`有 ${failed} 檔現價暫時無法更新`);
+      }
+    } catch {
+      if (portfolioRefreshSeq.current === seq) {
+        setPriceRefreshError('現價更新失敗');
+      }
+    } finally {
+      if (portfolioRefreshSeq.current === seq) {
+        setPriceRefreshing(false);
+      }
+    }
+  }, []);
+
+  // Load persisted state
+  useEffect(() => {
+    let loadedPositions: Position[] = [];
+    let loadedFavorites: FavoriteItem[] | null = null;
+    let loadedRecents: FavoriteItem[] | null = null;
+    try {
+      const p = localStorage.getItem(STORAGE_POSITIONS);
+      if (p) {
+        loadedPositions = JSON.parse(p);
+        positionsRef.current = loadedPositions;
+      }
+    } catch { /* empty */ }
+    try {
+      const f = localStorage.getItem(STORAGE_FAVORITES);
+      if (f) loadedFavorites = JSON.parse(f);
+    } catch { /* empty */ }
+    try {
+      const r = localStorage.getItem(STORAGE_RECENTS);
+      if (r) loadedRecents = JSON.parse(r);
+    } catch { /* empty */ }
+
+    queueMicrotask(() => {
+      if (loadedPositions.length > 0) setPositions(loadedPositions);
+      if (loadedFavorites) setFavorites(loadedFavorites);
+      if (loadedRecents) setRecents(loadedRecents);
+    });
+
+    if (loadedPositions.length > 0) {
+      refreshPortfolioPrices(loadedPositions);
+    }
+  }, [refreshPortfolioPrices]);
+
+  useEffect(() => {
+    if (page === 'portfolio' && positionsRef.current.length > 0) {
+      refreshPortfolioPrices();
+    }
+  }, [page, refreshPortfolioPrices]);
 
   // Analysis
   const handleSearch = useCallback(async (symbol: string) => {
@@ -170,13 +265,17 @@ export default function DashboardPage() {
         setTwResult(data);
         setUsResult(null);
         // Update current price in portfolio
-        setPositions((prev) =>
-          prev.map((p) =>
+        setPositions((prev) => {
+          const updatedAt = new Date().toISOString();
+          const next = prev.map((p) =>
             p.stock_code === symbol
-              ? { ...p, current_price: data.current_price }
+              ? { ...p, current_price: data.current_price, current_price_updated_at: updatedAt }
               : p
-          )
-        );
+          );
+          positionsRef.current = next;
+          localStorage.setItem(STORAGE_POSITIONS, JSON.stringify(next));
+          return next;
+        });
       } else {
         const data = await analyzeStock(symbol);
         setUsResult(data);
@@ -196,7 +295,6 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recents]);
 
   // Navigate to analysis and pre-fill symbol
@@ -223,12 +321,14 @@ export default function DashboardPage() {
   // Portfolio management
   function addPosition(pos: Omit<Position, 'id'>) {
     const newPos: Position = { ...pos, id: `${Date.now()}-${Math.random()}` };
-    savePositions([...positions, newPos]);
+    const next = [...positionsRef.current, newPos];
+    savePositions(next);
+    refreshPortfolioPrices(next);
     setPage('portfolio');
   }
 
   function deletePosition(id: string) {
-    savePositions(positions.filter((p) => p.id !== id));
+    savePositions(positionsRef.current.filter((p) => p.id !== id));
   }
 
   const latestTwCandle = twResult?.chart_data?.[twResult.chart_data.length - 1] ?? null;
@@ -530,6 +630,9 @@ export default function DashboardPage() {
                 positions={positions}
                 onDelete={deletePosition}
                 onSelect={(code, name) => goAnalyze(code, name)}
+                onRefreshPrices={() => refreshPortfolioPrices()}
+                refreshingPrices={priceRefreshing}
+                priceRefreshError={priceRefreshError}
               />
             )}
 

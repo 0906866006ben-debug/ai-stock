@@ -116,10 +116,12 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
   }, [stockCode]);
 
   useEffect(() => {
-    fetchHistory(range, toggles);
+    queueMicrotask(() => {
+      fetchHistory(range, toggles);
+    });
   }, [fetchHistory, range, toggles]);
 
-  const candles = data?.candles ?? initialCandles ?? [];
+  const candles = useMemo(() => data?.candles ?? initialCandles ?? [], [data?.candles, initialCandles]);
   const indicators = data?.indicators ?? null;
 
   // Render charts
@@ -449,7 +451,6 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
       chartsRef.current.forEach((c) => c.remove());
       chartsRef.current = [];
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, indicators, toggles.ma5, toggles.ma20, toggles.ma60, toggles.ma120, toggles.ma240, toggles.volume, toggles.rsi, toggles.macd, toggles.kd, toggles.bb, toggles.atr]);
 
   const togglesList: { key: keyof IndicatorToggles; label: string; color: string }[] = useMemo(() => [

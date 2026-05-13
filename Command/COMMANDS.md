@@ -207,7 +207,91 @@ Invoke-RestMethod "http://localhost:8000/analyze/tw?symbol=2330"
 Tested result:
 
 ```text
-92 passed, 1 warning
+141 passed, 1 warning
+```
+
+---
+
+## Run AI Stock Backtest
+
+The backtest runner supports local CSV files first, then FinMind if `FINMIND_API_KEY`
+is configured in `backend/.env`. Results are written to:
+
+```text
+backend/backtest_results/<timestamp>_v2_quant_<symbols>/
+```
+
+Each run creates:
+
+- `backtest_results.xlsx`
+- `Summary.csv`
+- `Trades.csv`
+- `DailySignals.csv`
+- `Hypotheses.csv`
+- `EquityCurve.csv`
+- `Config.csv`
+- `summary.json`
+
+Run a balanced v2 backtest:
+
+```powershell
+cd "C:\Users\09068\OneDrive\文件\GitHub\ai-stock"
+.\.venv\Scripts\python.exe -m backend.technical_analyzer.v1.backtest.runner `
+  --symbols 2330,2454,2317 `
+  --start 2023-01-01 `
+  --end 2025-12-31 `
+  --min-signal 60 `
+  --min-confidence 45 `
+  --max-risk 75
+```
+
+Run strict v2 mode, requiring RR >= 3:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.technical_analyzer.v1.backtest.runner `
+  --symbols 2330,2454,2317 `
+  --start 2023-01-01 `
+  --end 2025-12-31 `
+  --require-rr-pass
+```
+
+Use local CSV files instead of FinMind:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.technical_analyzer.v1.backtest.runner `
+  --symbols 2330,2454 `
+  --start 2023-01-01 `
+  --end 2025-12-31 `
+  --data-dir data\tw_ohlcv
+```
+
+CSV file names should be:
+
+```text
+data/tw_ohlcv/2330.csv
+data/tw_ohlcv/2454.csv
+```
+
+Supported CSV columns:
+
+```text
+date, open, high, low, close, volume, turnover_value
+```
+
+FinMind-style names are also accepted:
+
+```text
+date, open, max, min, close, Trading_Volume, Trading_money
+```
+
+If you only want to test the runner without real data:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.technical_analyzer.v1.backtest.runner `
+  --symbols 2330 `
+  --start 2025-01-01 `
+  --end 2025-12-31 `
+  --allow-mock
 ```
 
 ---

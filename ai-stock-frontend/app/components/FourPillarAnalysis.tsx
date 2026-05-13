@@ -227,9 +227,10 @@ export default function FourPillarAnalysis({
                       看壞: {news.sentiment_aggregate.bearish_count}
                     </p>
                     <p>
-                      整體評分: {(
-                        news.sentiment_aggregate.overall_score * 100
-                      ).toFixed(0)}%
+                      整體評分:{' '}
+                      {news.sentiment_aggregate.overall_score != null
+                        ? `${(news.sentiment_aggregate.overall_score * 100).toFixed(0)}%`
+                        : 'N/A'}
                     </p>
                     <p>趨勢: {news.sentiment_aggregate.trend}</p>
                   </div>
