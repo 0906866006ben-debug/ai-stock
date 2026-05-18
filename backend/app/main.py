@@ -56,6 +56,8 @@ from .services.tw_etf_holdings import get_etf_holdings
 from .services.fmp_price_history import get_us_price_history
 from backend.technical_analyzer.v1.contracts.input_contract import ContextBundle, OHLCVBar, OHLCVSeries
 from backend.technical_analyzer.v1.orchestration import AIAnalysisResultBuilder
+from .api.routes import screeners
+from backend.screeners.multi_factor_surge.api import router as multi_factor_surge_router
 
 app = FastAPI(title="AI Stock Analysis API", version="3.0.0")
 
@@ -65,6 +67,8 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+app.include_router(screeners.router)
+app.include_router(multi_factor_surge_router)
 
 SYMBOL_RE = re.compile(r"^[A-Za-z0-9]{1,10}$")
 TW_SYMBOL_RE = re.compile(r"^\d{4,6}$")

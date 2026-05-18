@@ -29,26 +29,35 @@ import DividendCalendar from './components/DividendCalendar';
 import EarningsCalendar from './components/EarningsCalendar';
 import ETFHoldingsCard from './components/ETFHoldingsCard';
 import { AIAnalysisPage } from './components/ai-analysis/AIAnalysisPage';
+import ScreenerView from './components/ScreenerView';
 
-type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position';
+type Page = 'analysis' | 'stock-analysis' | 'screener' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
+const STORAGE_SIM_POSITIONS = 'stockAssistant.simPositions';
 const STORAGE_FAVORITES = 'stockAssistant.favorites';
 const STORAGE_RECENTS = 'stockAssistant.recents';
 
 interface FavoriteItem { code: string; name: string }
 
+function initialPageFromUrl(): Page {
+  if (typeof window === 'undefined') return 'analysis';
+  const requestedPage = new URLSearchParams(window.location.search).get('page');
+  return NAV.some((item) => item.page === requestedPage) ? requestedPage as Page : 'analysis';
+}
+
 // ── Sidebar nav ────────────────────────────────────────────────────────────────
 
 const NAV: { page: Page; label: string; icon: string }[] = [
-  { page: 'analysis', label: 'AI 分析', icon: '🔍' },
-  { page: 'stock-analysis', label: '股票分析', icon: '📈' },
-  { page: 'portfolio', label: '投資組合', icon: '📊' },
+  { page: 'analysis', label: '小幫手分析', icon: '🔮' },
+  { page: 'stock-analysis', label: '看看走勢', icon: '📈' },
+  { page: 'screener', label: '挑選潛力股', icon: '✨' },
+  { page: 'portfolio', label: '我的小金庫', icon: '💖' },
   { page: 'directory', label: '股票目錄', icon: '📋' },
-  { page: 'news', label: '市場新聞', icon: '📰' },
-  { page: 'calendar', label: '行事曆', icon: '📅' },
-  { page: 'watchlist', label: '自選清單', icon: '★' },
-  { page: 'add-position', label: '新增持倉', icon: '+' },
+  { page: 'news', label: '今日新聞', icon: '📰' },
+  { page: 'calendar', label: '小日曆', icon: '📅' },
+  { page: 'watchlist', label: '私心清單', icon: '⭐' },
+  { page: 'add-position', label: '加新寶貝', icon: '🌷' },
 ];
 
 function Sidebar({
@@ -72,13 +81,13 @@ function Sidebar({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-56 transform bg-white shadow-lg transition-transform dark:bg-zinc-900 lg:static lg:translate-x-0 lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-30 w-56 transform bg-gradient-to-b from-pink-50 to-purple-50 shadow-lg transition-transform dark:from-pink-950/30 dark:to-purple-950/30 lg:static lg:translate-x-0 lg:shadow-none ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="border-b border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-            股票助理
+        <div className="border-b border-pink-200 p-4 dark:border-pink-900/50">
+          <p className="text-sm font-bold bg-gradient-to-r from-pink-500 via-rose-500 to-purple-500 bg-clip-text text-transparent animate-gradient-shift">
+            🌸 寶貝的股票小幫手 ♡
           </p>
         </div>
         <nav className="p-2">
@@ -86,10 +95,10 @@ function Sidebar({
             <button
               key={page}
               onClick={() => { onChange(page); onClose(); }}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+              className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-all duration-300 hover:translate-x-1 ${
                 current === page
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                  : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                  ? 'bg-gradient-to-r from-pink-200/80 to-purple-200/60 text-pink-800 shadow-sm dark:from-pink-900/40 dark:to-purple-900/40 dark:text-pink-200'
+                  : 'text-zinc-600 hover:bg-pink-100/60 dark:text-zinc-300 dark:hover:bg-pink-950/30'
               }`}
             >
               <span className="text-base">{icon}</span>
@@ -105,7 +114,7 @@ function Sidebar({
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [page, setPage] = useState<Page>('analysis');
+  const [page, setPage] = useState<Page>(initialPageFromUrl);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Analysis state
@@ -123,6 +132,15 @@ export default function DashboardPage() {
   const positionsRef = useRef<Position[]>([]);
   const portfolioRefreshSeq = useRef(0);
 
+  // Simulated portfolio (paper trading)
+  const [simPositions, setSimPositions] = useState<Position[]>([]);
+  const [simPriceRefreshing, setSimPriceRefreshing] = useState(false);
+  const [simPriceRefreshError, setSimPriceRefreshError] = useState<string | null>(null);
+  const simPositionsRef = useRef<Position[]>([]);
+  const simPortfolioRefreshSeq = useRef(0);
+  const [addTarget, setAddTarget] = useState<'real' | 'sim'>('real');
+  const [floatingSimAddOpen, setFloatingSimAddOpen] = useState(false);
+
   // Watchlist / recents
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [recents, setRecents] = useState<FavoriteItem[]>([]);
@@ -131,6 +149,12 @@ export default function DashboardPage() {
     positionsRef.current = next;
     setPositions(next);
     localStorage.setItem(STORAGE_POSITIONS, JSON.stringify(next));
+  }
+
+  function saveSimPositions(next: Position[]) {
+    simPositionsRef.current = next;
+    setSimPositions(next);
+    localStorage.setItem(STORAGE_SIM_POSITIONS, JSON.stringify(next));
   }
 
   function saveFavorites(next: FavoriteItem[]) {
@@ -211,9 +235,78 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const refreshSimPortfolioPrices = useCallback(async (sourcePositions?: Position[]) => {
+    const basePositions = sourcePositions ?? simPositionsRef.current;
+    const codes = Array.from(
+      new Set(
+        basePositions
+          .map((p) => p.stock_code.trim())
+          .filter((code) => TW_RE.test(code))
+      )
+    );
+
+    if (codes.length === 0) return;
+
+    const seq = simPortfolioRefreshSeq.current + 1;
+    simPortfolioRefreshSeq.current = seq;
+    setSimPriceRefreshing(true);
+    setSimPriceRefreshError(null);
+
+    try {
+      const results = await Promise.allSettled(
+        codes.map(async (code) => {
+          const history = await getTwPriceHistory(code, 'D');
+          const latest = history.candles.at(-1);
+          if (!latest || typeof latest.close !== 'number') return null;
+          return [code, latest.close] as const;
+        })
+      );
+
+      if (simPortfolioRefreshSeq.current !== seq) return;
+
+      const priceMap = new Map<string, number>();
+      let failed = 0;
+      results.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value) {
+          priceMap.set(result.value[0], result.value[1]);
+        } else {
+          failed += 1;
+        }
+      });
+
+      if (priceMap.size > 0) {
+        const updatedAt = new Date().toISOString();
+        setSimPositions((prev) => {
+          const next = prev.map((pos) => {
+            const price = priceMap.get(pos.stock_code.trim());
+            return price == null
+              ? pos
+              : { ...pos, current_price: price, current_price_updated_at: updatedAt };
+          });
+          simPositionsRef.current = next;
+          localStorage.setItem(STORAGE_SIM_POSITIONS, JSON.stringify(next));
+          return next;
+        });
+      }
+
+      if (failed > 0) {
+        setSimPriceRefreshError(`有 ${failed} 檔現價暫時無法更新`);
+      }
+    } catch {
+      if (simPortfolioRefreshSeq.current === seq) {
+        setSimPriceRefreshError('現價更新失敗');
+      }
+    } finally {
+      if (simPortfolioRefreshSeq.current === seq) {
+        setSimPriceRefreshing(false);
+      }
+    }
+  }, []);
+
   // Load persisted state
   useEffect(() => {
     let loadedPositions: Position[] = [];
+    let loadedSimPositions: Position[] = [];
     let loadedFavorites: FavoriteItem[] | null = null;
     let loadedRecents: FavoriteItem[] | null = null;
     try {
@@ -221,6 +314,13 @@ export default function DashboardPage() {
       if (p) {
         loadedPositions = JSON.parse(p);
         positionsRef.current = loadedPositions;
+      }
+    } catch { /* empty */ }
+    try {
+      const sp = localStorage.getItem(STORAGE_SIM_POSITIONS);
+      if (sp) {
+        loadedSimPositions = JSON.parse(sp);
+        simPositionsRef.current = loadedSimPositions;
       }
     } catch { /* empty */ }
     try {
@@ -234,6 +334,7 @@ export default function DashboardPage() {
 
     queueMicrotask(() => {
       if (loadedPositions.length > 0) setPositions(loadedPositions);
+      if (loadedSimPositions.length > 0) setSimPositions(loadedSimPositions);
       if (loadedFavorites) setFavorites(loadedFavorites);
       if (loadedRecents) setRecents(loadedRecents);
     });
@@ -241,13 +342,17 @@ export default function DashboardPage() {
     if (loadedPositions.length > 0) {
       refreshPortfolioPrices(loadedPositions);
     }
-  }, [refreshPortfolioPrices]);
+    if (loadedSimPositions.length > 0) {
+      refreshSimPortfolioPrices(loadedSimPositions);
+    }
+  }, [refreshPortfolioPrices, refreshSimPortfolioPrices]);
 
   useEffect(() => {
-    if (page === 'portfolio' && positionsRef.current.length > 0) {
-      refreshPortfolioPrices();
+    if (page === 'portfolio') {
+      if (positionsRef.current.length > 0) refreshPortfolioPrices();
+      if (simPositionsRef.current.length > 0) refreshSimPortfolioPrices();
     }
-  }, [page, refreshPortfolioPrices]);
+  }, [page, refreshPortfolioPrices, refreshSimPortfolioPrices]);
 
   // Analysis
   const handleSearch = useCallback(async (symbol: string) => {
@@ -274,6 +379,17 @@ export default function DashboardPage() {
           );
           positionsRef.current = next;
           localStorage.setItem(STORAGE_POSITIONS, JSON.stringify(next));
+          return next;
+        });
+        setSimPositions((prev) => {
+          const updatedAt = new Date().toISOString();
+          const next = prev.map((p) =>
+            p.stock_code === symbol
+              ? { ...p, current_price: data.current_price, current_price_updated_at: updatedAt }
+              : p
+          );
+          simPositionsRef.current = next;
+          localStorage.setItem(STORAGE_SIM_POSITIONS, JSON.stringify(next));
           return next;
         });
       } else {
@@ -321,14 +437,24 @@ export default function DashboardPage() {
   // Portfolio management
   function addPosition(pos: Omit<Position, 'id'>) {
     const newPos: Position = { ...pos, id: `${Date.now()}-${Math.random()}` };
-    const next = [...positionsRef.current, newPos];
-    savePositions(next);
-    refreshPortfolioPrices(next);
+    if (addTarget === 'sim') {
+      const next = [...simPositionsRef.current, newPos];
+      saveSimPositions(next);
+      refreshSimPortfolioPrices(next);
+    } else {
+      const next = [...positionsRef.current, newPos];
+      savePositions(next);
+      refreshPortfolioPrices(next);
+    }
     setPage('portfolio');
   }
 
   function deletePosition(id: string) {
     savePositions(positionsRef.current.filter((p) => p.id !== id));
+  }
+
+  function deleteSimPosition(id: string) {
+    saveSimPositions(simPositionsRef.current.filter((p) => p.id !== id));
   }
 
   const latestTwCandle = twResult?.chart_data?.[twResult.chart_data.length - 1] ?? null;
@@ -339,7 +465,7 @@ export default function DashboardPage() {
       : null;
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 dark:from-pink-950/20 dark:via-zinc-950 dark:to-purple-950/20">
       <Sidebar
         current={page}
         onChange={setPage}
@@ -349,10 +475,10 @@ export default function DashboardPage() {
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <header className="border-b border-pink-200 bg-white/80 backdrop-blur-sm dark:border-pink-900/40 dark:bg-zinc-900/80">
           <div className="flex items-center gap-3 px-4 py-3">
             <button
-              className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 lg:hidden"
+              className="rounded-2xl p-1.5 text-pink-500 hover:bg-pink-100 dark:hover:bg-pink-950/40 lg:hidden"
               onClick={() => setSidebarOpen(true)}
               aria-label="Open navigation"
             >
@@ -360,15 +486,24 @@ export default function DashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <h1 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+            <h1 className="text-base font-bold bg-gradient-to-r from-pink-600 via-rose-500 to-purple-600 bg-clip-text text-transparent">
+              <span className="inline-block animate-sparkle mr-1">✨</span>
               {NAV.find((n) => n.page === page)?.label ?? 'AI 股票分析'}
             </h1>
           </div>
         </header>
 
         {/* Main content */}
-        <main className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="mx-auto max-w-6xl space-y-6">
+        <main className="relative flex-1 overflow-y-auto px-4 py-6">
+          {/* Decorative floating sparkles in background */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <span className="absolute top-[10%] left-[8%] text-3xl opacity-20 animate-float-soft" style={{ animationDelay: '0s' }}>🌸</span>
+            <span className="absolute top-[25%] right-[6%] text-2xl opacity-20 animate-float-soft" style={{ animationDelay: '1.2s' }}>✨</span>
+            <span className="absolute top-[55%] left-[4%] text-2xl opacity-15 animate-float-soft" style={{ animationDelay: '0.6s' }}>💗</span>
+            <span className="absolute top-[70%] right-[10%] text-3xl opacity-15 animate-float-soft" style={{ animationDelay: '2s' }}>🌷</span>
+            <span className="absolute top-[88%] left-[15%] text-xl opacity-15 animate-float-soft" style={{ animationDelay: '1.5s' }}>♡</span>
+          </div>
+          <div key={page} className="relative mx-auto max-w-6xl space-y-6 animate-fade-in-up">
 
             {/* ── Stock / AI analysis ── */}
             {(page === 'analysis' || page === 'stock-analysis') && (
@@ -377,7 +512,7 @@ export default function DashboardPage() {
                 <TwSearchBar onSearch={handleSearch} loading={loading} />
 
                 {error && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
                     {error}
                   </div>
                 )}
@@ -393,7 +528,7 @@ export default function DashboardPage() {
                   <>
                     {/* Next dividend banner */}
                     {page === 'stock-analysis' && twResult.next_dividend && (
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/40">
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/40">
                         <div className="flex items-center justify-between">
                           <span className="font-medium text-amber-800 dark:text-amber-200">
                             💰 即將除息
@@ -624,16 +759,62 @@ export default function DashboardPage() {
               </>
             )}
 
+            {/* ── Screener ── */}
+            {page === 'screener' && (
+              <ScreenerView />
+            )}
+
             {/* ── Portfolio ── */}
             {page === 'portfolio' && (
-              <PortfolioDashboard
-                positions={positions}
-                onDelete={deletePosition}
-                onSelect={(code, name) => goAnalyze(code, name)}
-                onRefreshPrices={() => refreshPortfolioPrices()}
-                refreshingPrices={priceRefreshing}
-                priceRefreshError={priceRefreshError}
-              />
+              <div className="space-y-6">
+                <div>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h2 className="text-base font-semibold text-pink-700 dark:text-pink-300">
+                      <span className="inline-block animate-heartbeat mr-1">💖</span>
+                      我的寶貝資產
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => { setAddTarget('real'); setPage('add-position'); }}
+                      className="rounded-full bg-gradient-to-r from-pink-500 to-rose-500 px-4 py-1.5 text-xs font-semibold text-white shadow-md hover:from-pink-600 hover:to-rose-600 transition-all"
+                    >
+                      ➕ 加新寶貝
+                    </button>
+                  </div>
+                  <PortfolioDashboard
+                    positions={positions}
+                    onDelete={deletePosition}
+                    onSelect={(code, name) => goAnalyze(code, name)}
+                    onRefreshPrices={() => refreshPortfolioPrices()}
+                    refreshingPrices={priceRefreshing}
+                    priceRefreshError={priceRefreshError}
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <h2 className="text-base font-semibold text-purple-700 dark:text-purple-300">🌸 練習小天地</h2>
+                    <button
+                      type="button"
+                      onClick={() => { setAddTarget('sim'); setPage('add-position'); }}
+                      className="rounded-full bg-gradient-to-r from-purple-400 to-fuchsia-500 px-4 py-1.5 text-xs font-semibold text-white shadow-md hover:from-purple-500 hover:to-fuchsia-600 transition-all"
+                    >
+                      ✨ 加練習寶貝
+                    </button>
+                  </div>
+                  <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+                    這裡只是練習用的小天地，不會影響真正的小金庫～可以拿來追蹤想試試看的標的 ✿
+                  </p>
+                  <PortfolioDashboard
+                    positions={simPositions}
+                    onDelete={deleteSimPosition}
+                    onSelect={(code, name) => goAnalyze(code, name)}
+                    onRefreshPrices={() => refreshSimPortfolioPrices()}
+                    refreshingPrices={simPriceRefreshing}
+                    priceRefreshError={simPriceRefreshError}
+                  />
+                </div>
+              </div>
             )}
 
             {/* ── Stock directory ── */}
@@ -670,10 +851,35 @@ export default function DashboardPage() {
 
             {/* ── Add position ── */}
             {page === 'add-position' && (
-              <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-                <h2 className="mb-4 text-base font-semibold text-zinc-800 dark:text-zinc-200">
-                  新增持倉
+              <div className="rounded-2xl border border-pink-200 bg-white/90 p-6 shadow-sm dark:border-pink-900/40 dark:bg-zinc-900">
+                <h2 className="mb-4 text-base font-semibold text-pink-700 dark:text-pink-300">
+                  🌷 加新寶貝
                 </h2>
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400">加到哪裡：</span>
+                  <button
+                    type="button"
+                    onClick={() => setAddTarget('real')}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                      addTarget === 'real'
+                        ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
+                        : 'border border-pink-200 text-pink-600 hover:border-pink-400 hover:bg-pink-50 dark:border-pink-900/40 dark:text-pink-300'
+                    }`}
+                  >
+                    💖 我的寶貝資產
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddTarget('sim')}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                      addTarget === 'sim'
+                        ? 'bg-gradient-to-r from-purple-400 to-fuchsia-500 text-white shadow-md'
+                        : 'border border-purple-200 text-purple-600 hover:border-purple-400 hover:bg-purple-50 dark:border-purple-900/40 dark:text-purple-300'
+                    }`}
+                  >
+                    🌸 練習小天地
+                  </button>
+                </div>
                 <AddPosition
                   onAdd={addPosition}
                   currentAnalyzedStock={currentAnalyzedStock}
@@ -684,6 +890,62 @@ export default function DashboardPage() {
           </div>
         </main>
       </div>
+
+      {/* ── Floating 模擬持倉 quick-add bubble (always visible, scroll-locked) ── */}
+      <button
+        type="button"
+        onClick={() => setFloatingSimAddOpen(prev => !prev)}
+        title={floatingSimAddOpen ? '關閉' : '快速加練習寶貝'}
+        className={`fixed right-6 top-1/2 z-40 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-2xl shadow-xl transition-all hover:scale-110 active:scale-95 ${
+          floatingSimAddOpen
+            ? 'bg-zinc-600 text-white'
+            : 'bg-gradient-to-br from-pink-400 via-rose-400 to-purple-400 text-white animate-gradient-shift hover:from-pink-500 hover:via-rose-500 hover:to-purple-500'
+        }`}
+        aria-label="快速加練習寶貝"
+      >
+        <span className={floatingSimAddOpen ? '' : 'inline-block animate-heartbeat'}>
+          {floatingSimAddOpen ? '✕' : '💗'}
+        </span>
+      </button>
+
+      {floatingSimAddOpen && (
+        <div
+          className="fixed right-24 top-1/2 z-40 w-[420px] max-w-[calc(100vw-7rem)] -translate-y-1/2 rounded-3xl border border-pink-200 bg-white shadow-2xl dark:border-pink-900/60 dark:bg-zinc-900 animate-pop-in"
+          role="dialog"
+          aria-label="快速加練習寶貝"
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-pink-100 bg-gradient-to-r from-pink-50 to-purple-50 px-4 py-3 dark:border-pink-900/40 dark:from-pink-950/30 dark:to-purple-950/30">
+            <h3 className="text-sm font-semibold text-pink-700 dark:text-pink-300">
+              💗 快速加練習寶貝
+            </h3>
+            <button
+              type="button"
+              onClick={() => setFloatingSimAddOpen(false)}
+              className="rounded-md p-1 text-pink-500 hover:bg-pink-100 hover:text-pink-700 dark:hover:bg-pink-950/40 dark:hover:text-pink-200"
+              aria-label="關閉"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <p className="px-4 pt-3 text-xs text-zinc-500 dark:text-zinc-400">
+            ✿ 不會動到真正的小金庫，可以練習買進想試試看的標的～
+          </p>
+          <div className="max-h-[70vh] overflow-y-auto px-4 pb-4 pt-2">
+            <AddPosition
+              onAdd={(pos) => {
+                const newPos: Position = { ...pos, id: `${Date.now()}-${Math.random()}` };
+                const next = [...simPositionsRef.current, newPos];
+                saveSimPositions(next);
+                refreshSimPortfolioPrices(next);
+                setFloatingSimAddOpen(false);
+              }}
+              currentAnalyzedStock={currentAnalyzedStock}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

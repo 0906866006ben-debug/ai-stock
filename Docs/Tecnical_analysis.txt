@@ -1333,8 +1333,9 @@ Output language:
 Interpretation:
 
 RSI > 70:
-- overheating risk
-- not automatic bearish
+- strong momentum zone (momentum premium)
+- signals potential breakout acceleration
+- do not penalize as overheated unless combined with bearish divergence
 
 RSI 50–70:
 - healthy bullish momentum zone
@@ -1352,8 +1353,8 @@ RSI < 30:
 Rules:
 
 RSI > 70 + strong uptrend:
-- trend strong
-- chasing risk rises
+- trend extremely strong (momentum chasing phase)
+- risk-reward is acceptable if trailing stop is used
 
 RSI > 70 + resistance + long upper shadow:
 - short-term reversal risk rises
@@ -1492,7 +1493,7 @@ It does not mean immediate bearish reversal.
 Conditions:
 
 - price far above MA20
-- RSI > 70
+- RSI > 85  # Relaxed from 70 to allow chasing strong trends
 - KD high-level dulling
 - Bollinger upper expansion
 - volume spike
@@ -1505,8 +1506,8 @@ Conditions:
 Interpretation:
 
 - trend may not be broken
-- chasing risk rises
-- risk-reward deteriorates
+- chasing is acceptable for momentum strategies
+- require trailing stop (e.g. MA5 or MA10) to manage risk
 - wait for pullback or renewed confirmation
 
 Output language:

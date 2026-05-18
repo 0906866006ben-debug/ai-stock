@@ -157,7 +157,7 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
               setError('');
             }}
             placeholder="例如：2330"
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            className="w-full rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           />
         </div>
         <div>
@@ -172,7 +172,7 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
               setCompanyNameTouched(true);
             }}
             placeholder="不輸入會依股票代碼自動帶入"
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            className="w-full rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           />
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
             {companyLookupState === 'loading' && '正在查詢公司名稱...'}
@@ -193,12 +193,12 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
               placeholder={quantityUnit === 'lot' ? '例如：1' : '例如：1000'}
               min={quantityUnit === 'lot' ? '0.001' : '1'}
               step={quantityUnit === 'lot' ? '0.001' : '1'}
-              className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              className="min-w-0 flex-1 rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             />
             <select
               value={quantityUnit}
               onChange={(e) => setQuantityUnit(e.target.value as QuantityUnit)}
-              className="w-24 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              className="w-24 rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             >
               <option value="lot">張</option>
               <option value="share">股</option>
@@ -219,7 +219,7 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
             placeholder="例如：950"
             min="0.01"
             step="0.01"
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            className="w-full rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           />
         </div>
         <div>
@@ -230,7 +230,7 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
             type="date"
             value={purchaseDate}
             onChange={(e) => setPurchaseDate(e.target.value)}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            className="w-full rounded-2xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           />
         </div>
       </div>
@@ -241,9 +241,9 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
 
       <button
         type="submit"
-        className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
+        className="rounded-full bg-gradient-to-r from-pink-500 to-rose-500 px-6 py-2 text-sm font-semibold text-white shadow-md hover:from-pink-600 hover:to-rose-600 active:from-pink-700 active:to-rose-700 transition-all"
       >
-        新增持倉
+        💖 加入寶貝清單
       </button>
     </form>
   );

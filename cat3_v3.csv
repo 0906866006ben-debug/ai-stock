@@ -1,0 +1,12 @@
+﻿run_id,trade_id,stock_id,signal_date,entry_date,entry_price,exit_date,exit_price,exit_reason,hold_days,gross_return_pct,net_return_pct,entry_status,candidate_type,sector_category
+cat3_v3,1,6147,2023-08-18,2023-08-21,69.069,2023-09-18,71.2287,hold_days_expired,20,0.031269,0.025419,filled,起漲前觀察,cat_3_packaging
+cat3_v3,2,6147,2023-08-21,2023-08-22,67.067,2023-09-19,70.929,hold_days_expired,20,0.057584,0.051734,filled,起漲前觀察,cat_3_packaging
+cat3_v3,3,3711,2023-08-29,2023-08-30,119.119,2023-09-27,109.3905,hold_days_expired,20,-0.08167,-0.08752,filled,起漲前觀察,cat_3_packaging
+cat3_v3,4,3711,2023-11-03,2023-11-06,118.6185,2023-12-04,129.87,hold_days_expired,20,0.094855,0.089005,filled,起漲前觀察,cat_3_packaging
+cat3_v3,5,3711,2023-11-06,2023-11-07,118.118,2023-12-05,129.3705,hold_days_expired,20,0.095265,0.089415,filled,起漲前觀察,cat_3_packaging
+cat3_v3,6,3711,2023-11-09,2023-11-10,117.6175,2023-12-08,129.3705,hold_days_expired,20,0.099926,0.094076,filled,起漲前觀察,cat_3_packaging
+cat3_v3,7,6510,2023-12-19,2023-12-20,573.573,2024-01-15,515.6995,stop_loss_triggered,17,-0.1009,-0.10675,filled,起漲前觀察,cat_3_packaging
+cat3_v3,8,6510,2023-12-20,2023-12-21,563.563,2024-01-17,506.6995,stop_loss_triggered,18,-0.1009,-0.10675,filled,起漲前觀察,cat_3_packaging
+cat3_v3,9,6147,2024-03-05,2024-03-06,72.8728,2024-04-03,75.924,hold_days_expired,20,0.04187,0.03602,filled,起漲前觀察,cat_3_packaging
+cat3_v3,10,6147,2024-03-06,2024-03-07,74.2742,2024-04-08,76.2237,hold_days_expired,20,0.026247,0.020397,filled,起漲前觀察,cat_3_packaging
+cat3_v3,11,3711,2025-09-04,2025-09-05,155.155,2025-10-07,173.3265,hold_days_expired,20,0.117118,0.111268,filled,起漲前觀察,cat_3_packaging

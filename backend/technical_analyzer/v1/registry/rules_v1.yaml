@@ -653,3 +653,188 @@ result_builder:
     P_Q_failure: "abort pipeline"
   is_v1_hypothesis: true
   backtest_status: not_tested
+
+surge_candidate:
+  rule_set_version: "v1.0.0"
+  is_v1_hypothesis: true
+  position: "condition_watchlist_not_trading_signal"
+  cache:
+    ttl_seconds: 1800
+    force_refresh_cooldown_seconds: 300
+  history:
+    minimum_days: 65
+    full_confidence_days: 90
+  price_position:
+    # 允許 60 日微跌 — 黃圈狀態的盤整期常會有 -5% ~ -10% 的小漂移，不能用 0% 硬擋
+    min_return_60d: -0.15
+    max_return_60d: 0.35
+    max_base_return_abs: 0.05
+    medium_base_return_abs: 0.10
+    min_return_20d: 0.08
+    medium_return_20d: 0.03
+    return_90d_lookback_bars: 63
+    min_return_90d: 0.10
+    max_return_90d: 0.30
+    min_return_90d_broad: 0.00
+    max_return_90d_broad: 0.35
+    pre_breakout_return_20d_max: 0.05
+    max_return_20d_not_surged: 0.15
+    # 起漲前觀察 — 改用「90 日擺盪幅度」range_90d 而非 return_90d
+    # 公式: (high_90d - low_90d) / low_90d ∈ [5%, 30%]
+    # 鬆綁版 (路線 B)：min 從 0.10 降到 0.05，包含小擺盪股以拉高樣本數
+    pre_breakout_range_90d_min: 0.05
+    pre_breakout_range_90d_max: 0.30
+    # 保留 return_90d 寬鬆範圍作為輔助過濾 (避免「跌完反彈」誤判)
+    pre_breakout_return_90d_min: -0.15
+    pre_breakout_return_90d_max_strict: 0.30
+    pre_breakout_return_20d_strict_max: 0.08   # 起漲前 20日漲幅上限 (從 0.12 收緊到 0.08)
+    pre_breakout_return_60d_strict_max: 0.10   # 起漲前 60日漲幅上限 (從 0.15 收緊到 0.10)
+    pre_breakout_return_20d_high: 0.08
+    pre_breakout_return_20d_medium: 0.12
+    pre_breakout_return_60d_max: 0.15
+    pre_breakout_return_90d_max: 0.25
+    low_return_60d_max: 0.05
+    medium_return_60d_max: 0.10
+    preferred_return_60d_max: 0.20
+    extended_return_60d_max: 0.30
+    moderate_return_5d: 0.08
+    parabolic_return_5d: 0.25
+    overheat_return_5d: 0.15
+    warm_return_5d: 0.10
+  base:
+    max_range_pct: 0.20
+    tight_range_pct: 0.10
+    high_score_range_pct: 0.15
+    medium_range_pct: 0.15
+    loose_range_pct: 0.30
+    strong_contraction_ratio: 0.60
+    contraction_ratio: 0.80
+    neutral_contraction_ratio: 1.00
+    expansion_ratio: 1.20
+    tighter_base_return_abs: 0.03
+  volume:
+    sustained_recovery_ratio: 1.20
+    strong_recovery_ratio: 1.50
+    momentum_recovery_ratio: 1.30
+    mild_recovery_ratio: 1.05
+    weak_recovery_ratio: 0.90
+    single_day_surge_ratio: 1.50
+    setup_recovery_min: 1.00
+    setup_recovery_max: 1.30
+    overexpanded_recovery_ratio: 1.80
+    upper_shadow_volume_ratio: 2.00
+    climax_volume_ratio: 3.00
+    lots_per_share: 1000
+    # 起漲前觀察強制要求「縮量」— base 後半 20 日量能 ≤ 80% 前半 20 日量能 (從 0.85 收緊)
+    pre_breakout_volume_contraction_max: 0.80
+  liquidity:
+    min_avg_volume_20_lots: 300
+    min_avg_turnover_20: 30000000
+    tier_very_high_turnover: 500000000
+    tier_very_high_volume_lots: 2000
+    tier_high_turnover: 100000000
+    tier_high_volume_lots: 1000
+    tier_mid_turnover: 50000000
+    tier_mid_volume_lots: 500
+    tier_low_turnover: 10000000
+  ema:
+    periods: [5, 10, 20]
+    max_spread: 0.08
+    tight_spread: 0.03
+    medium_spread: 0.05
+    initial_move_spread: 0.08
+    extended_spread: 0.12
+    ema5_micro_upturn_min: 0.0
+    ema10_flat_floor: -0.001
+    ema20_flat_floor: -0.003
+    ema20_slope_floor: -0.003
+    slope_lookback_short: 5
+    slope_lookback_ema20: 10
+    extended_from_ema20: 0.15
+    warm_extended_from_ema20: 0.10
+    pre_breakout_close_ema20_max: 0.05        # 起漲前 abs(close-EMA20)/EMA20 上限 (從 0.08 收緊)
+    pre_breakout_ema_spread_max: 0.03         # 起漲前 EMA 糾結度上限 (從 0.05 收緊)
+    overheated_close_ema20_min: 0.12          # 偏熱觀察觸發門檻 — close 距 EMA20 > 12%
+    overheated_ema_spread_min: 0.08           # 偏熱觀察 EMA 已分叉 — spread > 8%
+    setup_close_distance_max: 0.12
+    setup_close_distance_ideal_abs: 0.08
+  relative_strength:
+    require_positive_20d: true
+    require_positive_60d: true
+    missing_score: 50
+    strong_60d: 0.15
+    high_60d: 0.10
+    positive_60d: 0.05
+    weak_60d_floor: -0.05
+    strong_20d: 0.05
+    downside_resilience_high: 0.70
+    downside_resilience_medium: 0.50
+  candle:
+    upper_shadow_ratio: 0.50
+    weak_close_position: 0.50
+  scoring:
+    weights:
+      liquidity_score: 0.15
+      price_position_score: 0.20
+      base_compression_score: 0.20
+      volume_score: 0.15
+      ema_convergence_score: 0.15
+      relative_strength_score: 0.15
+      risk_score: -0.20
+    pre_breakout_weights:
+      # 縮量盤整 + EMA 糾結微上翹 + EMA 由弱轉強 三大核心訊號平均加權
+      base_compression_score: 0.20            # 縮量盤整 (基底振幅 + base_return + 量縮)
+      volume_contraction_score: 0.20          # 純 volume_contraction_ratio 分數
+      ema_micro_upturn_score: 0.20            # EMA 現在斜率方向 (從 0.30 降至 0.20)
+      ema_down_to_up_transition_score: 0.20   # EMA 由弱轉強 — 前期下彎 → 近期上翹 (新增)
+      setup_price_position_score: 0.10        # 價格位置(靠近 EMA20 / 基底高點)
+      relative_strength_score: 0.05
+      liquidity_score: 0.05
+      risk_score: -0.10
+    score_min: 0
+    score_max: 100
+  confidence:
+    base: 80
+    market_index_missing_cap: 65
+    turnover_estimated_cap: 75
+    insufficient_history_cap: 50
+    universe_size_estimated_penalty: 5
+  classification:
+    disqualify_score_below: 55
+    observation_score_min: 60
+    initial_score_min: 65
+    momentum_score_min: 70
+    initial_return_60d_min: 0.10
+    initial_return_60d_max: 0.20
+    momentum_return_60d_min: 0.15
+    momentum_return_60d_max: 0.25
+    overheat_return_60d: 0.30
+    overheat_risk_score: 70
+    observation_risk_score_max: 65
+    observation_positive_signs_min: 2
+    pre_breakout_score_min: 55    # 路線 B 鬆綁: 60 → 55，包含邊緣訊號拉高樣本
+    pre_breakout_risk_score_max: 65
+    pre_breakout_base_score_min: 50
+    pre_breakout_ema_score_min: 50
+    pre_breakout_ema_transition_score_min: 20    # Phase 9.8: 從 50 降到 20 — breakout_today + ema_micro_upturn 已覆蓋「EMA 轉強」核心,transition gate 改為弱過濾
+    # 鬆綁版 (路線 B): 100M → 50M, 包含中型熱門股拉高樣本
+    pre_breakout_min_turnover: 50_000_000
+    pre_breakout_close_to_base_high_min: 0.85    # 允許在整理區中段以上 (0.85~1.00)
+    pre_breakout_close_to_base_high_ideal_max: 1.00
+    pre_breakout_close_to_base_high_max: 1.05    # O'Neil buy zone: 突破後 ≤5% 才不算 extended (Phase 9.8 從 1.00 放寬)
+    pre_breakout_close_from_base_low_max: 0.30
+    initial_base_score_min: 50
+    initial_ema_score_min: 55
+    initial_volume_score_min: 50
+    initial_risk_score_max: 60
+    # Flat Base (O'Neil) event-trigger entry rules — added by Phase 9.8
+    breakout_pivot_buffer: 0.001        # close > base_high × (1 + 0.001) = 突破 0.1%
+    breakout_volume_ratio_min: 1.4      # 突破日量 ≥ 50 日均量 × 1.4 (O'Neil 標準)
+    base_depth_max: 0.15                # base 高低差 ≤ 15% (O'Neil flat base)
+  api:
+    default_scan_limit: 1000
+    max_scan_limit: 10000
+    default_limit: 30
+    max_limit: 200
+    default_market: "TW"
+    default_sort_by: "surge_candidate_score"

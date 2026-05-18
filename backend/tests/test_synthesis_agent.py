@@ -162,8 +162,9 @@ async def test_synthesis_conflict_detection():
 
 
 @pytest.mark.asyncio
-async def test_synthesis_confirmation_scoring():
+async def test_synthesis_confirmation_scoring(monkeypatch):
     """Test confirmation scoring when all pillars agree."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     fundamental = FundamentalAnalysis(
         summary="基本面良好",
         revenue_trend="improving",

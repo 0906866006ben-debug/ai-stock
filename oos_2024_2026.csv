@@ -1,0 +1,4 @@
+﻿run_id,trade_id,stock_id,signal_date,entry_date,entry_price,exit_date,exit_price,exit_reason,hold_days,gross_return_pct,net_return_pct,entry_status,candidate_type,sector_category
+oos_2024_2026,1,6147,2024-03-05,2024-03-06,72.8728,2024-04-03,75.924,hold_days_expired,20,0.04187,0.03602,filled,起漲前觀察,cat_3_packaging
+oos_2024_2026,2,6147,2024-03-06,2024-03-07,74.2742,2024-04-08,76.2237,hold_days_expired,20,0.026247,0.020397,filled,起漲前觀察,cat_3_packaging
+oos_2024_2026,3,3711,2025-09-04,2025-09-05,155.155,2025-10-07,173.3265,hold_days_expired,20,0.117118,0.111268,filled,起漲前觀察,cat_3_packaging

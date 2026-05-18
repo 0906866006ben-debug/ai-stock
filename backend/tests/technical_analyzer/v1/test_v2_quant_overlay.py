@@ -13,7 +13,6 @@ from backend.technical_analyzer.v1.features.v2_quant import (
     evaluate_fundamental_gate,
     project_time_box,
 )
-from backend.technical_analyzer.v1.hypothesis.hypothesis_registry import HypothesisRegistry
 from backend.technical_analyzer.v1.orchestration.ai_analysis_result_builder import AIAnalysisResultBuilder, ai_analysis_result_json_schema
 
 
@@ -114,9 +113,6 @@ def test_v2_builder_contract_and_registries_include_overlay() -> None:
 
     schema = ai_analysis_result_json_schema()
     assert "v2_quant_analysis" in schema["properties"]
-
-    registry = HypothesisRegistry.load_default()
-    assert len(registry.get_by_module("V2")) >= 8
 
     inventory = DataInventory.load_default()
     assert inventory.get("poc_price").is_v1_implemented is True

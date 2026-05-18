@@ -15,7 +15,7 @@ Usage:
   ./git_push.sh --commit "commit message"
       Stage all current changes, commit them, then push the current branch.
 
-  ./git_push.sh --push-only
+    
       Push the current branch. Fails if there are uncommitted changes.
 
 Environment overrides:

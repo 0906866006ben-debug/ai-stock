@@ -280,13 +280,19 @@ def _consecutive_histogram_change(values: list[Decimal], min_days: int) -> int:
     if len(values) < 2:
         return 0
     streak = 0
-    direction = None
-    for prev, curr in zip(values[-min_days - 1 : -1], values[-min_days:]):
+    direction = "up" if values[-1] > values[-2] else "down" if values[-1] < values[-2] else "flat"
+    if direction == "flat":
+        return 0
+        
+    # 從最新的一天往前推，計算當前趨勢維持了幾天
+    for i in range(len(values) - 1, 0, -1):
+        curr = values[i]
+        prev = values[i - 1]
         current_direction = "up" if curr > prev else "down" if curr < prev else "flat"
-        if direction is None:
-            direction = current_direction
-        if current_direction == direction and current_direction != "flat":
+        if current_direction == direction:
             streak += 1
+        else:
+            break
     return streak
 
 

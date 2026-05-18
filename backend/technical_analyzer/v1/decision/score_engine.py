@@ -330,12 +330,12 @@ def _risk_factors(
 
     rsi = features.latest_value("rsi") if features else None
     if rsi is not None:
-        if rsi > Decimal("80"):
-            factors["momentum_overheat"] = 12
-        elif rsi > Decimal("75") and features and features.current_state in {TechnicalState.STRONG_UPTREND, TechnicalState.STEADY_UPTREND}:
-            factors["momentum_overheat"] = 5
-        elif rsi > Decimal("75"):
-            factors["momentum_overheat"] = 12
+        if rsi > Decimal("85"):
+            factors["momentum_overheat"] = 10
+        elif rsi > Decimal("80") and features and features.current_state in {TechnicalState.STRONG_UPTREND, TechnicalState.STEADY_UPTREND}:
+            factors["momentum_overheat"] = 0  # 🚀 放寬：強勢多頭下 RSI 80~85 不視為風險，讓獲利奔跑
+        elif rsi > Decimal("80"):
+            factors["momentum_overheat"] = 8
     kd_k = features.latest_value("kd_k") if features else None
     if kd_k is not None and kd_k > Decimal("80"):
         factors["kd_high_dulling"] = 5

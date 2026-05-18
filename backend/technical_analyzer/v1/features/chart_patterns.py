@@ -203,6 +203,15 @@ def _vcp(features: FeatureBundle, breakout_result: Optional[BreakoutAnalysisResu
     atr_ok = len(atr_values) >= 10 and sum(atr_values[-5:], ZERO) / Decimal("5") < sum(atr_values[-10:-5], ZERO) / Decimal("5")
     if not contractions_ok or not volume_ok:
         return []
+
+    # 🚀 結合研究報告第六章：VCP 必須符合 SEPA 長期多頭特徵 (Stage 2)
+    # 透過檢測 股價 > MA120 > MA240 來確保大趨勢向上，過濾弱勢區間的無效收斂
+    ma120 = features.ma_values.get("ma120")
+    ma240 = features.ma_values.get("ma240")
+    close = features.latest_close()
+    if ma120 and ma240 and not (close > ma120 > ma240):
+        return []
+
     status = "confirmed" if range_ok and atr_ok else "forming"
     if breakout_result and breakout_result.status.value == "confirmed_healthy_breakout" and status == "forming":
         status = "confirmed"

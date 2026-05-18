@@ -1,0 +1,1203 @@
+{
+  "strategy": "Taiwan Surge Candidate Screener v1",
+  "generated_at": "2026-05-14T12:38:48.655077",
+  "universe_size": 1972,
+  "matched_count": 24,
+  "parameters": {
+    "min_avg_volume_20": 500,
+    "min_return_60d": 0.1,
+    "max_return_60d": 0.35,
+    "max_base_return": 0.05
+  },
+  "data_warnings": [],
+  "results": [
+    {
+      "stock_id": "3014",
+      "stock_name": "聯陽",
+      "candidate_type": "動能確認",
+      "surge_candidate_score": 81,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 90,
+        "volume_score": 85,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1745,
+        "return_20d": 0.1405,
+        "return_60_to_20": 0.0298,
+        "return_5d": 0.0494,
+        "avg_volume_20": 2276344.4,
+        "avg_turnover_20": 301958902400.0,
+        "base_range_pct": 0.125,
+        "volume_contraction_ratio": 0.7353,
+        "volume_recovery_ratio": 0.6793,
+        "ema_spread": 0.0498,
+        "relative_strength_20d": 0.0064,
+        "downside_resilience": 0.0047
+      },
+      "reasons": [
+        "近60日漲幅 17.4%，且前期盤整區間漲幅僅 3.0%",
+        "EMA 均線發散度僅 5.0% 呈現糾結",
+        "近20日成交均量達 2276344 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3527O",
+      "stock_name": "聚積",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 81,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 90,
+        "volume_score": 85,
+        "ema_convergence_score": 100,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1159,
+        "return_20d": 0.0845,
+        "return_60_to_20": 0.029,
+        "return_5d": 0.0267,
+        "avg_volume_20": 385825.95,
+        "avg_turnover_20": 23501593938.63,
+        "base_range_pct": 0.2083,
+        "volume_contraction_ratio": 0.4679,
+        "volume_recovery_ratio": 0.4723,
+        "ema_spread": 0.0299,
+        "relative_strength_20d": -0.0496,
+        "downside_resilience": 0.016
+      },
+      "reasons": [
+        "近60日漲幅 11.6%，且前期盤整區間漲幅僅 2.9%",
+        "EMA 均線發散度僅 3.0% 呈現糾結",
+        "近20日成交均量達 385825 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "2832",
+      "stock_name": "台產",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 79,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 90,
+        "volume_score": 85,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1134,
+        "return_20d": 0.1123,
+        "return_60_to_20": 0.001,
+        "return_5d": 0.0247,
+        "avg_volume_20": 277804.2,
+        "avg_turnover_20": 14449882196.72,
+        "base_range_pct": 0.1067,
+        "volume_contraction_ratio": 0.7057,
+        "volume_recovery_ratio": 1.5067,
+        "ema_spread": 0.0307,
+        "relative_strength_20d": -0.0219,
+        "downside_resilience": 0.0136
+      },
+      "reasons": [
+        "近60日漲幅 11.3%，且前期盤整區間漲幅僅 0.1%",
+        "EMA 均線發散度僅 3.1% 呈現糾結",
+        "近20日成交均量達 277804 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3597O",
+      "stock_name": "映興",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 79,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 90,
+        "volume_score": 85,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1018,
+        "return_20d": 0.0907,
+        "return_60_to_20": 0.0102,
+        "return_5d": 0.0546,
+        "avg_volume_20": 154532.7,
+        "avg_turnover_20": 4115138650.89,
+        "base_range_pct": 0.183,
+        "volume_contraction_ratio": 0.7181,
+        "volume_recovery_ratio": 0.7313,
+        "ema_spread": 0.0472,
+        "relative_strength_20d": -0.0434,
+        "downside_resilience": 0.0006
+      },
+      "reasons": [
+        "近60日漲幅 10.2%，且前期盤整區間漲幅僅 1.0%",
+        "EMA 均線發散度僅 4.7% 呈現糾結",
+        "近20日成交均量達 154532 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "6570O",
+      "stock_name": "維田",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 79,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 90,
+        "volume_score": 85,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1033,
+        "return_20d": 0.0991,
+        "return_60_to_20": 0.0038,
+        "return_5d": 0.0355,
+        "avg_volume_20": 172997.45,
+        "avg_turnover_20": 7331105284.21,
+        "base_range_pct": 0.0947,
+        "volume_contraction_ratio": 0.773,
+        "volume_recovery_ratio": 0.5951,
+        "ema_spread": 0.0471,
+        "relative_strength_20d": -0.035,
+        "downside_resilience": 0.0081
+      },
+      "reasons": [
+        "近60日漲幅 10.3%，且前期盤整區間漲幅僅 0.4%",
+        "EMA 均線發散度僅 4.7% 呈現糾結",
+        "近20日成交均量達 172997 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3528",
+      "stock_name": "安馳",
+      "candidate_type": "動能確認",
+      "surge_candidate_score": 78,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 90,
+        "volume_score": 85,
+        "ema_convergence_score": 70,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.2044,
+        "return_20d": 0.1702,
+        "return_60_to_20": 0.0292,
+        "return_5d": -0.0678,
+        "avg_volume_20": 719897.05,
+        "avg_turnover_20": 58359263406.82,
+        "base_range_pct": 0.2401,
+        "volume_contraction_ratio": 0.6167,
+        "volume_recovery_ratio": 0.9805,
+        "ema_spread": 0.0398,
+        "relative_strength_20d": 0.0361,
+        "downside_resilience": 0.0258
+      },
+      "reasons": [
+        "近60日漲幅 20.4%，且前期盤整區間漲幅僅 2.9%",
+        "EMA 均線發散度僅 4.0% 呈現糾結",
+        "近20日成交均量達 719897 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3592",
+      "stock_name": "瑞鼎",
+      "candidate_type": "動能確認",
+      "surge_candidate_score": 77,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 70,
+        "volume_score": 85,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.179,
+        "return_20d": 0.1532,
+        "return_60_to_20": 0.0224,
+        "return_5d": 0.0866,
+        "avg_volume_20": 1197290.55,
+        "avg_turnover_20": 297553262450.0,
+        "base_range_pct": 0.1574,
+        "volume_contraction_ratio": 0.9044,
+        "volume_recovery_ratio": 0.6995,
+        "ema_spread": 0.0495,
+        "relative_strength_20d": 0.019,
+        "downside_resilience": 0.0095
+      },
+      "reasons": [
+        "近60日漲幅 17.9%，且前期盤整區間漲幅僅 2.2%",
+        "EMA 均線發散度僅 5.0% 呈現糾結",
+        "近20日成交均量達 1197290 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3227O",
+      "stock_name": "原相",
+      "candidate_type": "動能確認",
+      "surge_candidate_score": 77,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 90,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1667,
+        "return_20d": 0.1759,
+        "return_60_to_20": -0.0078,
+        "return_5d": 0.0323,
+        "avg_volume_20": 2911102.7,
+        "avg_turnover_20": 629104774300.0,
+        "base_range_pct": 0.1841,
+        "volume_contraction_ratio": 0.5755,
+        "volume_recovery_ratio": 0.4501,
+        "ema_spread": 0.0459,
+        "relative_strength_20d": 0.0417,
+        "downside_resilience": 0.0083
+      },
+      "reasons": [
+        "近60日漲幅 16.7%，且前期盤整區間漲幅僅 -0.8%",
+        "EMA 均線發散度僅 4.6% 呈現糾結",
+        "近20日成交均量達 2911102 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3479O",
+      "stock_name": "安勤",
+      "candidate_type": "動能確認",
+      "surge_candidate_score": 77,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 70,
+        "volume_score": 85,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1547,
+        "return_20d": 0.1319,
+        "return_60_to_20": 0.0202,
+        "return_5d": 0.0619,
+        "avg_volume_20": 512859.6,
+        "avg_turnover_20": 49021719621.14,
+        "base_range_pct": 0.1198,
+        "volume_contraction_ratio": 1.6833,
+        "volume_recovery_ratio": 2.9013,
+        "ema_spread": 0.0373,
+        "relative_strength_20d": -0.0023,
+        "downside_resilience": 0.0034
+      },
+      "reasons": [
+        "近60日漲幅 15.5%，且前期盤整區間漲幅僅 2.0%",
+        "EMA 均線發散度僅 3.7% 呈現糾結",
+        "近20日成交均量達 512859 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "6953O",
+      "stock_name": "家碩",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 76,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 90
+      },
+      "metrics": {
+        "return_60d": 0.1914,
+        "return_20d": 0.2488,
+        "return_60_to_20": -0.0459,
+        "return_5d": -0.081,
+        "avg_volume_20": 380617.3,
+        "avg_turnover_20": 102839049650.0,
+        "base_range_pct": 0.1872,
+        "volume_contraction_ratio": 0.9872,
+        "volume_recovery_ratio": 0.3417,
+        "ema_spread": 0.0295,
+        "relative_strength_20d": 0.1147,
+        "downside_resilience": 0.015
+      },
+      "reasons": [
+        "近60日漲幅 19.1%，且前期盤整區間漲幅僅 -4.6%",
+        "EMA 均線發散度僅 3.0% 呈現糾結",
+        "近20日成交均量達 380617 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "1533",
+      "stock_name": "車王電",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 75,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 70,
+        "volume_score": 85,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1205,
+        "return_20d": 0.1115,
+        "return_60_to_20": 0.0081,
+        "return_5d": 0.0147,
+        "avg_volume_20": 331148.5,
+        "avg_turnover_20": 10945842400.21,
+        "base_range_pct": 0.1,
+        "volume_contraction_ratio": 0.9962,
+        "volume_recovery_ratio": 1.1155,
+        "ema_spread": 0.0346,
+        "relative_strength_20d": -0.0227,
+        "downside_resilience": 0.0136
+      },
+      "reasons": [
+        "近60日漲幅 12.1%，且前期盤整區間漲幅僅 0.8%",
+        "EMA 均線發散度僅 3.5% 呈現糾結",
+        "近20日成交均量達 331148 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3588",
+      "stock_name": "通嘉",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 75,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 90,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1321,
+        "return_20d": 0.1257,
+        "return_60_to_20": 0.0057,
+        "return_5d": -0.0276,
+        "avg_volume_20": 1808865.25,
+        "avg_turnover_20": 115341358951.02,
+        "base_range_pct": 0.2299,
+        "volume_contraction_ratio": 0.6841,
+        "volume_recovery_ratio": 0.1379,
+        "ema_spread": 0.0195,
+        "relative_strength_20d": -0.0084,
+        "downside_resilience": 0.0038
+      },
+      "reasons": [
+        "近60日漲幅 13.2%，且前期盤整區間漲幅僅 0.6%",
+        "EMA 均線發散度僅 2.0% 呈現糾結",
+        "近20日成交均量達 1808865 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3303O",
+      "stock_name": "岱稜",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 75,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 90,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1114,
+        "return_20d": 0.098,
+        "return_60_to_20": 0.0121,
+        "return_5d": -0.0233,
+        "avg_volume_20": 584902.2,
+        "avg_turnover_20": 29401420184.88,
+        "base_range_pct": 0.1045,
+        "volume_contraction_ratio": 0.7468,
+        "volume_recovery_ratio": 0.6196,
+        "ema_spread": 0.0216,
+        "relative_strength_20d": -0.0361,
+        "downside_resilience": 0.0082
+      },
+      "reasons": [
+        "近60日漲幅 11.1%，且前期盤整區間漲幅僅 1.2%",
+        "EMA 均線發散度僅 2.2% 呈現糾結",
+        "近20日成交均量達 584902 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "2440",
+      "stock_name": "太空梭",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 73,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1588,
+        "return_20d": 0.1283,
+        "return_60_to_20": 0.027,
+        "return_5d": -0.02,
+        "avg_volume_20": 1475863.6,
+        "avg_turnover_20": 25937684236.99,
+        "base_range_pct": 0.2138,
+        "volume_contraction_ratio": 0.8353,
+        "volume_recovery_ratio": 0.6022,
+        "ema_spread": 0.0195,
+        "relative_strength_20d": -0.0058,
+        "downside_resilience": 0.0105
+      },
+      "reasons": [
+        "近60日漲幅 15.9%，且前期盤整區間漲幅僅 2.7%",
+        "EMA 均線發散度僅 2.0% 呈現糾結",
+        "近20日成交均量達 1475863 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "1570O",
+      "stock_name": "力肯",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 73,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.2426,
+        "return_20d": 0.2015,
+        "return_60_to_20": 0.0342,
+        "return_5d": 0.0458,
+        "avg_volume_20": 728907.65,
+        "avg_turnover_20": 28221653641.58,
+        "base_range_pct": 0.1464,
+        "volume_contraction_ratio": 2.0981,
+        "volume_recovery_ratio": 0.2376,
+        "ema_spread": 0.0448,
+        "relative_strength_20d": 0.0674,
+        "downside_resilience": -0.0065
+      },
+      "reasons": [
+        "近60日漲幅 24.3%，且前期盤整區間漲幅僅 3.4%",
+        "EMA 均線發散度僅 4.5% 呈現糾結",
+        "近20日成交均量達 728907 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3169O",
+      "stock_name": "亞信",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 73,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.19,
+        "return_20d": 0.2418,
+        "return_60_to_20": -0.0418,
+        "return_5d": 0.0411,
+        "avg_volume_20": 1104979.65,
+        "avg_turnover_20": 121311151815.99,
+        "base_range_pct": 0.226,
+        "volume_contraction_ratio": 0.8125,
+        "volume_recovery_ratio": 0.7116,
+        "ema_spread": 0.0428,
+        "relative_strength_20d": 0.1077,
+        "downside_resilience": -0.0073
+      },
+      "reasons": [
+        "近60日漲幅 19.0%，且前期盤整區間漲幅僅 -4.2%",
+        "EMA 均線發散度僅 4.3% 呈現糾結",
+        "近20日成交均量達 1104979 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3217O",
+      "stock_name": "優群",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 73,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 90,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.2097,
+        "return_20d": 0.1574,
+        "return_60_to_20": 0.0452,
+        "return_5d": 0.0714,
+        "avg_volume_20": 2109045.0,
+        "avg_turnover_20": 376839785825.0,
+        "base_range_pct": 0.134,
+        "volume_contraction_ratio": 0.8364,
+        "volume_recovery_ratio": 1.293,
+        "ema_spread": 0.0424,
+        "relative_strength_20d": 0.0233,
+        "downside_resilience": 0.011
+      },
+      "reasons": [
+        "近60日漲幅 21.0%，且前期盤整區間漲幅僅 4.5%",
+        "EMA 均線發散度僅 4.2% 呈現糾結",
+        "近20日成交均量達 2109045 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "3605",
+      "stock_name": "宏致",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 72,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 70,
+        "relative_strength_score": 90
+      },
+      "metrics": {
+        "return_60d": 0.3107,
+        "return_20d": 0.2828,
+        "return_60_to_20": 0.0217,
+        "return_5d": -0.0711,
+        "avg_volume_20": 11000841.8,
+        "avg_turnover_20": 900922919290.73,
+        "base_range_pct": 0.233,
+        "volume_contraction_ratio": 0.9604,
+        "volume_recovery_ratio": 0.2997,
+        "ema_spread": 0.0382,
+        "relative_strength_20d": 0.1487,
+        "downside_resilience": 0.0287
+      },
+      "reasons": [
+        "近60日漲幅 31.1%，且前期盤整區間漲幅僅 2.2%",
+        "EMA 均線發散度僅 3.8% 呈現糾結",
+        "近20日成交均量達 11000841 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "8081",
+      "stock_name": "致新",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 72,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 90,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 50
+      },
+      "metrics": {
+        "return_60d": 0.1261,
+        "return_20d": 0.1045,
+        "return_60_to_20": 0.0196,
+        "return_5d": 0.0058,
+        "avg_volume_20": 1138434.9,
+        "avg_turnover_20": 290961792675.0,
+        "base_range_pct": 0.1295,
+        "volume_contraction_ratio": 0.5408,
+        "volume_recovery_ratio": 0.7087,
+        "ema_spread": 0.0219,
+        "relative_strength_20d": -0.0296,
+        "downside_resilience": -0.0021
+      },
+      "reasons": [
+        "近60日漲幅 12.6%，且前期盤整區間漲幅僅 2.0%",
+        "EMA 均線發散度僅 2.2% 呈現糾結",
+        "近20日成交均量達 1138434 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "5344O",
+      "stock_name": "立衛",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 71,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1156,
+        "return_20d": 0.1119,
+        "return_60_to_20": 0.0034,
+        "return_5d": 0.0218,
+        "avg_volume_20": 372427.2,
+        "avg_turnover_20": 6538422239.55,
+        "base_range_pct": 0.1769,
+        "volume_contraction_ratio": 2.7706,
+        "volume_recovery_ratio": 0.3423,
+        "ema_spread": 0.0119,
+        "relative_strength_20d": -0.0223,
+        "downside_resilience": 0.0187
+      },
+      "reasons": [
+        "近60日漲幅 11.6%，且前期盤整區間漲幅僅 0.3%",
+        "EMA 均線發散度僅 1.2% 呈現糾結",
+        "近20日成交均量達 372427 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "8032O",
+      "stock_name": "光菱",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 71,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1475,
+        "return_20d": 0.1382,
+        "return_60_to_20": 0.0082,
+        "return_5d": 0.0024,
+        "avg_volume_20": 276445.4,
+        "avg_turnover_20": 11302430768.17,
+        "base_range_pct": 0.1549,
+        "volume_contraction_ratio": 1.0968,
+        "volume_recovery_ratio": 0.3395,
+        "ema_spread": 0.0446,
+        "relative_strength_20d": 0.0041,
+        "downside_resilience": 0.017
+      },
+      "reasons": [
+        "近60日漲幅 14.8%，且前期盤整區間漲幅僅 0.8%",
+        "EMA 均線發散度僅 4.5% 呈現糾結",
+        "近20日成交均量達 276445 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "8255O",
+      "stock_name": "朋程",
+      "candidate_type": "初動候選",
+      "surge_candidate_score": 71,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.1323,
+        "return_20d": 0.1829,
+        "return_60_to_20": -0.0428,
+        "return_5d": -0.0034,
+        "avg_volume_20": 971795.7,
+        "avg_turnover_20": 136729891175.0,
+        "base_range_pct": 0.193,
+        "volume_contraction_ratio": 1.3137,
+        "volume_recovery_ratio": 0.678,
+        "ema_spread": 0.0434,
+        "relative_strength_20d": 0.0488,
+        "downside_resilience": 0.0055
+      },
+      "reasons": [
+        "近60日漲幅 13.2%，且前期盤整區間漲幅僅 -4.3%",
+        "EMA 均線發散度僅 4.3% 呈現糾結",
+        "近20日成交均量達 971795 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "5276O",
+      "stock_name": "達輝-KY",
+      "candidate_type": "不符合",
+      "surge_candidate_score": 69,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 70,
+        "relative_strength_score": 70
+      },
+      "metrics": {
+        "return_60d": 0.266,
+        "return_20d": 0.2908,
+        "return_60_to_20": -0.0192,
+        "return_5d": -0.0662,
+        "avg_volume_20": 129785.65,
+        "avg_turnover_20": 2660705180.22,
+        "base_range_pct": 0.1067,
+        "volume_contraction_ratio": 1.1286,
+        "volume_recovery_ratio": 0.3495,
+        "ema_spread": 0.0423,
+        "relative_strength_20d": 0.1567,
+        "downside_resilience": -0.0007
+      },
+      "reasons": [
+        "近60日漲幅 26.6%，且前期盤整區間漲幅僅 -1.9%",
+        "EMA 均線發散度僅 4.2% 呈現糾結",
+        "近20日成交均量達 129785 張",
+        "近20日強於大盤"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    },
+    {
+      "stock_id": "8354O",
+      "stock_name": "冠好",
+      "candidate_type": "不符合",
+      "surge_candidate_score": 68,
+      "confidence_score": 75,
+      "risk_score": 30,
+      "scores": {
+        "liquidity_score": 100,
+        "price_position_score": 80,
+        "base_compression_score": 70,
+        "volume_score": 60,
+        "ema_convergence_score": 85,
+        "relative_strength_score": 50
+      },
+      "metrics": {
+        "return_60d": 0.1405,
+        "return_20d": 0.1186,
+        "return_60_to_20": 0.0196,
+        "return_5d": 0.1258,
+        "avg_volume_20": 542086.95,
+        "avg_turnover_20": 9543994438.58,
+        "base_range_pct": 0.0774,
+        "volume_contraction_ratio": 1.0016,
+        "volume_recovery_ratio": 0.319,
+        "ema_spread": 0.0323,
+        "relative_strength_20d": -0.0155,
+        "downside_resilience": -0.0007
+      },
+      "reasons": [
+        "近60日漲幅 14.1%，且前期盤整區間漲幅僅 2.0%",
+        "EMA 均線發散度僅 3.2% 呈現糾結",
+        "近20日成交均量達 542086 張"
+      ],
+      "watch_conditions": [
+        "後續是否帶量突破整理區高點",
+        "大盤回檔時是否仍保持抗跌"
+      ],
+      "invalidation": [
+        "跌破 EMA20 且無法收回",
+        "放量但價格無法突破",
+        "出現爆量長上影線"
+      ],
+      "risk_flags": [],
+      "missing_data": [],
+      "data_quality_flags": [
+        "turnover_value_estimated"
+      ]
+    }
+  ]
+}

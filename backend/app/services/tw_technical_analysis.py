@@ -27,8 +27,8 @@ def compute_rsi(closes: list[float], period: int = 14) -> Optional[float]:
 
     s = pd.Series(closes)
     delta = s.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    gain = (delta.where(delta > 0, 0)).ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/period, min_periods=period, adjust=False).mean()
     rs = gain / loss
     rsi = 100 - (100 / (1 + rs))
 
@@ -42,10 +42,10 @@ def compute_macd(closes: list[float]) -> Optional[dict]:
         return None
 
     s = pd.Series(closes)
-    ema12 = s.ewm(span=12).mean()
-    ema26 = s.ewm(span=26).mean()
+    ema12 = s.ewm(span=12, adjust=False).mean()
+    ema26 = s.ewm(span=26, adjust=False).mean()
     macd_line = ema12 - ema26
-    signal_line = macd_line.ewm(span=9).mean()
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
     histogram = macd_line - signal_line
 
     return {

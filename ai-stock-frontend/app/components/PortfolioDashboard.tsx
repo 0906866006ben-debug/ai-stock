@@ -69,9 +69,9 @@ export default function PortfolioDashboard({
 
   if (positions.length === 0) {
     return (
-      <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-800 dark:bg-zinc-900">
-        <p className="text-zinc-400">尚未新增任何持倉。</p>
-        <p className="mt-1 text-xs text-zinc-400">點擊「新增持倉」開始追蹤您的投資組合。</p>
+      <div className="rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50 to-purple-50 p-8 text-center dark:border-pink-900/40 dark:from-pink-950/20 dark:to-purple-950/20">
+        <p className="text-pink-600 dark:text-pink-300">✿ 還沒有任何寶貝呢～</p>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">點「加新寶貝」開始收集你的小金庫 ♡</p>
       </div>
     );
   }
@@ -80,10 +80,10 @@ export default function PortfolioDashboard({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-100">投資組合</h2>
+          <h2 className="text-base font-semibold text-pink-700 dark:text-pink-300">♡ 我的寶貝清單</h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             {refreshingPrices
-              ? '現價更新中...'
+              ? '🌸 現價更新中...'
               : updatedAt
                 ? `現價更新：${updatedAt}`
                 : '尚未更新現價'}
@@ -95,32 +95,32 @@ export default function PortfolioDashboard({
             type="button"
             onClick={onRefreshPrices}
             disabled={refreshingPrices}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            className="rounded-full border border-pink-300 bg-white px-3 py-2 text-sm font-medium text-pink-600 hover:bg-pink-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-pink-900/60 dark:bg-zinc-900 dark:text-pink-300 dark:hover:bg-pink-950/30"
           >
-            {refreshingPrices ? '更新中' : '更新現價'}
+            {refreshingPrices ? '更新中 ♡' : '↻ 更新現價'}
           </button>
         )}
       </div>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 stagger-children">
         {[
-          { label: '總市值', value: `$${fmt(totalValue)}`, color: 'text-zinc-800 dark:text-zinc-100' },
-          { label: '總成本', value: `$${fmt(totalCost)}`, color: 'text-zinc-600 dark:text-zinc-400' },
+          { label: '✿ 總市值', value: `$${fmt(totalValue)}`, color: 'text-zinc-800 dark:text-zinc-100' },
+          { label: '🪙 總成本', value: `$${fmt(totalCost)}`, color: 'text-zinc-600 dark:text-zinc-400' },
           {
-            label: '未實現損益',
+            label: totalPnl >= 0 ? '💗 未實現損益' : '🥺 未實現損益',
             value: `${totalPnl >= 0 ? '+' : ''}$${fmt(totalPnl)}`,
             color: totalPnl >= 0 ? 'text-red-500' : 'text-green-600',
           },
           {
-            label: '報酬率',
+            label: totalReturn >= 0 ? '🎀 報酬率' : '💧 報酬率',
             value: `${totalReturn >= 0 ? '+' : ''}${totalReturn.toFixed(2)}%`,
             color: totalReturn >= 0 ? 'text-red-500' : 'text-green-600',
           },
         ].map(({ label, value, color }) => (
           <div
             key={label}
-            className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
+            className="rounded-3xl border border-pink-100 bg-white p-3 shadow-sm hover:shadow-md hover:border-pink-200 hover:-translate-y-0.5 transition-all duration-300 dark:border-pink-900/30 dark:bg-zinc-900"
           >
             <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
             <p className={`mt-1 text-lg font-bold ${color}`}>{value}</p>
@@ -129,23 +129,23 @@ export default function PortfolioDashboard({
       </div>
 
       {/* Holdings table */}
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <div className="overflow-x-auto rounded-3xl border border-pink-100 bg-white shadow-sm dark:border-pink-900/30 dark:bg-zinc-900">
         <table className="w-full text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
+          <thead className="border-b border-pink-100 bg-pink-50/50 dark:border-pink-900/30 dark:bg-pink-950/20">
             <tr>
               {['股票', '張數', '成本價', '現價', '市值', '損益', '報酬%', ''].map((h) => (
-                <th key={h} className="px-3 py-2 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                <th key={h} className="px-3 py-2 text-left text-xs font-medium text-pink-600 dark:text-pink-300">
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100 bg-white dark:divide-zinc-800 dark:bg-zinc-900">
+          <tbody className="divide-y divide-pink-50 bg-white dark:divide-pink-900/20 dark:bg-zinc-900">
             {positions.map((pos) => {
               const pnl = calcPnl(pos);
               const ret = calcReturn(pos);
               return (
-                <tr key={pos.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                <tr key={pos.id} className="hover:bg-pink-50/40 dark:hover:bg-pink-950/20 transition-colors">
                   <td className="px-3 py-2">
                     <button
                       onClick={() => onSelect(pos.stock_code, pos.company_name)}

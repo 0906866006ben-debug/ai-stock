@@ -1,0 +1,44 @@
+# Default parameter search space for the 起漲前觀察 strategy optimizer.
+# Keys are dotted paths into rules_v1.yaml under the `surge_candidate` section.
+# Each value is a list of candidate values that random search will sample from.
+#
+# Adjust granularity to control search size:
+#   - fewer values per dim → faster random search, less coverage
+#   - more values per dim → broader exploration, slower convergence
+
+search_space:
+  # ─── Price / 起漲前未漲 ─────────────────────────────────────────────
+  price_position.min_return_60d: [-0.20, -0.15, -0.10, -0.05]
+  price_position.pre_breakout_range_90d_min: [0.03, 0.05, 0.08, 0.10]
+  price_position.pre_breakout_range_90d_max: [0.25, 0.30, 0.35]
+  price_position.pre_breakout_return_20d_strict_max: [0.06, 0.08, 0.10, 0.12]
+  price_position.pre_breakout_return_60d_strict_max: [0.08, 0.10, 0.15]
+  price_position.pre_breakout_return_90d_min: [-0.20, -0.15, -0.10]
+
+  # ─── EMA 結構 ──────────────────────────────────────────────────────
+  ema.pre_breakout_close_ema20_max: [0.04, 0.05, 0.06, 0.08]
+  ema.pre_breakout_ema_spread_max: [0.025, 0.03, 0.04, 0.05]
+  ema.overheated_close_ema20_min: [0.10, 0.12, 0.15]
+  ema.overheated_ema_spread_min: [0.06, 0.08, 0.10]
+
+  # ─── Volume / Base 縮量 ────────────────────────────────────────────
+  volume.pre_breakout_volume_contraction_max: [0.70, 0.80, 0.85, 0.95]
+
+  # ─── 分類 score 門檻 ───────────────────────────────────────────────
+  classification.pre_breakout_score_min: [50, 55, 60, 65]
+  classification.pre_breakout_ema_score_min: [40, 50, 60]
+  classification.pre_breakout_ema_transition_score_min: [20, 30, 40, 50, 60]   # 擴展下限
+  classification.pre_breakout_base_score_min: [40, 50, 60]
+  classification.pre_breakout_close_to_base_high_max: [1.03, 1.05, 1.08]   # buy zone 上緣 (O'Neil ≤5%)
+  classification.pre_breakout_risk_score_max: [60, 65, 70]
+  classification.pre_breakout_min_turnover: [30000000, 50000000, 100000000]
+
+  # ─── Phase 9.8: Flat Base event trigger thresholds ─────────────────
+  classification.breakout_pivot_buffer: [0.001, 0.003, 0.005]       # 突破幅度 0.1%, 0.3%, 0.5%
+  classification.breakout_volume_ratio_min: [1.2, 1.4, 1.5, 2.0]    # 突破日量爆倍數 (O'Neil 標準 1.4)
+  classification.base_depth_max: [0.10, 0.12, 0.15, 0.18]           # base 深度上限
+
+  # ─── Phase 9.8: Exit rules (trade_rules.*) ─────────────────────────
+  trade_rules.max_hold_days: [0, 40, 60, 120]                       # 0 = 無時間限制 (user thesis)
+  trade_rules.stop_loss_pct: [0.07, 0.08, 0.10, 0.12]                # -7% (O'Neil) ~ -10% (user) ~ -12%
+  trade_rules.measured_move_multiplier: [0.70, 0.85, 1.00]           # 0.85 = O'Neil 標準, 1.00 = user thesis

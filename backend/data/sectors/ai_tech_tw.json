@@ -1,0 +1,108 @@
+{
+  "version": "2026-05-17",
+  "framework": "6-Layer AI Industry Framework",
+  "description": "Taiwan AI Tech Stock Whitelist organized by upstream-to-downstream value chain",
+  "categories": {
+    "cat_1_silicon_ip": {
+      "order": 1,
+      "label": "IC設計/IP/記憶體",
+      "label_en": "Silicon IP, IC Design & Memory (The Brains)",
+      "description": "晶片架構、邏輯設計、IP 授權、記憶體；高毛利、高進入門檻",
+      "stocks": [
+        {"code": "3661", "name": "世芯-KY"},
+        {"code": "3443", "name": "創意"},
+        {"code": "3035", "name": "智原"},
+        {"code": "2454", "name": "聯發科"},
+        {"code": "3034", "name": "聯詠"},
+        {"code": "2379", "name": "瑞昱"},
+        {"code": "5274", "name": "信驊"},
+        {"code": "3529", "name": "力旺"},
+        {"code": "6643", "name": "M31"},
+        {"code": "8299", "name": "群聯"},
+        {"code": "2408", "name": "南亞科"},
+        {"code": "2344", "name": "華邦電"}
+      ]
+    },
+    "cat_2_foundry": {
+      "order": 2,
+      "label": "晶圓代工",
+      "label_en": "Foundry & Semi Equipment (The Manufacturers)",
+      "description": "先進製程晶圓代工",
+      "stocks": [
+        {"code": "2330", "name": "台積電"},
+        {"code": "2303", "name": "聯電"},
+        {"code": "5347", "name": "世界先進"}
+      ]
+    },
+    "cat_3_packaging": {
+      "order": 3,
+      "label": "先進封裝/測試 ★瓶頸★",
+      "label_en": "Advanced Packaging & Testing (The Chokepoint)",
+      "description": "CoWoS 是 AI 晶片供應的全域限速器，測試端營收常領先 TSMC 反映訂單動能",
+      "stocks": [
+        {"code": "3711", "name": "日月光投控"},
+        {"code": "2449", "name": "京元電子"},
+        {"code": "3583", "name": "辛耘"},
+        {"code": "3680", "name": "家登"},
+        {"code": "6223", "name": "旺矽"},
+        {"code": "6510", "name": "精測"},
+        {"code": "6147", "name": "頎邦"},
+        {"code": "6239", "name": "力成"},
+        {"code": "2441", "name": "超豐"},
+        {"code": "2360", "name": "致茂"}
+      ]
+    },
+    "cat_4_components": {
+      "order": 4,
+      "label": "關鍵零組件/散熱/載板/網通",
+      "label_en": "Key Components, Thermal, Substrate & Networking (Infrastructure Backbone)",
+      "description": "支撐高功耗 AI 叢集所需 — 液冷、ABF 載板、高層 PCB、CCL、高速交換器；與 Cat 3 同步擴",
+      "stocks": [
+        {"code": "3017", "name": "奇鋐"},
+        {"code": "3324", "name": "雙鴻"},
+        {"code": "2383", "name": "台光電"},
+        {"code": "2368", "name": "金像電"},
+        {"code": "3037", "name": "欣興"},
+        {"code": "8358", "name": "金居"},
+        {"code": "3653", "name": "健策"},
+        {"code": "3533", "name": "嘉澤"},
+        {"code": "3044", "name": "健鼎"},
+        {"code": "8046", "name": "南電"},
+        {"code": "3189", "name": "景碩"},
+        {"code": "6274", "name": "台燿"},
+        {"code": "2301", "name": "光寶科"},
+        {"code": "6805", "name": "富世達"},
+        {"code": "2345", "name": "智邦"}
+      ]
+    },
+    "cat_5_system_integration": {
+      "order": 5,
+      "label": "系統組裝/ODM",
+      "label_en": "Server Assembly & System Integration (The Body)",
+      "description": "AI 伺服器組裝；訂單動能反映 Hyperscaler capex",
+      "stocks": [
+        {"code": "2382", "name": "廣達"},
+        {"code": "3231", "name": "緯創"},
+        {"code": "6669", "name": "緯穎"},
+        {"code": "2317", "name": "鴻海"},
+        {"code": "2356", "name": "英業達"},
+        {"code": "2308", "name": "台達電"},
+        {"code": "2324", "name": "仁寶"},
+        {"code": "2376", "name": "技嘉"},
+        {"code": "2377", "name": "微星"}
+      ]
+    },
+    "cat_6_cloud_software": {
+      "order": 6,
+      "label": "雲端/AI軟體",
+      "label_en": "Cloud Services & AI Software (The Enablers)",
+      "description": "AI 雲服務與企業 AI 軟體；資金面 sanity check 指標",
+      "stocks": [
+        {"code": "2357", "name": "華碩"},
+        {"code": "6214", "name": "精誠"},
+        {"code": "4953", "name": "緯軟"},
+        {"code": "5203", "name": "訊連"}
+      ]
+    }
+  }
+}

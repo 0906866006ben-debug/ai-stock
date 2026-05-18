@@ -91,6 +91,7 @@ class TwoBReversalResult:
 class RiskExecutionPlan:
     take_profit_price: Optional[Decimal]
     stop_loss_price: Optional[Decimal]
+    trailing_stop_price: Optional[Decimal]
     rr_ratio: Optional[Decimal]
     rr_pass: bool
     kelly_fraction: Decimal
@@ -376,6 +377,10 @@ def build_risk_execution_plan(
     stop_candidates = [value for value in stop_candidates if value > ZERO and value < close]
     stop_loss = max(stop_candidates) if stop_candidates else close * Decimal("0.95")
 
+    # 🚀 結合研究報告第十一章：基於 ATR 的移動防守位 (Trailing Stop)
+    # 以收盤價減去 1.5 倍 ATR 作為跟隨停損點，保護波段既有獲利
+    trailing_stop = quantize(close - atr * Decimal("1.5"), "0.01") if atr else stop_loss
+
     target_candidates: list[Decimal] = []
     if volume_profile.vah_price is not None and volume_profile.vah_price > close:
         target_candidates.append(volume_profile.vah_price)
@@ -410,13 +415,14 @@ def build_risk_execution_plan(
     return RiskExecutionPlan(
         take_profit_price=quantize(take_profit, "0.01") if take_profit is not None else None,
         stop_loss_price=quantize(stop_loss, "0.01"),
+        trailing_stop_price=trailing_stop,
         rr_ratio=rr,
         rr_pass=rr is not None and rr >= Decimal("3"),
         kelly_fraction=kelly,
         position_cap=position_cap,
         forced_exit=forced_exit_reason is not None,
         forced_exit_reason=forced_exit_reason,
-        bottom_line_fields=["take_profit_price", "stop_loss_price", "rr_ratio", "forced_exit_reason"],
+        bottom_line_fields=["take_profit_price", "stop_loss_price", "trailing_stop_price", "rr_ratio", "forced_exit_reason"],
     )
 
 

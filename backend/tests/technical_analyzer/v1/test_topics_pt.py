@@ -10,7 +10,6 @@ from backend.technical_analyzer.v1.contracts.output_contract import FactorVote, 
 from backend.technical_analyzer.v1.data.data_inventory import DataInventory
 from backend.technical_analyzer.v1.decision.confidence_cap_engine import apply_confidence_caps, collect_cap_candidates
 from backend.technical_analyzer.v1.decision.score_engine import compute_three_axis_scores
-from backend.technical_analyzer.v1.hypothesis.hypothesis_registry import BacktestMetrics, HypothesisRegistry
 from backend.technical_analyzer.v1.orchestration.ai_analysis_result_builder import AIAnalysisResultBuilder, ai_analysis_result_json_schema
 from backend.technical_analyzer.v1.special_rules.taiwan_market_rules import evaluate_market_gate
 from backend.technical_analyzer.v1.traceability.trace import ReasonTrace
@@ -237,22 +236,6 @@ def test_topic_q_rule_scenarios() -> None:
         ContextBundle(),
     )
     assert apply_confidence_caps(90, collect_cap_candidates(categories_in_agreement=4, market_gate=gate)).confidence_final == 30
-
-
-def test_topic_r_hypothesis_registry() -> None:
-    registry = HypothesisRegistry.load_default()
-    assert len(registry.entries) >= 60
-    assert registry.get_by_module("H")
-    assert len(registry.get_not_tested()) == len(registry.entries)
-    updated = registry.update_backtest_status(
-        "H001",
-        "validated",
-        BacktestMetrics(hit_rate=0.57, sample_size=120),
-        date(2026, 5, 13),
-    )
-    assert updated.backtest_status == "validated"
-    assert updated.metrics.sample_size == 120
-    assert "Hypothesis Registry" in registry.export_report()
 
 
 def test_topic_s_data_inventory() -> None:

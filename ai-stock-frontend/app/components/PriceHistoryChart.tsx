@@ -18,6 +18,7 @@ const RANGES: { code: Range; label: string }[] = [
 
 interface IndicatorToggles {
   ma5: boolean;
+  ma10: boolean;
   ma20: boolean;
   ma60: boolean;
   ma120: boolean;
@@ -32,6 +33,7 @@ interface IndicatorToggles {
 
 const DEFAULT_TOGGLES: IndicatorToggles = {
   ma5: false,
+  ma10: false,
   ma20: true,
   ma60: false,
   ma120: false,
@@ -46,6 +48,7 @@ const DEFAULT_TOGGLES: IndicatorToggles = {
 
 const COLORS = {
   ma5: '#f97316',   // orange
+  ma10: '#22c55e',  // green
   ma20: '#3b82f6',  // blue
   ma60: '#a855f7',  // purple
   ma120: '#ec4899', // pink
@@ -124,6 +127,15 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
   const candles = useMemo(() => data?.candles ?? initialCandles ?? [], [data?.candles, initialCandles]);
   const indicators = data?.indicators ?? null;
 
+  const ma10Data = useMemo((): (number | null)[] | null => {
+    if (candles.length === 0) return null;
+    return candles.map((_, i) => {
+      if (i < 9) return null;
+      const sum = candles.slice(i - 9, i + 1).reduce((acc, c) => acc + c.close, 0);
+      return sum / 10;
+    });
+  }, [candles]);
+
   // Render charts
   useEffect(() => {
     // Cleanup previous
@@ -176,9 +188,18 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
       wickDownColor: COLORS.downBar,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
     });
-    candleSeries.setData(candles);
+    // lightweight-charts asserts every OHLC field is a finite number; drop any
+    // partially-populated candles (e.g. today's quote patch before market close).
+    const validCandles = candles.filter((c) =>
+      typeof c?.open === 'number' && Number.isFinite(c.open) &&
+      typeof c?.high === 'number' && Number.isFinite(c.high) &&
+      typeof c?.low === 'number' && Number.isFinite(c.low) &&
+      typeof c?.close === 'number' && Number.isFinite(c.close)
+    );
+    candleSeries.setData(validCandles);
 
     addMaLine(priceChart, candles, indicators?.ma5, toggles.ma5, COLORS.ma5);
+    addMaLine(priceChart, candles, ma10Data, toggles.ma10, COLORS.ma10);
     addMaLine(priceChart, candles, indicators?.ma20, toggles.ma20, COLORS.ma20);
     addMaLine(priceChart, candles, indicators?.ma60, toggles.ma60, COLORS.ma60);
     addMaLine(priceChart, candles, indicators?.ma120, toggles.ma120, COLORS.ma120);
@@ -250,11 +271,18 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
       const volSeries = volChart.addSeries(HistogramSeries, {
         priceFormat: { type: 'volume' },
       });
-      const volData = candles.map((c, i) => ({
-        time: c.time,
-        value: indicators?.volume?.[i] ?? c.volume ?? 0,
-        color: c.close >= c.open ? `${COLORS.upBar}80` : `${COLORS.downBar}80`,
-      }));
+      const volData = candles
+        .map((c, i) => {
+          const value = indicators?.volume?.[i] ?? c.volume ?? 0;
+          if (!Number.isFinite(value)) return null;
+          const upColor = typeof c?.close === 'number' && typeof c?.open === 'number' && c.close >= c.open;
+          return {
+            time: c.time,
+            value,
+            color: upColor ? `${COLORS.upBar}80` : `${COLORS.downBar}80`,
+          };
+        })
+        .filter((p): p is { time: string; value: number; color: string } => p !== null);
       volSeries.setData(volData);
       syncTimeScale(priceChart, volChart);
     }
@@ -451,10 +479,11 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
       chartsRef.current.forEach((c) => c.remove());
       chartsRef.current = [];
     };
-  }, [candles, indicators, toggles.ma5, toggles.ma20, toggles.ma60, toggles.ma120, toggles.ma240, toggles.volume, toggles.rsi, toggles.macd, toggles.kd, toggles.bb, toggles.atr]);
+  }, [candles, ma10Data, indicators, toggles.ma5, toggles.ma10, toggles.ma20, toggles.ma60, toggles.ma120, toggles.ma240, toggles.volume, toggles.rsi, toggles.macd, toggles.kd, toggles.bb, toggles.atr]);
 
   const togglesList: { key: keyof IndicatorToggles; label: string; color: string }[] = useMemo(() => [
     { key: 'ma5', label: 'MA5', color: COLORS.ma5 },
+    { key: 'ma10', label: 'MA10', color: COLORS.ma10 },
     { key: 'ma20', label: 'MA20', color: COLORS.ma20 },
     { key: 'ma60', label: 'MA60', color: COLORS.ma60 },
     { key: 'ma120', label: 'MA120', color: COLORS.ma120 },
@@ -496,6 +525,26 @@ export default function PriceHistoryChart({ stockCode, initialCandles }: Props) 
 
       {/* Indicator toggles */}
       <div className="mb-3 flex flex-wrap gap-2 border-b border-zinc-100 pb-3 dark:border-zinc-800">
+        {/* Combined MA 5/10/20 group button */}
+        <button
+          type="button"
+          onClick={() => {
+            const allOn = toggles.ma5 && toggles.ma10 && toggles.ma20;
+            setToggles(t => ({ ...t, ma5: !allOn, ma10: !allOn, ma20: !allOn }));
+          }}
+          className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+            toggles.ma5 && toggles.ma10 && toggles.ma20
+              ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-600 dark:bg-blue-900/30 dark:text-blue-300'
+              : 'border-zinc-300 text-zinc-500 hover:border-zinc-400 dark:border-zinc-600 dark:text-zinc-400'
+          }`}
+        >
+          <span className="flex gap-0.5">
+            <span className="inline-block h-2 w-1.5 rounded-sm" style={{ backgroundColor: COLORS.ma5 }} />
+            <span className="inline-block h-2 w-1.5 rounded-sm" style={{ backgroundColor: COLORS.ma10 }} />
+            <span className="inline-block h-2 w-1.5 rounded-sm" style={{ backgroundColor: COLORS.ma20 }} />
+          </span>
+          MA 5/10/20
+        </button>
         {togglesList.map(({ key, label, color }) => (
           <label
             key={key}
