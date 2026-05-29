@@ -34,6 +34,10 @@ class ScreeningResult(BaseModel):
     data_warnings: list[str] = Field(default_factory=list)
     needs_manual_review: list[str] = Field(default_factory=list)
     action_type: Literal["Watchlist Candidate", "Manual Review Required", "Track Only"]
+    # Swing exit / invalidation layer (additive, verb-free conditions). structure_status
+    # is a neutral observation of the swing setup's health, not a buy/sell instruction.
+    exit_signals: list[str] = Field(default_factory=list)
+    structure_status: Literal["intact", "profit_watch", "weakening", "invalidated"] = "intact"
 
 
 class CanslimFactorScore(BaseModel):

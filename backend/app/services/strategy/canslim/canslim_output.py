@@ -57,7 +57,10 @@ def build_full_result(result: ScreeningResult, *, params: Mapping[str, Any] | No
     missing = [f"{f.factor} 資料不足/需審查" for f in per_factor if f.score is None]
     missing += list(result.needs_manual_review)
 
-    invalidation = clean_string_list(cfg.get("invalidation_templates", []))
+    # Data-driven swing exit/invalidation conditions (from live features) lead; the
+    # static YAML templates remain as generic fallbacks. structure_status stays
+    # accessible via the embedded screening_result.
+    invalidation = clean_string_list([*result.exit_signals, *cfg.get("invalidation_templates", [])])
     observation = clean_string_list(cfg.get("observation_templates", []))
     suggested = _suggested_strategy(result, pass_status, by_factor, cfg)
 

@@ -13,6 +13,7 @@ from backend.app.models.screener_schemas import Evidence, PillarStatus, Screenin
 from backend.app.services.strategy.canslim.features import CanslimFeatures, build_features
 from backend.app.services.strategy.canslim.news_pillar import NPillarAnalysis, analyze_n_pillar_sources
 from backend.app.services.strategy.canslim.pillar_screening import PillarVerdict, assemble_pillars
+from backend.app.services.strategy.canslim.swing_exit import evaluate_swing_exit
 from backend.app.services.strategy.canslim.observer import observe
 from backend.app.services.strategy.canslim.params import load_params
 from backend.app.services.strategy.canslim.regime import build_market_features
@@ -64,6 +65,21 @@ def build_screening_result(
     params = load_params()
     market_features = _market_features_first(as_of_date, market=market, store=store)
     market_regime = regime_severity(market_features, params) or "unknown"
+    # Perf: build features ONCE here and share with both observe() and the pillar
+    # rule-eval below (was built twice). Also compute only the horizon(s) this result
+    # needs (was all three). Behaviour-preserving — same features, same chosen card.
+    prebuilt_features: CanslimFeatures | None = None
+    if store is not None:
+        try:
+            prebuilt_features = build_features(
+                symbol, as_of_date, store,
+                universe_returns_60d=universe_returns_60d,
+                universe_returns_252d=universe_returns_252d,
+                fin_metrics=fin_metrics, detail=detail,
+                eps_filing_date=eps_filing_date, event_window_active=event_window_active,
+            )
+        except Exception:
+            prebuilt_features = None
     observations = observe(
         symbol,
         as_of_date,
@@ -75,6 +91,8 @@ def build_screening_result(
         universe_returns_252d=universe_returns_252d,
         event_window_active=event_window_active,
         eps_filing_date=eps_filing_date,
+        prebuilt_features=prebuilt_features,
+        horizons=list(dict.fromkeys([horizon, "swing_term"])),
     )
     card = observations.get(horizon) or observations["swing_term"]
     n_analysis = analyze_n_pillar_sources(
@@ -95,6 +113,7 @@ def build_screening_result(
         eps_filing_date=eps_filing_date,
         params=params,
         card=card,
+        prebuilt_features=prebuilt_features,
     )
     pillar_verdicts = assemble_pillars(
         features=features,
@@ -126,6 +145,9 @@ def build_screening_result(
         top_type = f" · {types[0]}" if types else ""
         pillar_metrics["N"] = f"催化劑強度 {n_analysis.catalyst_score}/100{top_type}"
 
+    # Swing exit / invalidation layer (data-driven, verb-free conditions).
+    exit_eval = evaluate_swing_exit(features, params)
+
     return ScreeningResult(
         stock_id=str(symbol),
         as_of_date=str(as_of_date),
@@ -145,6 +167,8 @@ def build_screening_result(
         data_warnings=warnings,
         needs_manual_review=needs_review,
         action_type=action_type,  # type: ignore[arg-type]
+        exit_signals=exit_eval["exit_signals"],
+        structure_status=exit_eval["structure_status"],  # type: ignore[arg-type]
     )
 
 
@@ -161,11 +185,13 @@ def _features_and_rule_results(
     eps_filing_date,
     params,
     card: HorizonObservation,
+    prebuilt_features: CanslimFeatures | None = None,
 ) -> tuple[CanslimFeatures | None, dict[str, RuleResult]]:
-    features: CanslimFeatures | None = None
+    # Perf: reuse features the caller already built (avoids a 2nd build_features).
+    features: CanslimFeatures | None = prebuilt_features
     rule_results: dict[str, RuleResult] = {}
     try:
-        if store is not None:
+        if features is None and store is not None:
             features = build_features(
                 symbol,
                 as_of_date,
@@ -177,6 +203,7 @@ def _features_and_rule_results(
                 eps_filing_date=eps_filing_date,
                 event_window_active=event_window_active,
             )
+        if features is not None:
             for evaluator in [*GROWTH_RULES, *TECHNICAL_RULES, *SUPPLY_RULES, *INSTITUTIONAL_RULES]:
                 result = evaluator(features, params)
                 rule_results[result.rule_id] = result

@@ -80,9 +80,19 @@ def observe(
     universe_returns_252d=None,
     event_window_active=None,
     eps_filing_date=None,
+    prebuilt_features: CanslimFeatures | None = None,
+    horizons: list[str] | None = None,
 ) -> dict[str, HorizonObservation]:
+    """Compose per-horizon observation cards.
+
+    Perf hooks (behaviour-preserving; defaults reproduce the original output):
+    - `prebuilt_features`: reuse features the caller already built (avoids a second
+      expensive build_features when the caller also needs the features object).
+    - `horizons`: compute only the listed horizons (the screening path needs just one),
+      instead of all three.
+    """
     params = load_params()
-    features = build_features(
+    features = prebuilt_features if prebuilt_features is not None else build_features(
         symbol,
         as_of_date,
         store,
@@ -98,7 +108,7 @@ def observe(
     base = detect_base(bars, params) if bars is not None else detect_base(_empty_bars(), params)
 
     observations: dict[str, HorizonObservation] = {}
-    for horizon in HORIZONS:
+    for horizon in (horizons or HORIZONS):
         rule_results = _evaluate_rules(features, market_features, params, horizon)
         aggregate_result = aggregate(rule_results, base, horizon, params)
         observations[horizon] = _to_observation(aggregate_result, rule_results, features, market_features)

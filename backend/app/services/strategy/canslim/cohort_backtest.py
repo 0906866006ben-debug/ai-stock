@@ -148,6 +148,8 @@ def _cohort_rows(
             row: dict[str, Any] = {
                 "as_of_date": as_of,
                 "stock_id": symbol,
+                "overall_score": full.overall_score,
+                "score_band": _score_band(full.overall_score),
                 "pass_status": full.pass_status,
                 "grade": full.grade,
                 "regime": result.market_regime,
@@ -159,6 +161,15 @@ def _cohort_rows(
             row.update(fwd)
             rows.append(row)
     return pd.DataFrame(rows)
+
+
+def _score_band(score: int | None) -> str:
+    """Map overall_score to the same S/A/B/C/D bands the live ranking uses, so the
+    cohort validates THE GRADING the user trades on (does a higher band grow more?)."""
+    if score is None:
+        return "NA"
+    s = float(score)
+    return "S(>=80)" if s >= 80 else "A(70-79)" if s >= 70 else "B(55-69)" if s >= 55 else "C(40-54)" if s >= 40 else "D(<40)"
 
 
 def _bucket_metrics(frame: pd.DataFrame, col: str) -> dict[str, Any]:
@@ -183,11 +194,18 @@ def summarize_cohort(df: pd.DataFrame) -> dict[str, Any]:
         "baseline_all_screened": {},
         "by_pillar": {},
         "by_grade": {},
+        "by_score_band": {},
     }
     if df.empty:
         return summary
     for h in horizons:
         summary["baseline_all_screened"][h] = _bucket_metrics(df, h)
+    # THE key validation: does a higher CANSLIM score-band actually grow more?
+    if "score_band" in df:
+        band_order = ["S(>=80)", "A(70-79)", "B(55-69)", "C(40-54)", "D(<40)", "NA"]
+        for band in [b for b in band_order if b in set(df["score_band"].dropna())]:
+            sub = df[df["score_band"] == band]
+            summary["by_score_band"][band] = {h: _bucket_metrics(sub, h) for h in horizons}
     for status in sorted(df["pass_status"].dropna().unique()):
         sub = df[df["pass_status"] == status]
         summary["by_pass_status"][status] = {h: _bucket_metrics(sub, h) for h in horizons}
@@ -233,6 +251,13 @@ def _write_cohort_report(report: CohortReport, json_path: Path, md_path: Path) -
     lines.append("### ALL (baseline)")
     for h in horizons:
         lines.append(f"- {h}: {_fmt_metrics(s['baseline_all_screened'][h])}")
+    # KEY: does a higher CANSLIM grade band actually grow more? (validates the grading)
+    lines += ["", "## Forward return by CANSLIM score band (THE grading validation: higher band should grow more)"]
+    for band, per_h in s.get("by_score_band", {}).items():
+        lines.append(f"### {band}")
+        for h in horizons:
+            lines.append(f"- {h}: {_fmt_metrics(per_h[h])}")
+    lines += ["", "## Forward return by pass_status"]
     for status, per_h in s.get("by_pass_status", {}).items():
         lines.append(f"### {status}")
         for h in horizons:
@@ -267,7 +292,8 @@ def run_cohort_backtest(
     candidates = candidate_symbols or fundamentals_covered_symbols(pit_db_path)
     logger.info("cohort run %s: %d candidate symbols", run_id, len(candidates))
     data_store = CachedHistoricalDataStore(
-        ohlcv_db_path, universe=[*candidates, "TAIEX"],
+        # TPEX required for regime (M-2); without it regime=unknown -> confidence LOW -> no PASS.
+        ohlcv_db_path, universe=[*candidates, "TAIEX", "TPEX"],
         start_date=start_date, end_date=end_date,
         lookback_buffer_days=500, forward_buffer_days=420,
     )

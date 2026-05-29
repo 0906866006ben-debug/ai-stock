@@ -74,6 +74,30 @@ def test_summarize_cohort_structure():
     assert "C" in s["by_pillar"] and "pass" in s["by_pillar"]["C"]["fwd_1m"]
 
 
+def test_score_band_mapping():
+    assert cb._score_band(85) == "S(>=80)"
+    assert cb._score_band(72) == "A(70-79)"
+    assert cb._score_band(60) == "B(55-69)"
+    assert cb._score_band(45) == "C(40-54)"
+    assert cb._score_band(10) == "D(<40)"
+    assert cb._score_band(None) == "NA"
+
+
+def test_summarize_by_score_band_validates_grading():
+    df = pd.DataFrame({
+        "as_of_date": ["2020-06-01"] * 4,
+        "overall_score": [85, 72, 60, 30],
+        "score_band": [cb._score_band(s) for s in (85, 72, 60, 30)],
+        "pass_status": ["WATCHLIST"] * 4, "grade": ["S", "A", "B", "D"],
+        "fwd_1m": [0.30, 0.10, 0.02, -0.10], "fwd_3m": [0.5, 0.2, 0.05, -0.2],
+        "fwd_6m": [0.6, 0.3, 0.1, -0.3], "fwd_12m": [0.8, 0.4, 0.15, -0.4],
+    })
+    s = cb.summarize_cohort(df)
+    assert "S(>=80)" in s["by_score_band"] and "D(<40)" in s["by_score_band"]
+    # higher band should show higher mean forward return in this fixture
+    assert s["by_score_band"]["S(>=80)"]["fwd_3m"]["mean"] > s["by_score_band"]["D(<40)"]["fwd_3m"]["mean"]
+
+
 def test_cohort_rows_end_to_end(tmp_path: Path, monkeypatch):
     store, dates = _store(tmp_path)
     as_of = dates[100]
