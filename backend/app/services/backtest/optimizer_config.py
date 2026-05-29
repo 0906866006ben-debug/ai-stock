@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 
+UNBOUNDED_PF_SENTINEL = 20.0
+MIN_TRADES_FOR_UNBOUNDED_PF = 10
+
+
 # ── Default 4 Gates (matches user spec) ────────────────────────────────────
 
 @dataclass
@@ -36,7 +40,7 @@ class GateConfig:
 @dataclass
 class OptimizerConfig:
     target: str = "cat3"            # "cat3" | "all"
-    method: str = "random"          # "random" | "grid"
+    method: str = "random"          # "random" | "grid" | "adaptive"
     max_trials: int = 200
     train_split: float = 0.7        # fraction of dates for training
     top_k: int = 5                  # number of best trials to keep in validation_report
@@ -51,6 +55,7 @@ class OptimizerConfig:
     # Speedup knobs (default behavior unchanged when these are at defaults).
     n_workers: int = 1                                       # multiprocess parallel trials
     universe_categories: list[str] = field(default_factory=list)  # narrow universe to these AI tech cat keys
+    min_entry_tier: int = 1                                  # Phase 11 tiered entry filter
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -134,7 +139,16 @@ def gates_passed_count(m, gates: GateConfig) -> int:
         passed += 1
     if win_rate >= gates.min_win_rate:
         passed += 1
-    if profit_factor is not None and profit_factor >= gates.min_profit_factor:
+    is_unbounded_thin_pf = (
+        profit_factor is not None
+        and profit_factor >= UNBOUNDED_PF_SENTINEL
+        and n_trades < MIN_TRADES_FOR_UNBOUNDED_PF
+    )
+    if (
+        profit_factor is not None
+        and profit_factor >= gates.min_profit_factor
+        and not is_unbounded_thin_pf
+    ):
         passed += 1
     if max_drawdown >= gates.max_drawdown_pct:
         passed += 1

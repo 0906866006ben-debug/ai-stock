@@ -2,7 +2,7 @@
 
 Usage:
     python -m backend.scripts.optimization --target cat3 --max-trials 200
-    python -m backend.scripts.optimization --target all --method random --max-trials 500
+    python -m backend.scripts.optimization --target all --method adaptive --max-trials 500
 
 This script runs entirely locally without LLM involvement per-iteration. It:
   1. Loads the search space (default backend/.../optimizer_search_space.yaml)
@@ -43,7 +43,7 @@ from backend.app.services.backtest.optimizer_config import (
 )
 
 
-DEFAULT_SEARCH_SPACE = Path(__file__).resolve().parent.parent / "app" / "services" / "backtest" / "optimizer_search_space.yaml"
+DEFAULT_SEARCH_SPACE = Path(__file__).resolve().parent.parent / "app" / "services" / "backtest" / "v1" / "optimizer_search_space.yaml"
 
 
 def _print_progress(result: TrialResult, best: TrialResult, is_best: bool) -> None:
@@ -65,7 +65,7 @@ def _print_progress(result: TrialResult, best: TrialResult, is_best: bool) -> No
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Strategy parameter optimizer")
     parser.add_argument("--target", choices=["cat3", "all"], default="cat3")
-    parser.add_argument("--method", choices=["random", "grid"], default="random")
+    parser.add_argument("--method", choices=["random", "grid", "adaptive"], default="adaptive")
     parser.add_argument("--max-trials", type=int, default=200)
     parser.add_argument("--start", default="2022-11-01")
     parser.add_argument("--end", default="2026-05-15")
@@ -79,10 +79,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--search-space", default=str(DEFAULT_SEARCH_SPACE))
     parser.add_argument("--stocks", nargs="*", help="Override universe with explicit codes")
     parser.add_argument("--candidate-types", nargs="+", default=["起漲前觀察"])
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Parallel trial workers. 1 = sequential.")
     parser.add_argument("--min-trades", type=int, default=30)
     parser.add_argument("--min-win-rate", type=float, default=0.45)
     parser.add_argument("--min-profit-factor", type=float, default=1.05)
     parser.add_argument("--max-drawdown-pct", type=float, default=-0.15)
+    parser.add_argument("--min-entry-tier", type=int, choices=[1, 2, 3], default=1,
+                        help="Phase 11: minimum tier to enter (1=CORE, 2=QUALITY, 3=PREMIUM)")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
 
@@ -112,13 +116,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         universe=args.stocks or [],
         candidate_types=args.candidate_types,
         gates=gates,
+        n_workers=max(1, args.workers),
+        min_entry_tier=args.min_entry_tier,
     )
 
     print("=" * 80)
     print(f" Strategy Parameter Optimization")
-    print(f" target={args.target} | method={args.method} | max_trials={args.max_trials}")
+    print(f" target={args.target} | method={args.method} | max_trials={args.max_trials} | workers={max(1, args.workers)}")
     print(f" date_range={args.start} ~ {args.end} | train_split={args.train_split}")
     print(f" gates: n>={args.min_trades}  wr>={args.min_win_rate}  pf>={args.min_profit_factor}  dd>={args.max_drawdown_pct}")
+    print(f" min_entry_tier={args.min_entry_tier}")
     print("=" * 80)
 
     search_space = load_search_space(args.search_space)

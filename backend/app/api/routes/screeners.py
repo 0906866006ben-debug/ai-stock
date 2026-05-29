@@ -58,6 +58,7 @@ def _build_screener_parameters(
     candidate_type: str | None = Query(None),
     include_unfit: bool = Query(False),
     ai_tech_only: bool = Query(True, description="Only show AI tech stocks (6-Layer Framework whitelist)"),
+    include_canslim: bool = Query(False, description="Attach optional CAN SLIM observation fields"),
 ) -> ScreenerParameters:
     rules = load_surge_candidate_rules()
     defaults = default_screener_parameters()
@@ -65,7 +66,7 @@ def _build_screener_parameters(
     effective_sort = sort_by or defaults.sort_by
     if effective_sort not in allowed_sort:
         raise HTTPException(status_code=422, detail="sort_by must be surge_candidate_score, confidence_score, or return_60d.")
-    if candidate_type and candidate_type not in {"初動觀察", "初動候選", "動能確認", "偏熱觀察", "不符合"}:
+    if candidate_type and candidate_type not in {"初動觀察", "初動候選", "動能確認", "偏熱觀察", "不符合", "CANSLIM觀察"}:
         raise HTTPException(status_code=422, detail="candidate_type is not supported.")
 
     max_limit = int(require_rule(rules, "api.max_limit"))
@@ -86,6 +87,7 @@ def _build_screener_parameters(
         candidate_type=candidate_type,
         include_unfit=include_unfit,
         ai_tech_only=ai_tech_only,
+        include_canslim=include_canslim,
     )
     if params.market != "TW":
         raise HTTPException(status_code=422, detail="Only market=TW is supported in Phase 1.")
@@ -108,6 +110,7 @@ async def surge_candidates(
     candidate_type: str | None = Query(None),
     include_unfit: bool = Query(False),
     ai_tech_only: bool = Query(True, description="Only show AI tech stocks (6-Layer Framework whitelist)"),
+    include_canslim: bool = Query(False, description="Attach optional CAN SLIM observation fields"),
     force_refresh: bool = Query(False),
     debug: bool = Query(False),
 ) -> ScreenerResponse:
@@ -125,6 +128,7 @@ async def surge_candidates(
         candidate_type=candidate_type,
         include_unfit=include_unfit,
         ai_tech_only=ai_tech_only,
+        include_canslim=include_canslim,
     )
     cache_key = make_cache_key(_cache_payload(params, debug))
     if not force_refresh:
@@ -178,6 +182,7 @@ async def start_surge_candidates_job(
     candidate_type: str | None = Query(None),
     include_unfit: bool = Query(False),
     ai_tech_only: bool = Query(True, description="Only show AI tech stocks (6-Layer Framework whitelist)"),
+    include_canslim: bool = Query(False, description="Attach optional CAN SLIM observation fields"),
     force_refresh: bool = Query(False),
     debug: bool = Query(False),
 ) -> dict[str, Any]:
@@ -195,6 +200,7 @@ async def start_surge_candidates_job(
         candidate_type=candidate_type,
         include_unfit=include_unfit,
         ai_tech_only=ai_tech_only,
+        include_canslim=include_canslim,
     )
     cache_key = make_cache_key(_cache_payload(params, debug))
     if not force_refresh:

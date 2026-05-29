@@ -40,11 +40,11 @@ from backend.app.services.backtest.optimizer_config import GateConfig
 
 DEFAULT_SEARCH_SPACE = (
     Path(__file__).resolve().parent.parent
-    / "app" / "services" / "backtest" / "optimizer_search_space.yaml"
+    / "app" / "services" / "backtest" / "v1" / "optimizer_search_space.yaml"
 )
 DEFAULT_BOUNDS = (
     Path(__file__).resolve().parent.parent
-    / "app" / "services" / "backtest" / "allowed_bounds.yaml"
+    / "app" / "services" / "backtest" / "v1" / "allowed_bounds.yaml"
 )
 
 
@@ -74,6 +74,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--search-space", default=str(DEFAULT_SEARCH_SPACE))
     parser.add_argument("--bounds-config", default=str(DEFAULT_BOUNDS))
     parser.add_argument("--candidate-types", nargs="+", default=["起漲前觀察"])
+    parser.add_argument("--sampler-method", choices=["random", "adaptive"], default="adaptive",
+                        help="Inner-loop parameter sampler. adaptive learns from earlier batches in each iteration.")
+    parser.add_argument("--min-entry-tier", type=int, choices=[1, 2, 3], default=1,
+                        help="Phase 11: minimum tier to enter (1=CORE, 2=QUALITY, 3=PREMIUM)")
 
     # Gate config
     parser.add_argument("--min-trades", type=int, default=30)
@@ -182,6 +186,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         bounds_config_path=args.bounds_config,
         n_workers=max(1, args.workers),
         universe_categories=universe_cats,
+        sampler_method=args.sampler_method,
+        min_entry_tier=args.min_entry_tier,
     )
 
     # ── Banner (NO key, NO prompts) ─────────────────────────────────────────
@@ -196,6 +202,8 @@ def main(argv: Optional[list[str]] = None) -> int:
           f"rollback={rollback_on_regression}")
     print(f" workers={loop_config.n_workers}  "
           f"universe_cats={universe_cats or 'full_ai_tech'}")
+    print(f" sampler={args.sampler_method}")
+    print(f" min_entry_tier={args.min_entry_tier}")
     print(f" auto_dir={args.auto_dir}")
     print("=" * 80)
 

@@ -6,6 +6,7 @@ import { VerdictBar } from './verdict/VerdictBar';
 import { ThreeHorizonView } from './horizons/ThreeHorizonView';
 import { ScenarioPlaybook } from './scenarios/ScenarioPlaybook';
 import { EvidenceLedger } from './evidence/EvidenceLedger';
+import { MultiAgentAnalysisPanel } from './agents/MultiAgentAnalysisPanel';
 import { WyckoffStructurePanel } from './structure/WyckoffStructurePanel';
 import { V2QuantPreviewPanel } from './v2/V2QuantPreviewPanel';
 import { DeepResearchReport } from './report/DeepResearchReport';
@@ -38,6 +39,7 @@ export function AIAnalysisPage({ symbol, sourceData }: AIAnalysisPageProps) {
       <DispositionWarning status={data.disposition_status} />
 
       <VerdictBar data={data} />
+      <MultiAgentAnalysisPanel data={data.multi_agent_analysis} />
       <ThreeHorizonView data={data} />
       <ScenarioPlaybook data={data} />
       <EvidenceLedger data={data} />

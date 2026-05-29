@@ -11,7 +11,9 @@ import pytest
 
 from backend.app.services.backtest.optimizer import (
     OBJECTIVE_FORMULA,
+    _adaptive_batch_size,
     apply_override,
+    build_adaptive_value_weights,
     clear_override,
     compute_convergence_summary,
     compute_dimension_analysis,
@@ -24,6 +26,8 @@ from backend.app.services.backtest.optimizer import (
     grid_iterator,
     load_search_space,
     params_hash,
+    sample_params_weighted,
+    sample_unique_params,
     sample_params_random,
     split_dates,
     write_best_params,
@@ -113,6 +117,15 @@ def test_gates_passed_count_matches_thresholds():
     assert gates_passed_count(m3, gates) == 0
 
 
+def test_tiny_no_loss_sample_does_not_pass_profit_factor_gate():
+    gates = GateConfig(min_trades=3, min_win_rate=0.45, min_profit_factor=1.05, max_drawdown_pct=-0.15)
+    thin_no_loss = SplitMetrics(n_trades=5, win_rate=1.0, profit_factor=999.0, max_drawdown=0.0)
+
+    # Passes trade count / win rate / drawdown, but PF=999 is undefined with
+    # too few trades and must not count as a robust PF gate.
+    assert gates_passed_count(thin_no_loss, gates) == 3
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # 4. Objective scoring
 # ───────────────────────────────────────────────────────────────────────────
@@ -137,6 +150,14 @@ def test_objective_penalizes_overfit_train_val_gap():
     aligned_score = compute_objective(train_aligned, val, config)
     overfit_score = compute_objective(train_overfit, val, config)
     assert aligned_score > overfit_score  # overfit pair gets penalized
+
+
+def test_objective_hard_rejects_tiny_no_loss_profit_factor():
+    config = OptimizerConfig(target="cat3", gates=GateConfig(min_trades=3))
+    train = SplitMetrics(n_trades=20, win_rate=0.5, avg_return_pct=0.01, profit_factor=1.2, max_drawdown=-0.10, expectancy=0.005, gates_passed=2)
+    val = SplitMetrics(n_trades=5, win_rate=1.0, avg_return_pct=0.04, profit_factor=999.0, max_drawdown=0.0, expectancy=0.04, gates_passed=3)
+
+    assert compute_objective(train, val, config) == -2000.0
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -308,7 +329,7 @@ def test_derive_recommendation_paths():
 
 def test_load_search_space_from_default(tmp_path: Path):
     # Use the actual default search space file
-    default_path = Path(__file__).resolve().parent.parent / "app" / "services" / "backtest" / "optimizer_search_space.yaml"
+    default_path = Path(__file__).resolve().parent.parent / "app" / "services" / "backtest" / "v1" / "optimizer_search_space.yaml"
     assert default_path.exists(), f"Default search space not found at {default_path}"
     space = load_search_space(default_path)
     assert len(space) > 0
@@ -316,6 +337,15 @@ def test_load_search_space_from_default(tmp_path: Path):
     for k, v in space.items():
         assert isinstance(v, list), f"Search space value for {k} must be list, got {type(v)}"
         assert len(v) > 0
+
+
+def test_default_search_space_respects_ema_transition_invariant():
+    default_path = Path(__file__).resolve().parent.parent / "app" / "services" / "backtest" / "v1" / "optimizer_search_space.yaml"
+    space = load_search_space(default_path)
+
+    vals = space["classification.pre_breakout_ema_transition_score_min"]
+
+    assert min(vals) >= 30
 
 
 def test_objective_formula_string_exists():
@@ -342,6 +372,166 @@ def _make_trial(trial_id: int, score_min: int, obj: float, val_wr: float) -> Tri
         train=train, validation=val, objective_score=obj,
         overfit_warning=False, success=False,
     )
+
+
+def _make_adaptive_trial(trial_id: int, params: dict, obj: float, val_n: int = 10) -> TrialResult:
+    train = SplitMetrics(n_trades=max(10, val_n), win_rate=0.55, avg_return_pct=0.01, profit_factor=1.3, max_drawdown=-0.10, gates_passed=2)
+    val = SplitMetrics(n_trades=val_n, win_rate=0.55, avg_return_pct=0.01, profit_factor=1.3, max_drawdown=-0.10, gates_passed=2)
+    return TrialResult(
+        trial_id=trial_id,
+        params_hash=f"a{trial_id}",
+        params=params,
+        train=train,
+        validation=val,
+        objective_score=obj,
+        overfit_warning=False,
+        success=False,
+    )
+
+
+def _make_adaptive_trial_with_overfit(
+    trial_id: int,
+    params: dict,
+    obj: float,
+    *,
+    overfit: bool,
+    val_n: int = 10,
+) -> TrialResult:
+    trial = _make_adaptive_trial(trial_id, params, obj, val_n=val_n)
+    trial.overfit_warning = overfit
+    return trial
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Adaptive sampler tests
+# ───────────────────────────────────────────────────────────────────────────
+
+def test_weighted_sampling_prefers_high_weight_value():
+    space = {"a": ["cold", "hot"], "b": [1]}
+    weights = {"a": {"cold": 1.0, "hot": 100.0}, "b": {1: 1.0}}
+    rng = random.Random(123)
+
+    samples = [
+        sample_params_weighted(space, rng, weights, exploration_prob=0.0)["a"]
+        for _ in range(300)
+    ]
+
+    assert samples.count("hot") > 285
+
+
+def test_weighted_sampling_keeps_uniform_exploration_path():
+    space = {"a": ["left", "right"]}
+    weights = {"a": {"left": 999.0, "right": 1.0}}
+    rng = random.Random(456)
+
+    samples = [
+        sample_params_weighted(space, rng, weights, exploration_prob=1.0)["a"]
+        for _ in range(100)
+    ]
+
+    assert set(samples) == {"left", "right"}
+
+
+def test_unique_param_sampler_avoids_duplicates():
+    space = {"a": [1, 2], "b": ["x", "y"]}
+    rng = random.Random(0)
+    samples = sample_unique_params(space, rng, 4)
+    hashes = [params_hash(s) for s in samples]
+
+    assert len(samples) == 4
+    assert len(set(hashes)) == 4
+
+
+def test_unique_param_sampler_stops_when_grid_exhausted():
+    space = {"a": [1], "b": ["x", "y"]}
+    rng = random.Random(0)
+    samples = sample_unique_params(space, rng, 10)
+
+    assert len(samples) == 2
+    assert len({params_hash(s) for s in samples}) == 2
+
+
+def test_unique_param_sampler_respects_seen_hashes():
+    space = {"a": [1, 2], "b": ["x"]}
+    already_seen = {params_hash({"a": 1, "b": "x"})}
+    rng = random.Random(0)
+
+    samples = sample_unique_params(space, rng, 2, seen_hashes=already_seen)
+
+    assert samples == [{"a": 2, "b": "x"}]
+    assert len(already_seen) == 2
+
+
+def test_adaptive_weights_boost_elite_values():
+    space = {"score": [50, 55, 60], "stop": [0.07, 0.10]}
+    results = [
+        _make_adaptive_trial(1, {"score": 50, "stop": 0.07}, obj=10),
+        _make_adaptive_trial(2, {"score": 60, "stop": 0.10}, obj=300),
+        _make_adaptive_trial(3, {"score": 60, "stop": 0.07}, obj=250),
+    ]
+
+    weights = build_adaptive_value_weights(results, space, min_elites=2)
+
+    assert weights["score"][60] > weights["score"][50]
+    assert weights["stop"][0.10] > 1.0
+
+
+def test_adaptive_weights_ignore_rejected_trials_when_valid_exists():
+    space = {"score": [50, 60]}
+    results = [
+        _make_adaptive_trial(1, {"score": 50}, obj=9999, val_n=1),
+        _make_adaptive_trial(2, {"score": 60}, obj=100, val_n=10),
+        _make_adaptive_trial(3, {"score": 60}, obj=90, val_n=9),
+    ]
+
+    weights = build_adaptive_value_weights(results, space, min_elites=2)
+
+    assert weights["score"][60] > weights["score"][50]
+
+
+def test_adaptive_weights_prefer_non_overfit_trials_when_available():
+    space = {"score": [50, 60]}
+    results = [
+        _make_adaptive_trial_with_overfit(1, {"score": 50}, obj=500, overfit=True),
+        _make_adaptive_trial_with_overfit(2, {"score": 60}, obj=100, overfit=False),
+        _make_adaptive_trial_with_overfit(3, {"score": 60}, obj=90, overfit=False),
+    ]
+
+    weights = build_adaptive_value_weights(results, space, min_elites=2)
+
+    assert weights["score"][60] > weights["score"][50]
+
+
+def test_adaptive_weights_fall_back_to_overfit_when_no_stable_trials():
+    space = {"score": [50, 60]}
+    results = [
+        _make_adaptive_trial_with_overfit(1, {"score": 50}, obj=500, overfit=True),
+        _make_adaptive_trial_with_overfit(2, {"score": 60}, obj=100, overfit=True),
+    ]
+
+    weights = build_adaptive_value_weights(results, space, min_elites=2)
+
+    assert weights["score"][50] > 1.0
+    assert weights["score"][60] > 1.0
+
+
+def test_adaptive_weights_fall_back_when_all_trials_rejected():
+    space = {"score": [50, 60]}
+    results = [
+        _make_adaptive_trial(1, {"score": 50}, obj=20, val_n=1),
+        _make_adaptive_trial(2, {"score": 60}, obj=10, val_n=1),
+    ]
+
+    weights = build_adaptive_value_weights(results, space, min_elites=2)
+
+    assert weights["score"][50] > 1.0
+    assert weights["score"][60] > 1.0
+
+
+def test_adaptive_batch_size_scales_with_workers():
+    assert _adaptive_batch_size(3, 4) == 3
+    assert _adaptive_batch_size(80, 1) == 8
+    assert _adaptive_batch_size(80, 4) == 12
 
 
 def test_dimension_analysis_identifies_dominant_value():

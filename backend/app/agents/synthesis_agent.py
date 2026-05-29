@@ -6,6 +6,7 @@ Detects conflicts, calculates confirmation scoring, generates final recommendati
 """
 import os
 from pydantic_ai import Agent
+from backend.app.agents.retry import run_with_backoff
 from backend.app.models.schemas import (
     FundamentalAnalysis,
     TechnicalAnalysis,
@@ -156,10 +157,19 @@ async def synthesize_analysis(
             output_type=ComprehensiveAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )
-        result = await agent.run(user_prompt)
+        result = await run_with_backoff(agent, user_prompt)
         analysis = result.output
+        analysis.overall_direction = _normalize_direction(
+            analysis.overall_direction,
+            confirmation["dominant_direction"],
+        )
+        analysis.confirmation_pillars = {
+            key: _normalize_direction(value, "neutral")
+            for key, value in dict(analysis.confirmation_pillars).items()
+        }
         analysis.confirmation_score = confirmation["score"]
         analysis.conflicts = conflicts
+        analysis.composite_confidence = max(0.0, min(1.0, float(analysis.composite_confidence)))
         analysis.is_mock = False
         return analysis
 
@@ -188,6 +198,20 @@ def _extract_direction(revenue_trend: str) -> str:
         return "bearish"
     else:
         return "neutral"
+
+
+def _normalize_direction(value: str, fallback: str = "neutral") -> str:
+    """Normalize LLM/free-text direction labels to bullish/bearish/neutral."""
+    text = str(value or "").strip().lower()
+    if text in {"bullish", "bearish", "neutral"}:
+        return text
+    if any(token in text for token in ("bullish", "uptrend", "positive", "看漲", "看好", "多頭", "上升")):
+        return "bullish"
+    if any(token in text for token in ("bearish", "downtrend", "negative", "看跌", "看壞", "空頭", "下降")):
+        return "bearish"
+    if any(token in text for token in ("neutral", "sideways", "中立", "觀望", "盤整")):
+        return "neutral"
+    return fallback if fallback in {"bullish", "bearish", "neutral"} else "neutral"
 
 
 def _extract_technical_direction(technical_trend: str) -> str:

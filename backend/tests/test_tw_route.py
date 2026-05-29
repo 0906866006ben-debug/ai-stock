@@ -54,3 +54,17 @@ def test_existing_us_route_unchanged(client):
     resp = client.get("/analyze", params={"symbol": "AAPL"})
     assert resp.status_code == 200
     assert "symbol" in resp.json()
+
+
+def test_tw_analysis_daily_cache_never_reuses_mock_market_data():
+    from backend.app.main import _is_reusable_tw_analysis_cache
+
+    assert _is_reusable_tw_analysis_cache(
+        {"analysis_source": "ai", "data_source": "live"}
+    )
+    assert not _is_reusable_tw_analysis_cache(
+        {"analysis_source": "ai", "data_source": "mock"}
+    )
+    assert not _is_reusable_tw_analysis_cache(
+        {"analysis_source": "mock", "data_source": "live"}
+    )

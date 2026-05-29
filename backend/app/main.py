@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .models.schemas import (
     HealthResponse,
     StockAnalysisResponse, TaiwanStockAnalysisResponse,
+    AgentAnalysisRequest, AgentAnalysisResponse,
     NewsItem,
     FundamentalsData, AnalystTarget, LastEarnings, ESGData,
     CompetitorResponse, PeerStock,
@@ -18,7 +19,8 @@ from .models.schemas import (
     SearchResponse, SearchResult,
     # New TW detail schemas
     RevenueSummary, ValuationSummary, InstitutionalSummary,
-    ChipRiskSummary, MacroEnvironmentSummary, ETFSummary,
+    ChipRiskSummary, CashFlowSummary, MacroEnvironmentSummary, ETFSummary,
+    CanslimSummary,
     # New endpoint schemas
     StockInfo, StockListResponse,
     PriceHistoryResponse, CandlePoint,
@@ -34,6 +36,7 @@ from .models.schemas import (
     # Phase 4: elite equity research
     EquityResearch,
 )
+from .models.screener_schemas import CanslimFullResult, ScreeningResult
 from .graphs.stock_analysis_graph import run_analysis
 from .graphs.tw_stock_graph import run_tw_analysis
 from .graphs.comprehensive_analysis_graph import run_comprehensive_analysis
@@ -58,6 +61,11 @@ from backend.technical_analyzer.v1.contracts.input_contract import ContextBundle
 from backend.technical_analyzer.v1.orchestration import AIAnalysisResultBuilder
 from .api.routes import screeners
 from backend.screeners.multi_factor_surge.api import router as multi_factor_surge_router
+from backend.app.services.strategy.canslim.observer import observe as observe_canslim
+from backend.app.services.strategy.canslim.live_screening import screen_symbol, screen_symbol_full
+from backend.app.services.strategy.canslim.types import MarketFeatures
+from backend.app.services.multi_agent_analysis import run_multi_agent_analysis
+from backend.app.services import file_cache
 
 app = FastAPI(title="AI Stock Analysis API", version="3.0.0")
 
@@ -78,6 +86,15 @@ _tw_price_cache: dict[str, tuple[dict, float]] = {}
 _stocks_cache: tuple[dict | None, float] = (None, 0.0)
 _PRICE_CACHE_TTL = 300
 _STOCKS_CACHE_TTL = 86400
+
+
+def _is_reusable_tw_analysis_cache(payload: dict) -> bool:
+    """Only reuse AI analysis generated from real market data.
+
+    A model response generated successfully over fallback OHLCV is still a mock
+    analysis and must not be pinned in the daily cache.
+    """
+    return payload.get("analysis_source") == "ai" and payload.get("data_source") == "live"
 
 
 def _ohlcv_series_from_tw_candles(symbol: str, candles: list[dict], is_mock: bool) -> OHLCVSeries:
@@ -130,6 +147,88 @@ def _tw_news_items_from_analysis(news_analysis: object | None) -> list[NewsItem]
             url=raw.get("url"),
         ))
     return items
+
+
+class _CandleStoreAdapter:
+    def __init__(self, symbol: str, candles: list[dict]) -> None:
+        self.symbol = str(symbol)
+        self.candles = list(candles or [])
+
+    def get_ohlcv_as_of(self, stock_id: str, as_of_date: str, lookback_bars: int):
+        import pandas as pd
+
+        if str(stock_id) != self.symbol or not self.candles:
+            return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume", "turnover"])
+        frame = pd.DataFrame(self.candles).copy()
+        if "time" in frame and "date" not in frame:
+            frame["date"] = frame["time"]
+        if "date" not in frame:
+            return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume", "turnover"])
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+        cutoff = pd.to_datetime(as_of_date)
+        frame = frame[frame["date"].notna() & (frame["date"] <= cutoff)].tail(lookback_bars).copy()
+        frame["date"] = frame["date"].dt.strftime("%Y-%m-%d")
+        if "turnover" not in frame and "close" in frame and "volume" in frame:
+            frame["turnover"] = frame["close"].astype(float) * frame["volume"].astype(float)
+        return frame.reset_index(drop=True)
+
+
+def _canslim_summary_from_cards(cards: dict) -> CanslimSummary:
+    warnings: list[str] = []
+    grades: dict[str, str] = {}
+    scores: dict[str, dict] = {}
+    hard_blocked: dict[str, bool] = {}
+    for horizon, card in cards.items():
+        grades[horizon] = str(card.scores.get("grade", "C"))
+        scores[horizon] = {
+            "signal": card.scores.get("signal"),
+            "signal_raw": card.scores.get("signal_raw"),
+            "signal_achievable_max": card.scores.get("signal_achievable_max"),
+            "risk": card.scores.get("risk"),
+            "confidence": card.scores.get("confidence"),
+        }
+        hard_blocked[horizon] = bool(card.scores.get("hard_blocked", False))
+        warnings.extend(card.data_warnings)
+    return CanslimSummary(
+        grades=grades,
+        scores=scores,
+        hard_blocked=hard_blocked,
+        data_warnings=list(dict.fromkeys(warnings)),
+        is_mock=False,
+    )
+
+
+def _mock_canslim_summary(message: str) -> CanslimSummary:
+    return CanslimSummary(
+        grades={horizon: "C" for horizon in ("short_term", "swing_term", "long_term")},
+        scores={
+            horizon: {"signal": 0, "signal_raw": 0, "signal_achievable_max": 1, "risk": 0, "confidence": 0}
+            for horizon in ("short_term", "swing_term", "long_term")
+        },
+        hard_blocked={horizon: False for horizon in ("short_term", "swing_term", "long_term")},
+        data_warnings=[message],
+        is_mock=True,
+    )
+
+
+def _detail_to_canslim_inputs(detail: dict) -> tuple[dict, dict]:
+    rev = detail.get("revenue_summary") or {}
+    val = detail.get("valuation_summary") or {}
+    inst = detail.get("institutional_summary") or {}
+    fin_metrics = {
+        "eps_yoy": detail.get("eps_yoy"),
+        "annual_eps": detail.get("annual_eps"),
+        "roe": detail.get("roe"),
+        "op_margin_last4": detail.get("op_margin_last4"),
+        "pe_ttm": val.get("per"),
+    }
+    detail_inputs = {
+        "month_revenue_yoy": [rev.get("yoy_pct")] if rev.get("yoy_pct") is not None else None,
+        "foreign_net_5": [inst.get("foreign_net_5d")] if inst.get("foreign_net_5d") is not None else None,
+        "trust_net_5": [inst.get("trust_net_5d")] if inst.get("trust_net_5d") is not None else None,
+        "dealer_net_5": [inst.get("dealer_net_5d")] if inst.get("dealer_net_5d") is not None else None,
+    }
+    return fin_metrics, detail_inputs
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -243,7 +342,9 @@ async def analyze(symbol: str = Query(..., description="Stock ticker symbol")) -
 
 @app.get("/analyze/tw", response_model=TaiwanStockAnalysisResponse)
 async def analyze_tw(
-    symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)")
+    symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)"),
+    include_canslim: bool = Query(False, description="Include optional CAN SLIM observation summary"),
+    include_screening: bool = Query(False, description="Include optional CAN SLIM screening result"),
 ) -> TaiwanStockAnalysisResponse:
     symbol = symbol.strip()
     if not TW_SYMBOL_RE.match(symbol):
@@ -251,6 +352,18 @@ async def analyze_tw(
             status_code=422,
             detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
         )
+
+    # Same (symbol, UTC-day, flags) is served from disk so a repeat request does not
+    # re-run the Gemini agents. Only AI-backed responses are cached (see save below),
+    # so a mock fallback is never pinned for the day.
+    _today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _cache_key = f"{symbol}_{_today}_{int(include_canslim)}_{int(include_screening)}"
+    _cached = file_cache.load("analyze_tw", _cache_key)
+    if isinstance(_cached, dict) and _is_reusable_tw_analysis_cache(_cached):
+        try:
+            return TaiwanStockAnalysisResponse(**_cached)
+        except Exception:
+            pass  # corrupt/old shape -> recompute
 
     import asyncio as _asyncio
     state_task = _asyncio.create_task(run_tw_analysis(symbol))
@@ -280,10 +393,12 @@ async def analyze_tw(
     inst = detail.get("institutional_summary", {})
     chip = detail.get("chip_risk_summary", {})
 
+    cf = detail.get("cashflow_summary", {})
     revenue_summary = RevenueSummary(**rev) if rev else None
     valuation_summary = ValuationSummary(**val) if val else None
     institutional_summary = InstitutionalSummary(**inst) if inst else None
     chip_risk_summary = ChipRiskSummary(**chip) if chip else None
+    cashflow_summary = CashFlowSummary(**cf) if cf else None
     macro_summary = MacroEnvironmentSummary(**macro_raw) if macro_raw else None
 
     next_dividend = None
@@ -336,7 +451,34 @@ async def analyze_tw(
     if comprehensive_state and comprehensive_state.get("equity_research"):
         equity_research = comprehensive_state["equity_research"]
 
-    return TaiwanStockAnalysisResponse(
+    canslim_summary = None
+    if include_canslim:
+        try:
+            chart_data = market.get("chart_data", [])
+            as_of_date = str(chart_data[-1]["time"]) if chart_data else date.today().isoformat()
+            fin_metrics, canslim_detail = _detail_to_canslim_inputs(detail)
+            cards = observe_canslim(
+                symbol,
+                as_of_date,
+                store=_CandleStoreAdapter(symbol, chart_data),
+                market=MarketFeatures(),
+                fin_metrics=fin_metrics,
+                detail=canslim_detail,
+                event_window_active=False,
+                eps_filing_date=None,
+            )
+            canslim_summary = _canslim_summary_from_cards(cards)
+        except Exception as exc:
+            canslim_summary = _mock_canslim_summary(f"CANSLIM unavailable: {exc}")
+
+    screening_result = None
+    if include_screening:
+        try:
+            screening_result = await screen_symbol(symbol)
+        except Exception:
+            screening_result = None
+
+    response = TaiwanStockAnalysisResponse(
         symbol=symbol,
         company_name=company.get("company_name", symbol),
         market_type=company.get("market_type", "UNKNOWN"),
@@ -359,6 +501,7 @@ async def analyze_tw(
         valuation_summary=valuation_summary,
         institutional_summary=institutional_summary,
         chip_risk_summary=chip_risk_summary,
+        cashflow_summary=cashflow_summary,
         macro_summary=macro_summary,
         next_dividend=next_dividend,
         etf_holdings=etf_holdings_resp,
@@ -368,7 +511,127 @@ async def analyze_tw(
         news=news_analysis,
         comprehensive_analysis=comprehensive_analysis,
         equity_research=equity_research,
+        canslim_summary=canslim_summary,
+        screening_result=screening_result,
     )
+
+    if _is_reusable_tw_analysis_cache(response.model_dump(mode="json")):
+        file_cache.save("analyze_tw", _cache_key, response.model_dump(mode="json"))
+    return response
+
+
+@app.get("/tw/screen", response_model=ScreeningResult)
+async def screen_tw(
+    symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)"),
+    as_of_date: str | None = Query(None, description="Optional YYYY-MM-DD as-of date"),
+) -> ScreeningResult:
+    symbol = symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
+        )
+    return await screen_symbol(symbol, as_of_date=as_of_date)
+
+
+@app.get("/tw/screen/full", response_model=CanslimFullResult)
+async def screen_tw_full(
+    symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)"),
+    as_of_date: str | None = Query(None, description="Optional YYYY-MM-DD as-of date"),
+) -> CanslimFullResult:
+    symbol = symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
+        )
+    return await screen_symbol_full(symbol, as_of_date=as_of_date)
+
+
+@app.get("/tw/agent-analysis", response_model=AgentAnalysisResponse)
+async def tw_agent_analysis_get(
+    symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)"),
+    question: str | None = Query(None, description="Optional user question for Gemini/Claude"),
+) -> AgentAnalysisResponse:
+    symbol = symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
+        )
+    _today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _cache_key = f"{symbol}_{_today}_{question or 'default'}"
+    _cached = file_cache.load("tw_agent_analysis", _cache_key)
+    if isinstance(_cached, dict):
+        try:
+            return AgentAnalysisResponse(**_cached)
+        except Exception:
+            pass
+    response = await run_multi_agent_analysis(symbol, question=question)
+    if any(stage.status == "completed" for stage in response.analysis.agents[1:]):
+        file_cache.save("tw_agent_analysis", _cache_key, response.model_dump(mode="json"))
+    return response
+
+
+@app.post("/tw/agent-analysis", response_model=AgentAnalysisResponse)
+async def tw_agent_analysis_post(request: AgentAnalysisRequest) -> AgentAnalysisResponse:
+    symbol = request.symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
+        )
+    _today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _cache_key = f"{symbol}_{_today}_{request.question or 'default'}"
+    _cached = file_cache.load("tw_agent_analysis", _cache_key)
+    if isinstance(_cached, dict):
+        try:
+            return AgentAnalysisResponse(**_cached)
+        except Exception:
+            pass
+    response = await run_multi_agent_analysis(symbol, question=request.question)
+    if any(stage.status == "completed" for stage in response.analysis.agents[1:]):
+        file_cache.save("tw_agent_analysis", _cache_key, response.model_dump(mode="json"))
+    return response
+
+
+@app.get("/tw/adjusted-price")
+async def tw_adjusted_price(
+    symbol: str = Query(..., description="Taiwan stock symbol"),
+    days: int = Query(250, ge=20, le=2000),
+) -> dict:
+    """Self-computed dividend-adjusted (還原) close series for one stock (free)."""
+    symbol = symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(status_code=422, detail="Invalid Taiwan symbol.")
+    from backend.app.services.tw_adjusted_prices import get_adjusted_prices
+    return get_adjusted_prices(symbol, days=days)
+
+
+@app.get("/tw/market/heatmap")
+async def tw_market_heatmap() -> dict:
+    """Sector heatmap (板塊熱力圖) computed from the local OHLCV store (free)."""
+    from backend.app.services.tw_market_heatmap import get_market_heatmap
+    return await get_market_heatmap()
+
+
+@app.get("/tw/finmind/datasets")
+async def tw_finmind_datasets() -> dict:
+    """Curated, grouped FinMind dataset list for the in-app playground."""
+    from backend.app.services.finmind_query import DATASET_GROUPS
+    return {"groups": DATASET_GROUPS}
+
+
+@app.get("/tw/finmind/query")
+async def tw_finmind_query(
+    dataset: str = Query(..., description="FinMind dataset name (must be allow-listed)"),
+    data_id: str = Query("", description="Stock/contract id, e.g. 2330"),
+    start_date: str = Query("", description="YYYY-MM-DD"),
+    end_date: str = Query("", description="YYYY-MM-DD"),
+) -> dict:
+    """Server-side FinMind dataset query (token stays server-side, loop-free)."""
+    from backend.app.services.finmind_query import query_finmind
+    return await query_finmind(dataset, data_id=data_id, start_date=start_date, end_date=end_date)
 
 
 @app.get("/ai-analysis/tw")

@@ -11,6 +11,7 @@ Generates Traditional Chinese narrative explaining:
 """
 import os
 from pydantic_ai import Agent
+from backend.app.agents.retry import run_with_backoff
 from backend.app.models.schemas import ChipAnalysis
 from backend.app.services.tw_chip_analysis import get_tw_chip_analysis
 
@@ -72,13 +73,45 @@ async def analyze_chip(symbol: str, company_name: str) -> ChipAnalysis:
             output_type=ChipAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )
-        result = await agent.run(user_prompt)
+        result = await run_with_backoff(agent, user_prompt)
         analysis = result.output
         analysis.is_mock = is_mock
+        analysis.institutional_sentiment = _normalize_institutional_sentiment(
+            analysis.institutional_sentiment,
+            chip_dict,
+        )
         return analysis
 
     except Exception:
         return _mock_chip_analysis(symbol, company_name, chip_dict, is_mock)
+
+
+def _normalize_institutional_sentiment(sentiment: dict, chip_dict: dict) -> dict:
+    """Keep the public schema stable even when an LLM omits a sub-key."""
+    normalized = dict(sentiment or {})
+    normalized.setdefault(
+        "foreign",
+        {
+            "5d_net": chip_dict.get("foreign_5d_net", 0),
+            "trend": chip_dict.get("foreign_accumulation_trend", "neutral"),
+            "signal": "moderate",
+        },
+    )
+    normalized.setdefault(
+        "domestic_fund",
+        {
+            "5d_net": chip_dict.get("trust_5d_net", 0),
+            "trend": chip_dict.get("trust_accumulation_trend", "neutral"),
+        },
+    )
+    normalized.setdefault(
+        "dealer",
+        {
+            "5d_net": chip_dict.get("dealer_5d_net", 0),
+            "activity": "normal",
+        },
+    )
+    return normalized
 
 
 def _format_chip_for_prompt(chip_dict: dict) -> str:
@@ -90,6 +123,11 @@ def _format_chip_for_prompt(chip_dict: dict) -> str:
     lines.append(f"  10日淨買：{chip_dict.get('foreign_10d_net', 0):,}")
     lines.append(f"  20日淨買：{chip_dict.get('foreign_20d_net', 0):,}")
     lines.append(f"  趨勢：{chip_dict.get('foreign_accumulation_trend', 'neutral')}")
+    fhr = chip_dict.get("foreign_holding_ratio")
+    if fhr is not None:
+        chg = chip_dict.get("foreign_holding_ratio_change")
+        chg_txt = f"（{chg:+.2f}%）" if isinstance(chg, (int, float)) else ""
+        lines.append(f"  外資持股比例：{fhr:.2f}%{chg_txt}")
 
     lines.append("")
 

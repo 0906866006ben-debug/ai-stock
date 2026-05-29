@@ -6,6 +6,7 @@ from .gemini_diagnostics import (
     get_gemini_model_chain,
     is_gemini_enabled,
     log_gemini_diagnostics,
+    to_pydantic_ai_model_id,
 )
 
 MOCK_AI_RESULT: dict = {
@@ -181,7 +182,7 @@ async def get_tw_ai_analysis(
                 fallback_models=model_chain[1:],
             )
             agent = Agent(
-                model_name,
+                to_pydantic_ai_model_id(model_name),
                 output_type=TaiwanStockAIAnalysis,
                 system_prompt=_SYSTEM_PROMPT,
             )

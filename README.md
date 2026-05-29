@@ -60,8 +60,11 @@ ai-stock/
 │  │  ├─ types.ts                 # 一般前端資料型別
 │  │  └─ ai-analysis/             # AI 分析 transformer / constants / mock
 │  └─ types/aiAnalysis.ts         # Topics A-E 前端資料合約
-├─ Command/COMMANDS.md            # Windows PowerShell 開發指令
-├─ Tecnical_analysis.txt          # 技術分析知識庫來源之一
+├─ Docs/                          # 專案文件、規劃、prompt、知識庫
+│  ├─ README.md                   # 文件索引
+│  ├─ backtesting/Backtest.md     # 回測完整使用指南
+│  ├─ planning/                   # 演進規格與升級計畫
+│  └─ agent-prompts/              # Codex / Claude 交接 prompt
 └─ README.md
 ```
 
@@ -471,7 +474,7 @@ AI 分析直接路由支援 mock fixtures，可在 backend 未啟動時獨立渲
 
 ## 知識庫與未來計畫
 
-來源：`台股 AI 交易分析知識庫建構.txt`。以下整理為產品與工程路線圖。
+來源：[Docs/knowledge-base/tw_ai_trading_knowledge_base.txt](Docs/knowledge-base/tw_ai_trading_knowledge_base.txt)。以下整理為產品與工程路線圖。
 
 ### A. 多因子共振
 

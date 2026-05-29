@@ -192,6 +192,7 @@ async def get_tw_detail(symbol: str) -> dict:
     end = date.today()
     start_14m = (end - timedelta(days=425)).strftime("%Y-%m-%d")
     start_30d = (end - timedelta(days=30)).strftime("%Y-%m-%d")
+    start_2y = (end - timedelta(days=760)).strftime("%Y-%m-%d")
 
     revenue_task = asyncio.create_task(
         _fetch_dataset("TaiwanStockMonthRevenue", symbol, start_14m, token)
@@ -205,9 +206,12 @@ async def get_tw_detail(symbol: str) -> dict:
     margin_task = asyncio.create_task(
         _fetch_dataset("TaiwanStockMarginPurchaseShortSale", symbol, start_30d, token)
     )
+    cashflow_task = asyncio.create_task(
+        _fetch_dataset("TaiwanStockCashFlowsStatement", symbol, start_2y, token)
+    )
 
-    revenue_data, per_data, inst_data, margin_data = await asyncio.gather(
-        revenue_task, per_task, inst_task, margin_task,
+    revenue_data, per_data, inst_data, margin_data, cashflow_data = await asyncio.gather(
+        revenue_task, per_task, inst_task, margin_task, cashflow_task,
         return_exceptions=True,
     )
 
@@ -221,6 +225,7 @@ async def get_tw_detail(symbol: str) -> dict:
         "chip_risk_summary": _build_chip_risk_summary(
             safe(margin_data, []), safe(margin_data, [])
         ),
+        "cashflow_summary": _build_cashflow_summary(safe(cashflow_data, [])),
     }
 
 
@@ -230,4 +235,55 @@ def _mock_detail() -> dict:
         "valuation_summary": {"status": "no_data"},
         "institutional_summary": {"status": "no_data", "direction": "unknown"},
         "chip_risk_summary": {"status": "no_data", "chip_direction": "unknown", "risk_level": "unknown"},
+        "cashflow_summary": {"status": "no_data"},
+    }
+
+
+def _build_cashflow_summary(rows: list) -> dict:
+    """Latest-quarter cash-flow snapshot from TaiwanStockCashFlowsStatement (long
+    format: date/type/value). Free dataset. Values in TWD."""
+    if not rows:
+        return {"status": "no_data"}
+    by_period: dict[str, dict[str, float]] = {}
+    for row in rows:
+        period = str(row.get("date") or "")[:10]
+        type_code = str(row.get("type") or "")
+        try:
+            value = float(row.get("value"))
+        except (TypeError, ValueError):
+            continue
+        by_period.setdefault(period, {})[type_code] = value
+    if not by_period:
+        return {"status": "no_data"}
+
+    def pick(period: dict[str, float], *codes: str):
+        for code in codes:
+            if code in period:
+                return period[code]
+        return None
+
+    periods = sorted(by_period)
+    latest = by_period[periods[-1]]
+    operating = pick(latest, "CashFlowsFromOperatingActivities", "NetCashInflowFromOperatingActivities")
+    investing = pick(latest, "CashProvidedByInvestingActivities")
+    financing = pick(latest, "CashFlowsProvidedFromFinancingActivities")
+    capex = pick(latest, "PropertyAndPlantAndEquipment")
+    free_cf = operating - abs(capex) if (operating is not None and capex is not None) else None
+
+    trend = "unknown"
+    if len(periods) >= 2:
+        prior = by_period[periods[-2]]
+        prior_op = pick(prior, "CashFlowsFromOperatingActivities", "NetCashInflowFromOperatingActivities")
+        if operating is not None and prior_op is not None:
+            trend = "improving" if operating > prior_op else ("declining" if operating < prior_op else "stable")
+
+    return {
+        "status": "ok",
+        "period": periods[-1],
+        "operating_cash_flow": operating,
+        "investing_cash_flow": investing,
+        "financing_cash_flow": financing,
+        "free_cash_flow": free_cf,
+        "operating_cf_positive": (operating is not None and operating > 0),
+        "operating_cf_trend": trend,
     }

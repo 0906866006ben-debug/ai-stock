@@ -5,7 +5,14 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 backend/backtest_results/
+# Generated SQLite stores — rebuilt by download/backfill scripts, never committed
+# (pit_fundamentals.db hit GitHub's 100MB limit at 330MB+).
+*.db
+*.db-wal
+*.db-shm
 backend/historical_data.db
+backend/pit_fundamentals.db
+tmp_debug_live/
 artifacts/
 *.override.tmp.yaml
 node_modules/
@@ -14,4 +21,5 @@ dist/
 build/
 .claude/
 .specify/cache/
+backend/data/cache/
 *.log

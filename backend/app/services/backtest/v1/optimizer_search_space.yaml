@@ -1,0 +1,50 @@
+# Phase 9.8 corrected search space (2026-05-18 update)
+#
+# Removed values that, when combined in random sampling, produce ~0 trades:
+#   - breakout_volume_ratio_min: dropped 1.5, 2.0 (too strict for 53-stock universe)
+#   - base_depth_max: dropped 0.10 (too tight for AI tech volatility)
+#   - breakout_pivot_buffer: dropped 0.005 (entry was missed when too far above)
+#   - pre_breakout_score_min: dropped 65 (combined with other strict gates → empty)
+#   - pre_breakout_ema_score_min: dropped 60
+#   - pre_breakout_base_score_min: dropped 60
+#
+# Goal: keep enough exploration but reduce "all gates strict" combinations.
+# Expected wasted-trial rate: ~50% → ~15-20%.
+
+search_space:
+  # ─── Price / 起漲前未漲 ─────────────────────────────────────────────
+  price_position.min_return_60d: [-0.20, -0.15, -0.10, -0.05]
+  price_position.pre_breakout_range_90d_min: [0.05, 0.08, 0.10]
+  price_position.pre_breakout_range_90d_max: [0.25, 0.30, 0.35]
+  price_position.pre_breakout_return_20d_strict_max: [0.06, 0.08, 0.10, 0.12]
+  price_position.pre_breakout_return_60d_strict_max: [0.10, 0.15, 0.20]
+  price_position.pre_breakout_return_90d_min: [-0.20, -0.15, -0.10]
+
+  # ─── EMA 結構 ──────────────────────────────────────────────────────
+  ema.pre_breakout_close_ema20_max: [0.04, 0.05, 0.06, 0.08]
+  ema.pre_breakout_ema_spread_max: [0.025, 0.03, 0.04, 0.05]
+  ema.overheated_close_ema20_min: [0.10, 0.12, 0.15]
+  ema.overheated_ema_spread_min: [0.06, 0.08, 0.10]
+
+  # ─── Volume / Base 縮量 ────────────────────────────────────────────
+  volume.pre_breakout_volume_contraction_max: [0.75, 0.85, 0.95]
+
+  # ─── 分類 score 門檻（拿掉太嚴值） ───────────────────────────────
+  classification.pre_breakout_score_min: [50, 55, 60]
+  classification.pre_breakout_ema_score_min: [40, 50]
+  classification.pre_breakout_ema_transition_score_min: [30, 40]
+  classification.pre_breakout_base_score_min: [40, 50]
+  classification.pre_breakout_close_to_base_high_max: [1.03, 1.05, 1.08]
+  classification.pre_breakout_risk_score_max: [60, 65, 70]
+  classification.pre_breakout_min_turnover: [30000000, 50000000, 100000000]
+
+  # ─── Phase 9.8: Flat Base event trigger thresholds（已收窄） ───────
+  classification.breakout_pivot_buffer: [0.001, 0.002, 0.003]
+  classification.breakout_volume_ratio_min: [1.2, 1.3, 1.4]
+  classification.base_depth_max: [0.13, 0.15, 0.18]
+
+  # ─── Phase 9.8: Exit rules ─────────────────────────────────────────
+  trade_rules.max_hold_days: [0, 60, 120]
+  trade_rules.stop_loss_pct: [0.07, 0.08, 0.10]
+  trade_rules.measured_move_multiplier: [0.70, 0.85, 1.00]
+  trade_rules.min_entry_tier: [1, 2]

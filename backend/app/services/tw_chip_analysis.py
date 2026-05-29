@@ -123,13 +123,15 @@ async def get_tw_chip_analysis(symbol: str) -> tuple[dict, bool]:
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            inst_r, margin_r = await asyncio.gather(
+            inst_r, margin_r, share_r = await asyncio.gather(
                 client.get(FINMIND_BASE, params={**params_base, "dataset": "TaiwanStockInstitutionalInvestorsBuySell"}),
                 client.get(FINMIND_BASE, params={**params_base, "dataset": "TaiwanStockMarginPurchaseShortSale"}),
+                client.get(FINMIND_BASE, params={**params_base, "dataset": "TaiwanStockShareholding"}),
             )
 
         inst_rows = _parse_payload(inst_r)
         margin_rows = _parse_payload(margin_r)
+        share_rows = _parse_payload(share_r)
         short_rows = margin_rows  # same dataset contains both margin and short
 
         if not inst_rows:
@@ -164,8 +166,27 @@ async def get_tw_chip_analysis(symbol: str) -> tuple[dict, bool]:
                 margin_change = margin_balance - int(prev_m.get("MarginPurchaseTodayBalance") or 0)
                 short_change  = short_interest - int(prev_m.get("ShortSaleTodayBalance") or 0)
 
+        # Foreign holding ratio (絕對外資持股%) from TaiwanStockShareholding —
+        # complements the net-flow numbers with the absolute ownership level.
+        foreign_holding_ratio = None
+        foreign_holding_ratio_change = None
+        if share_rows:
+            sorted_s = sorted(share_rows, key=lambda r: r.get("date", ""))
+            def _ratio(row: dict) -> float | None:
+                try:
+                    return float(row.get("ForeignInvestmentSharesRatio"))
+                except (TypeError, ValueError):
+                    return None
+            foreign_holding_ratio = _ratio(sorted_s[-1])
+            if len(sorted_s) >= 2 and foreign_holding_ratio is not None:
+                prev_ratio = _ratio(sorted_s[-2])
+                if prev_ratio is not None:
+                    foreign_holding_ratio_change = round(foreign_holding_ratio - prev_ratio, 4)
+
         chip_data = {
             "company_name": symbol,
+            "foreign_holding_ratio": foreign_holding_ratio,
+            "foreign_holding_ratio_change": foreign_holding_ratio_change,
             "foreign_5d_net": foreign_5d,
             "foreign_10d_net": foreign_10d,
             "foreign_20d_net": foreign_20d,

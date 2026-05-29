@@ -20,6 +20,8 @@ from backend.app.services.finmind_market import get_finmind_rate_limit_state, ge
 from backend.app.services.screener_rules import load_surge_candidate_rules, require_rule
 from backend.app.services.sector_service import get_sector_info, is_ai_tech_stock, list_ai_tech_codes
 from backend.app.services.tw_stocks_list import get_tw_stocks
+from backend.app.services.strategy.canslim.observer import observe as observe_canslim
+from backend.app.services.strategy.canslim.types import MarketFeatures
 
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,7 @@ class ScreenerParameters:
     candidate_type: Optional[str]
     include_unfit: bool
     ai_tech_only: bool = False    # 預設 False 維持向下相容；API/UI 預設打開
+    include_canslim: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -62,6 +65,7 @@ class ScreenerParameters:
             "candidate_type": self.candidate_type,
             "include_unfit": self.include_unfit,
             "ai_tech_only": self.ai_tech_only,
+            "include_canslim": self.include_canslim,
         }
 
 
@@ -89,6 +93,7 @@ def default_screener_parameters() -> ScreenerParameters:
         sort_by=str(require_rule(rules, "api.default_sort_by")),
         candidate_type=None,
         include_unfit=False,
+        include_canslim=False,
     )
 
 
@@ -98,6 +103,59 @@ def _clamp_score(value: float) -> int:
 
 def _safe_ratio(numerator: float, denominator: float, fallback: float = 0.0) -> float:
     return numerator / denominator if denominator else fallback
+
+
+class _DataFrameStoreAdapter:
+    def __init__(self, stock_id: str, df: pd.DataFrame) -> None:
+        self.stock_id = str(stock_id)
+        self.df = df.copy().reset_index(drop=True)
+
+    def get_ohlcv_as_of(self, stock_id: str, as_of_date: str, lookback_bars: int) -> pd.DataFrame:
+        if str(stock_id) != self.stock_id or self.df.empty:
+            return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume", "turnover"])
+        frame = self.df.copy()
+        if "date" not in frame:
+            return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume", "turnover"])
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+        cutoff = pd.to_datetime(as_of_date)
+        frame = frame[frame["date"].notna() & (frame["date"] <= cutoff)].tail(lookback_bars).copy()
+        frame["date"] = frame["date"].dt.strftime("%Y-%m-%d")
+        if "turnover" not in frame and "close" in frame and "volume" in frame:
+            frame["turnover"] = pd.to_numeric(frame["close"], errors="coerce") * pd.to_numeric(frame["volume"], errors="coerce")
+        return frame.reset_index(drop=True)
+
+
+def _attach_canslim_observation(
+    result: SurgeCandidateResult,
+    stock_id: str,
+    df: pd.DataFrame,
+    as_of_date: str,
+) -> None:
+    try:
+        cards = observe_canslim(
+            stock_id,
+            as_of_date,
+            store=_DataFrameStoreAdapter(stock_id, df),
+            market=MarketFeatures(),
+            event_window_active=None,
+        )
+        swing = cards["swing_term"]
+        result.metrics.canslim_grade = str(swing.scores.get("grade"))
+        result.metrics.canslim_signal = int(swing.scores.get("signal", 0))
+        result.metrics.canslim_risk = int(swing.scores.get("risk", 0))
+        result.metrics.canslim_confidence = int(swing.scores.get("confidence", 0))
+        result.metrics.canslim_hard_blocked = bool(swing.scores.get("hard_blocked", False))
+        result.scores.canslim_signal = result.metrics.canslim_signal
+        result.scores.canslim_risk = result.metrics.canslim_risk
+        result.scores.canslim_confidence = result.metrics.canslim_confidence
+        result.extras["canslim"] = {
+            horizon: card.model_dump()
+            for horizon, card in cards.items()
+        }
+        if result.candidate_type == "不符合" and result.metrics.canslim_signal and result.metrics.canslim_signal > 0:
+            result.candidate_type = "CANSLIM觀察"
+    except Exception as exc:
+        result.extras["canslim_error"] = str(exc)
 
 
 def _canonicalize_ohlcv(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
@@ -729,6 +787,84 @@ def _build_invalidation(metrics: CandidateMetrics) -> list[str]:
     ]
 
 
+def _compute_entry_tier(
+    features: dict[str, Any],
+    rules: dict[str, Any],
+    risk_score: int,
+) -> int:
+    """Phase 11: return 0=no entry, 1=CORE, 2=QUALITY, 3=PREMIUM.
+
+    This is an additive backtest/sizing signal. It keeps the Flat Base identity
+    locked by enforcing the non-negotiable structure gates before assigning any
+    tier, then lets quality filters upgrade the position.
+    """
+    pp = rules.get("price_position", {})
+    cls = rules.get("classification", {})
+
+    range_min = max(float(pp.get("pre_breakout_range_90d_min", 0.10)), 0.10)
+    range_max = min(float(pp.get("pre_breakout_range_90d_max", 0.30)), 0.30)
+    r90 = float(features.get("range_90d", 0.0))
+    if not (range_min <= r90 <= range_max):
+        return 0
+
+    if float(features.get("volume_contraction_ratio", 99.0)) > 1.0:
+        return 0
+
+    # Core invariant: still require EMA cluster not to be fully fanned out.
+    if float(features.get("ema_spread", 99.0)) > 0.08:
+        return 0
+
+    base_high = float(features.get("base_high", 0.0))
+    close_today = float(features.get("close_today", 0.0))
+    breakout_buffer = float(cls.get("breakout_pivot_buffer", 0.001))
+    if base_high <= 0 or close_today <= base_high * (1.0 + breakout_buffer):
+        return 0
+
+    if float(features.get("close_to_base_high_ratio", 99.0)) > 1.08:
+        return 0
+
+    if float(features.get("avg_turnover_20", 0.0)) < 30_000_000:
+        return 0
+
+    if float(features.get("return_90d", -99.0)) < -0.25:
+        return 0
+
+    tier = 1
+
+    avg_volume_50 = float(features.get("avg_volume_50_shares", 0.0))
+    volume_today = float(features.get("volume_today_shares", 0.0))
+    tier2_pass = (
+        float(features.get("ema_spread", 99.0)) <= 0.05
+        and float(features.get("ema5_slope", -99.0)) >= 0.0
+        and float(features.get("ema10_slope", -99.0)) >= 0.0
+        and float(features.get("ema20_slope", -99.0)) >= 0.0
+        and float(features.get("base_range_pct", 99.0)) <= 0.15
+        and avg_volume_50 > 0
+        and volume_today >= avg_volume_50 * 1.2
+        and int(features.get("pre_breakout_score", 0)) >= 50
+        and int(features.get("ema_micro_upturn_score", 0)) >= 40
+        and risk_score < 70
+    )
+    if tier2_pass:
+        tier = 2
+
+    if tier == 2:
+        tier3_pass = (
+            avg_volume_50 > 0
+            and volume_today >= avg_volume_50 * 1.5
+            and int(features.get("pre_breakout_score", 0)) >= 60
+            and int(features.get("ema_micro_upturn_score", 0)) >= 60
+            and int(features.get("base_compression_score", 0)) >= 60
+            and int(features.get("ema_down_to_up_transition_score", 0)) >= 50
+            and float(features.get("avg_turnover_20", 0.0)) >= 100_000_000
+            and bool(features.get("trend_template_ok", False))
+        )
+        if tier3_pass:
+            tier = 3
+
+    return tier
+
+
 def _classify_candidate(
     score: int,
     risk_score: int,
@@ -943,6 +1079,25 @@ def _compute_base_features(
     ema5_slope = _safe_ratio(ema5 - float(ema5_series.iloc[-5]), float(ema5_series.iloc[-5]))
     ema10_slope = _safe_ratio(ema10 - float(ema10_series.iloc[-5]), float(ema10_series.iloc[-5]))
     ema20_slope = _safe_ratio(ema20 - float(ema20_series.iloc[-10]), float(ema20_series.iloc[-10]))
+    trend_template_ok = False
+    if len(normalized) >= 200:
+        ema50_series = _ema(normalized["close"], 50)
+        ema150_series = _ema(normalized["close"], 150)
+        ema200_series = _ema(normalized["close"], 200)
+        ema50_last = float(ema50_series.iloc[-1])
+        ema150_last = float(ema150_series.iloc[-1])
+        ema200_last = float(ema200_series.iloc[-1])
+        ema200_valid = ema200_series.dropna()
+        ema200_reference = float(ema200_valid.iloc[-30] if len(ema200_valid) >= 30 else ema200_valid.iloc[0])
+        trend_template_ok = (
+            not pd.isna(ema50_last)
+            and not pd.isna(ema150_last)
+            and not pd.isna(ema200_last)
+            and close_today > ema50_last
+            and ema50_last > ema150_last
+            and ema150_last > ema200_last
+            and ema200_last > ema200_reference
+        )
     try:
         ema5_slope_prev_10d = _safe_ratio(
             float(ema5_series.iloc[-5]) - float(ema5_series.iloc[-15]),
@@ -1066,6 +1221,7 @@ def _compute_base_features(
         "close_above_all_emas": close_above_all_emas,
         "ema_near_convergence": ema_near_convergence,
         "ema_micro_upturn": ema_micro_upturn,
+        "trend_template_ok": trend_template_ok,
         # Relative strength
         "relative_strength_20d": relative_strength_20d,
         "relative_strength_60d": relative_strength_60d,
@@ -1361,6 +1517,14 @@ def evaluate_surge_candidate(
         risk_score,
         rules,
     )
+    features_with_scores = {
+        **features,
+        "pre_breakout_score": pre_breakout_score,
+        "ema_micro_upturn_score": ema_micro_upturn_score,
+        "base_compression_score": scores.base_compression_score,
+        "ema_down_to_up_transition_score": ema_down_to_up_transition_score,
+    }
+    entry_tier = _compute_entry_tier(features_with_scores, rules, risk_score)
 
     sector_info = get_sector_info(stock_id)
     metrics = CandidateMetrics(
@@ -1407,6 +1571,7 @@ def evaluate_surge_candidate(
         recent_base_window_bars=recent_base_window_bars,
         recent_base_range_pct=recent_base_range_pct,
         recent_base_contraction_ratio=recent_base_contraction_ratio,
+        entry_tier=entry_tier,
     )
 
     candidate_type = _classify_candidate(
@@ -2308,6 +2473,9 @@ async def scan_surge_candidates(
                         "bars_available": len(df),
                     })
                 continue
+            if parameters.include_canslim:
+                as_of_date = str(df["date"].iloc[-1])[:10] if "date" in df and not df.empty else datetime.now(TW_TIMEZONE).strftime("%Y-%m-%d")
+                _attach_canslim_observation(result, stock_id, df, as_of_date)
             if debug:
                 debug_rows.append(_debug_row(result, debug_context))
             summary[result.candidate_type] = summary.get(result.candidate_type, 0) + 1

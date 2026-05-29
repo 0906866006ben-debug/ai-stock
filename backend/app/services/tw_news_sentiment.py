@@ -55,6 +55,29 @@ _MOCK_NEWS = {
 }
 
 
+_POSITIVE_TERMS = (
+    "創新高", "新高", "成長", "大漲", "看好", "利多", "突破", "獲利", "訂單", "受惠",
+    "強勁", "上修", "飆", "走揚", "回升", "樂觀", "擴產", "增資", "得標", "認列",
+)
+_NEGATIVE_TERMS = (
+    "下跌", "虧損", "看壞", "利空", "衰退", "下修", "疲弱", "賣壓", "示警", "重挫",
+    "警示", "跌停", "減資", "違約", "下滑", "保守", "裁員", "停工", "認賠", "降評",
+)
+
+
+def _classify_sentiment(title: str) -> str:
+    """Keyword seed sentiment for a headline. The news agent's LLM still does the
+    nuanced read; this only seeds the aggregate counts when real news is used."""
+    text = title or ""
+    pos = sum(1 for kw in _POSITIVE_TERMS if kw in text)
+    neg = sum(1 for kw in _NEGATIVE_TERMS if kw in text)
+    if pos > neg:
+        return "positive"
+    if neg > pos:
+        return "negative"
+    return "neutral"
+
+
 async def get_tw_news(symbol: str) -> tuple[list[dict], bool]:
     """
     Fetch Taiwan stock news and sentiment.
@@ -63,10 +86,36 @@ async def get_tw_news(symbol: str) -> tuple[list[dict], bool]:
 
     news_list items have keys:
       title, source, date, sentiment (positive|negative|neutral),
-      impact (short_term|long_term|both), relevance (0-1)
+      impact (short_term|long_term|both), relevance (0-1), url
+
+    Primary source: real per-stock headlines via Google News RSS (no key needed,
+    same free fetcher the CANSLIM N pillar uses). Falls back to mock only when no
+    real news is returned, so the news agent runs on real headlines when available.
     """
-    # For MVP, always return mock (no external news API wired)
-    api_key = os.getenv("FINMIND_API_KEY")
+    rows: list[dict] = []
+    if not os.getenv("AISTOCK_DISABLE_LIVE_NEWS"):  # offline/test guard
+        try:
+            from backend.app.services.yahoo_news import get_tw_stock_news_yahoo
+            rows = await get_tw_stock_news_yahoo(symbol)
+        except Exception:
+            rows = []
+
+    if rows:
+        items = [
+            {
+                "title": r.get("title") or "",
+                "source": r.get("source") or "Google News",
+                "date": r.get("published_at") or "",
+                "sentiment": _classify_sentiment(r.get("title") or ""),
+                "impact": "short_term",
+                "relevance": 0.6,
+                "url": r.get("url"),
+            }
+            for r in rows
+            if r.get("title")
+        ]
+        if items:
+            return items, False
 
     if symbol in _MOCK_NEWS:
         return _MOCK_NEWS[symbol].copy(), True

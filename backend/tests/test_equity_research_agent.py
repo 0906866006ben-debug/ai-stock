@@ -10,6 +10,7 @@ from backend.app.services.tw_market_research import _get_mock_research_data
 from backend.app.services.gemini_diagnostics import (
     get_gemini_fallback_models,
     get_gemini_model,
+    to_pydantic_ai_model_id,
     is_gemini_enabled,
 )
 from backend.app.models.schemas import (
@@ -381,6 +382,11 @@ def test_gemini_config_reads_fallback_models(monkeypatch):
     assert get_gemini_model() == "gemini-2.5-flash"
     assert get_gemini_fallback_models() == ["gemini-2.5-flash-lite", "gemini-2.0-flash"]
     assert is_gemini_enabled() is False
+
+
+def test_pydantic_ai_model_id_adds_google_provider_prefix():
+    assert to_pydantic_ai_model_id("gemini-2.5-flash") == "google-gla:gemini-2.5-flash"
+    assert to_pydantic_ai_model_id("google-gla:gemini-2.5-flash") == "google-gla:gemini-2.5-flash"
 
 
 @pytest.mark.asyncio

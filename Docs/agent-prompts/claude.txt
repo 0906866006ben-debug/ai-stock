@@ -1,0 +1,266 @@
+# AI Stock Project Update - Claude Handoff
+
+Date: 2026-05-10
+
+Purpose: give Claude enough context to continue project work without re-discovering today's changes.
+
+Do not expose secrets. Do not print full API keys.
+
+## What Changed Today
+
+The Taiwan stock analysis flow was upgraded in four areas:
+
+1. Structured Equity Research fields were added.
+2. Gemini prompts and model configuration were improved.
+3. Frontend rendering was updated for the new structured fields.
+4. Equity Research UI was reorganized into a cleaner report layout with collapsible detail sections.
+
+## Structured Equity Research Fields
+
+Backend schema file:
+- `backend/app/models/schemas.py`
+
+Added models:
+- `SentimentScore`
+- `AnalystEntry`
+- `AnalystConsensus`
+- `CatalystRow`
+- `RiskRow`
+- `CategoryRating`
+- `SourceCitation`
+
+Added optional fields to `EquityResearch`:
+- `sentiment_data`
+- `analyst_consensus_data`
+- `catalyst_table`
+- `risk_table`
+- `category_ratings`
+- `source_citations`
+
+Backward compatibility preserved:
+- `social_sentiment`
+- `institutional_view`
+- `catalysts`
+- `financial_risks`
+
+## Equity Research Agent
+
+Main file:
+- `backend/app/agents/equity_research_agent.py`
+
+Important changes:
+- Mock/fallback Equity Research now fills all structured fields.
+- Gemini prompt now instructs AI to produce:
+  - sentiment score
+  - analyst consensus
+  - catalyst table
+  - risk table
+  - five category ratings
+  - source citations
+- Prompt includes structured references from `research_data`.
+- Defensive fallback only fills missing/empty fields and does not overwrite valid Gemini output.
+- PydanticAI result access fixed to `result.output`.
+- Hardcoded `gemini-2.5-pro` was removed from this path.
+
+## Gemini Configuration
+
+Helper file:
+- `backend/app/services/gemini_diagnostics.py`
+
+Supported env vars:
+- `GEMINI_ENABLED=true/false`
+- `GEMINI_MODEL=gemini-2.5-flash`
+- `GEMINI_FALLBACK_MODELS=gemini-2.5-flash-lite,gemini-2.0-flash`
+
+Default:
+- `gemini-2.5-flash`
+
+Behavior:
+- `GEMINI_ENABLED=false`: skip Gemini completely and use fallback/mock.
+- missing `GEMINI_ENABLED`: enabled by default for backward compatibility.
+- `GEMINI_ENABLED=true`: use `GEMINI_MODEL`, then try fallback models in order.
+- if all models fail: return structured fallback.
+
+Diagnostic logs are safe:
+- masked API key only
+- selected model
+- fallback list
+- attempted/fallback flags
+- error type
+
+## Taiwan Quick AI Analysis Fix
+
+File:
+- `backend/app/services/tw_ai_analysis.py`
+
+Problem fixed:
+- Top-level `TwAnalysisCard` showed `analysis_source: mock` even when Equity Research was AI-generated.
+
+Change:
+- Quick Taiwan AI analysis now uses the same Gemini model chain and diagnostics.
+- If primary Flash model hits quota, fallback models are attempted.
+
+Verified:
+- `/analyze/tw?symbol=2330` can now return:
+  - `analysis_source: ai`
+  - `equity_research.is_mock: false`
+  - `equity_research.sentiment_data.source: estimated`
+
+## Taiwan Market Research
+
+File:
+- `backend/app/services/tw_market_research.py`
+
+Changes:
+- Uses Gemini config/model chain.
+- Respects `GEMINI_ENABLED=false`.
+- Added per-symbol mock analyst consensus / target ranges.
+
+Known issue:
+- Grounded search may fail if `google.generativeai` package is missing.
+- It falls back safely.
+
+## Frontend Types
+
+File:
+- `ai-stock-frontend/lib/types.ts`
+
+Added matching TS interfaces:
+- `SentimentScore`
+- `AnalystEntry`
+- `AnalystConsensus`
+- `CatalystRow`
+- `RiskRow`
+- `CategoryRating`
+- `SourceCitation`
+
+Updated `EquityResearch` type with optional structured fields.
+
+## Frontend Layout
+
+Page file:
+- `ai-stock-frontend/app/page.tsx`
+
+Changes:
+- Main result width increased to `max-w-6xl`.
+- Chart and financial summary placed in a cleaner desktop layout.
+- Mobile remains one column.
+
+Equity Research file:
+- `ai-stock-frontend/app/components/EquityResearchReport.tsx`
+
+New visible-by-default layout:
+- Header
+- Executive Summary
+- Investment Action Framework
+
+Collapsed sections:
+- `市場敘事詳細`
+- `基本面詳細`
+- `技術與籌碼詳細`
+- `情景分析`
+- `評級與資料來源`
+
+Source/mode badge uses existing fields only:
+- `Mock / Fallback`
+- `AI Estimated`
+- `AI Analysis`
+
+Tables moved to full-width accordion areas:
+- analyst entries
+- catalyst table
+- risk table
+
+Fallback UI preserved:
+- social sentiment prose
+- institutional view prose
+- catalyst bullet list
+- financial risk bullet list
+
+Important constraint honored:
+- no short-term / swing-term / long-term opinion cards were added.
+- no horizon opinions were inferred.
+- no recommendations were fabricated.
+
+## What "estimated" Means
+
+`estimated` means the AI inferred a structured field from available inputs, but the value is not a direct live API fact.
+
+Example:
+- `equity_research.is_mock = false`
+- `equity_research.sentiment_data.source = "estimated"`
+
+Interpretation:
+- Equity Research report is AI-generated.
+- Sentiment score is inferred by AI.
+- It is not from a real social sentiment API.
+
+## Tests / Checks Already Run
+
+Frontend:
+```bash
+cd ai-stock-frontend && npx tsc --noEmit
+```
+Result: passed.
+
+Equity Research backend:
+```bash
+.venv/bin/python -m pytest backend/tests/test_equity_research_agent.py -q
+```
+Result: `10 passed`.
+
+Quick TW AI + route tests:
+```bash
+.venv/bin/python -m pytest backend/tests/test_tw_ai_analysis.py backend/tests/test_tw_route.py -q
+```
+Result: `11 passed`.
+
+API smoke:
+```txt
+GET /analyze/tw?symbol=2330
+```
+Confirmed structured fields were present.
+
+## Important Operational Notes
+
+1. Restart backend after code changes.
+   - Old uvicorn process will keep old code.
+
+2. Gemini quota may still fail.
+   - Primary `gemini-2.5-flash` has returned 429 quota errors.
+   - Fallback models may succeed if quota exists.
+
+3. Do not assume `analysis_source` applies to Equity Research.
+   - `analysis_source` is top-level quick AI analysis.
+   - Equity Research mode is closer to `equity_research.is_mock` and `sentiment_data.source`.
+
+4. Security.
+   - A GitHub PAT appeared in user context.
+   - Recommend rotating/revoking that token if valid.
+
+## Recommended Next Tasks
+
+Must be user-approved before implementation:
+- Add explicit backend metadata fields:
+  - `model_used`
+  - `fallback_used`
+  - `provider`
+  - `error_reason`
+- Add frontend source badge based on those fields.
+- Fix/install grounded search dependency for `google.generativeai` if grounded search is required.
+- Review estimated analyst target prices for Taiwan stock scale consistency.
+- Add caching/rate limiting to reduce Gemini quota burn.
+
+Avoid unless explicitly requested:
+- short-term / swing-term / long-term cards
+- new AI features
+- new routes
+- backend DB/auth/deployment changes
+
+## Suggested Commit Messages
+
+- `feat: add structured equity research fields`
+- `feat: upgrade Gemini prompt for structured equity research output`
+- `chore: add Gemini config and dev-mode fallback switch`
+- `fix: use Gemini fallback models for Taiwan quick analysis`
+- `refactor: simplify equity research report layout`

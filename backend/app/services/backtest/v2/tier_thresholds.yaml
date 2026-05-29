@@ -1,0 +1,37 @@
+tiers:
+  C:
+    range_90d_min: 0.10
+    range_90d_max: 0.30
+    volume_contraction_ratio_max: 1.0
+    ema_spread_max: 0.08
+    breakout_pivot_buffer: 0.0
+    close_to_base_high_max: 1.08
+    avg_turnover_20_min: 30000000
+    return_90d_min: -0.25
+  B:
+    ema_spread_max: 0.05
+    ema_slope_min: 0.0
+    base_range_pct_max: 0.15
+    volume_today_vs_avg_vol_50_min: 1.2
+    pre_breakout_score_min: 50
+    risk_score_max_exclusive: 70
+  A:
+    volume_today_vs_avg_vol_50_min: 1.4
+    pre_breakout_score_min: 60
+    ema_micro_upturn_score_min: 50
+    base_compression_score_min: 50
+    avg_turnover_20_min: 70000000
+  S:
+    volume_today_vs_avg_vol_50_min: 1.5
+    pre_breakout_score_min: 70
+    ema_micro_upturn_score_min: 60
+    base_compression_score_min: 60
+    ema_down_to_up_transition_score_min: 50
+    avg_turnover_20_min: 100000000
+    trend_template_ok: true
+position_multipliers:
+  C: 0.3
+  B: 0.7
+  A: 1.0
+  S: 1.5
+

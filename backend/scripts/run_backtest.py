@@ -70,11 +70,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate-types", nargs="+", default=["起漲前觀察"],
                         help="Target candidate types to track (default 起漲前觀察)")
     parser.add_argument("--hold-days", type=int, default=20)
-    parser.add_argument("--stop-loss", type=float, default=0.07, help="Stop loss as decimal (0.07 = 7%)")
+    parser.add_argument("--stop-loss", type=float, default=0.07, help="Stop loss as decimal (0.07 = 7 percent)")
     parser.add_argument("--target", type=float, default=0.15, help="Profit target as decimal")
     parser.add_argument("--commission", type=float, default=0.001425)
     parser.add_argument("--tax", type=float, default=0.003)
     parser.add_argument("--slippage", type=float, default=0.001)
+    parser.add_argument("--min-entry-tier", type=int, choices=[1, 2, 3], default=1,
+                        help="Phase 11: minimum tier to enter (1=CORE, 2=QUALITY, 3=PREMIUM)")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="SQLite DB path")
     parser.add_argument("--output", default="backtest_report.md", help="Markdown report output path")
     parser.add_argument("--csv-output", default=None, help="Optional CSV trades export")
@@ -143,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         commission_pct=args.commission,
         transaction_tax_pct=args.tax,
         slippage_pct=args.slippage,
+        min_entry_tier=args.min_entry_tier,
     )
     logger.info("Step 2: simulating trades with rules %s", rules)
     sim_summary = simulate_trades(signals_df=signals_df, data_store=store, rules=rules, run_id=run_id, db_path=args.db)
@@ -163,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
         "commission": f"{args.commission*100:.4f}%",
         "tax": f"{args.tax*100:.2f}%",
         "slippage": f"{args.slippage*100:.2f}%",
+        "min_entry_tier": args.min_entry_tier,
     }
     report = generate_markdown_report(
         run_id=run_id,

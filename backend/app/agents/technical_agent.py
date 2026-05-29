@@ -12,6 +12,7 @@ Generates Traditional Chinese narrative explaining:
 """
 import os
 from pydantic_ai import Agent
+from backend.app.agents.retry import run_with_backoff
 from backend.app.models.schemas import TechnicalAnalysis
 from backend.app.services.tw_technical_extended import compute_extended_indicators
 from backend.app.services.tw_indicators import rsi, macd
@@ -47,6 +48,8 @@ async def analyze_technical(
     """
     # Compute extended indicators
     indicators = compute_extended_indicators(candles)
+    if not candles:
+        return _mock_technical_analysis(symbol, company_name, candles, indicators)
 
     # Build prompt with indicator data
     indicators_text = _format_indicators_for_prompt(candles, indicators)
@@ -78,8 +81,14 @@ async def analyze_technical(
             output_type=TechnicalAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )
-        result = await agent.run(user_prompt)
+        result = await run_with_backoff(agent, user_prompt)
         analysis = result.output
+        fallback = _mock_technical_analysis(symbol, company_name, candles, indicators)
+        analysis.trend = _normalize_trend(analysis.trend, indicators.get("trend", "sideways"))
+        analysis.momentum = {**fallback.momentum, **dict(analysis.momentum)}
+        analysis.volatility = {**fallback.volatility, **dict(analysis.volatility)}
+        analysis.key_levels = {**fallback.key_levels, **dict(analysis.key_levels)}
+        analysis.confidence = max(0.0, min(1.0, float(analysis.confidence)))
         analysis.is_mock = False
         return analysis
 
@@ -180,6 +189,20 @@ def _trend_zh(trend: str) -> str:
     """Convert trend to Chinese."""
     mapping = {"uptrend": "上升趨勢", "downtrend": "下降趨勢", "sideways": "盤整"}
     return mapping.get(trend, "不確定")
+
+
+def _normalize_trend(value: str, fallback: str = "sideways") -> str:
+    """Normalize LLM/free-text trend labels to the public schema vocabulary."""
+    text = str(value or "").strip().lower()
+    if text in {"uptrend", "downtrend", "sideways"}:
+        return text
+    if any(token in text for token in ("uptrend", "bullish", "上升", "看漲", "多頭")):
+        return "uptrend"
+    if any(token in text for token in ("downtrend", "bearish", "下降", "看跌", "空頭")):
+        return "downtrend"
+    if any(token in text for token in ("sideways", "neutral", "盤整", "橫盤", "中立")):
+        return "sideways"
+    return fallback if fallback in {"uptrend", "downtrend", "sideways"} else "sideways"
 
 
 def _breakout_zh(direction: str) -> str:

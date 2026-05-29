@@ -30,8 +30,10 @@ import EarningsCalendar from './components/EarningsCalendar';
 import ETFHoldingsCard from './components/ETFHoldingsCard';
 import { AIAnalysisPage } from './components/ai-analysis/AIAnalysisPage';
 import ScreenerView from './components/ScreenerView';
+import BoldPlanView from './components/BoldPlanView';
+import MarketHeatmapView from './components/MarketHeatmapView';
 
-type Page = 'analysis' | 'stock-analysis' | 'screener' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position';
+type Page = 'analysis' | 'stock-analysis' | 'screener' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_SIM_POSITIONS = 'stockAssistant.simPositions';
@@ -58,6 +60,8 @@ const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'calendar', label: '小日曆', icon: '📅' },
   { page: 'watchlist', label: '私心清單', icon: '⭐' },
   { page: 'add-position', label: '加新寶貝', icon: '🌷' },
+  { page: 'bold-plan', label: '大膽的計畫', icon: '🧪' },
+  { page: 'market-heatmap', label: '板塊熱力圖', icon: '🗺️' },
 ];
 
 function Sidebar({
@@ -662,6 +666,8 @@ export default function DashboardPage() {
                           <TwDetailedAnalysis
                             institutional_summary={twResult.institutional_summary}
                             chip_risk_summary={twResult.chip_risk_summary}
+                            cashflow_summary={twResult.cashflow_summary}
+                            macro_summary={twResult.macro_summary}
                           />
                         </section>
 
@@ -763,6 +769,12 @@ export default function DashboardPage() {
             {page === 'screener' && (
               <ScreenerView />
             )}
+
+            {/* ── Bold plan: FinMind playground ── */}
+            {page === 'bold-plan' && <BoldPlanView />}
+
+            {/* ── Market sector heatmap ── */}
+            {page === 'market-heatmap' && <MarketHeatmapView />}
 
             {/* ── Portfolio ── */}
             {page === 'portfolio' && (

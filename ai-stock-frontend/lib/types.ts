@@ -45,6 +45,17 @@ export interface ChipRiskSummary {
   status: string;
 }
 
+export interface CashFlowSummary {
+  period?: string | null;
+  operating_cash_flow?: number | null;
+  investing_cash_flow?: number | null;
+  financing_cash_flow?: number | null;
+  free_cash_flow?: number | null;
+  operating_cf_positive?: boolean | null;
+  operating_cf_trend: string;
+  status: string;
+}
+
 export interface MacroEnvironmentSummary {
   usd_twd?: number | null;
   fed_rate?: number | null;
@@ -53,6 +64,10 @@ export interface MacroEnvironmentSummary {
   oil_wti?: number | null;
   sp500?: number | null;
   nasdaq?: number | null;
+  fut_foreign_net_oi?: number | null;
+  fut_foreign_net_oi_change?: number | null;
+  fut_foreign_direction?: string | null;
+  fut_foreign_trend?: string | null;
   status: string;
 }
 
@@ -341,6 +356,7 @@ export interface TaiwanStockAnalysisResponse {
   valuation_summary?: ValuationSummary | null;
   institutional_summary?: InstitutionalSummary | null;
   chip_risk_summary?: ChipRiskSummary | null;
+  cashflow_summary?: CashFlowSummary | null;
   macro_summary?: MacroEnvironmentSummary | null;
   etf_summary?: ETFSummary | null;
   // Phase 2 enrichments

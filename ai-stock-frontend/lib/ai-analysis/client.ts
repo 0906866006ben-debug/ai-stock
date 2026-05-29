@@ -1,4 +1,4 @@
-import { analyzeTW, getTwAIAnalysisContract } from '@/lib/api';
+import { analyzeTW, getTwAgentAnalysis, getTwAIAnalysisContract } from '@/lib/api';
 import type { TaiwanStockAnalysisResponse } from '@/lib/types';
 import type { AIAnalysisResult, ReportSection } from '@/types/aiAnalysis';
 import { parabolicOverheatAnalysis, springEventAnalysis, tsmc2330Analysis, vcpConsolidationAnalysis } from './mock-data';
@@ -21,12 +21,13 @@ export function getMockAIAnalysis(symbol: string): AIAnalysisResult {
 
 export async function fetchAIAnalysis(symbol: string): Promise<AIAnalysisResult> {
   if (FIXTURES[symbol]) {
-    return FIXTURES[symbol];
+    return fetchMultiAgentOverlay(symbol, FIXTURES[symbol]);
   }
 
   try {
     const twData = await analyzeTW(symbol);
-    return fetchAIAnalysisV2Overlay(symbol, transformTaiwanAnalysisToAI(twData));
+    const withV2 = await fetchAIAnalysisV2Overlay(symbol, transformTaiwanAnalysisToAI(twData));
+    return fetchMultiAgentOverlay(symbol, withV2);
   } catch {
     return getMockAIAnalysis(symbol);
   }
@@ -40,6 +41,25 @@ export async function fetchAIAnalysisV2Overlay(symbol: string, base: AIAnalysisR
   try {
     const contract = await getTwAIAnalysisContract(symbol);
     return mergeV2Overlay(base, contract);
+  } catch {
+    return base;
+  }
+}
+
+export async function fetchMultiAgentOverlay(symbol: string, base: AIAnalysisResult): Promise<AIAnalysisResult> {
+  try {
+    const response = await getTwAgentAnalysis(symbol);
+    return {
+      ...base,
+      multi_agent_analysis: response.analysis,
+      data_quality: response.is_mock ? 'mock' : base.data_quality,
+      models_used: Array.from(new Set([
+        ...base.models_used,
+        ...response.analysis.agents
+          .filter((agent) => agent.status === 'completed')
+          .map((agent) => agent.name),
+      ])),
+    };
   } catch {
     return base;
   }

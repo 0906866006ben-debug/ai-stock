@@ -44,4 +44,16 @@ def _fetch_sync() -> dict:
 
 async def get_macro_summary() -> dict:
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _fetch_sync)
+    result = await loop.run_in_executor(None, _fetch_sync)
+    # Market-level 大盤情緒: foreign TAIEX-futures net open interest (free, daily-cached).
+    try:
+        from backend.app.services.tw_futures_sentiment import get_foreign_futures_sentiment
+        fut = await get_foreign_futures_sentiment()
+        if fut.get("status") == "ok":
+            result["fut_foreign_net_oi"] = fut.get("foreign_net_oi")
+            result["fut_foreign_net_oi_change"] = fut.get("foreign_net_oi_change")
+            result["fut_foreign_direction"] = fut.get("direction")
+            result["fut_foreign_trend"] = fut.get("trend")
+    except Exception:
+        pass
+    return result

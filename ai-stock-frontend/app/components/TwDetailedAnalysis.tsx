@@ -2,7 +2,7 @@
 
 import type {
   RevenueSummary, ValuationSummary, InstitutionalSummary,
-  ChipRiskSummary, MacroEnvironmentSummary,
+  ChipRiskSummary, CashFlowSummary, MacroEnvironmentSummary,
 } from '@/lib/types';
 
 function fmt(val: number | null | undefined, digits = 2): string {
@@ -150,6 +150,34 @@ function ChipRiskCard({ data }: { data: ChipRiskSummary }) {
   );
 }
 
+// ── Cash Flow ─────────────────────────────────────────────────────────────────
+
+function CashFlowCard({ data }: { data: CashFlowSummary }) {
+  if (data.status === 'no_data') {
+    return (
+      <Card title="現金流">
+        <p className="text-sm text-zinc-400">暫無現金流資料</p>
+      </Card>
+    );
+  }
+  const yi = (v?: number | null) => (v == null ? 'N/A' : `${(v / 1e8).toFixed(1)} 億`);
+  const trendTxt: Record<string, string> = {
+    improving: '↑ 改善', declining: '↓ 衰退', stable: '→ 持平', unknown: '—',
+  };
+  return (
+    <Card title="現金流">
+      <Row label="期別" value={data.period ?? 'N/A'} />
+      <Row label="營業現金流" value={
+        <span className={data.operating_cf_positive ? 'text-green-600' : 'text-red-500'}>{yi(data.operating_cash_flow)}</span>
+      } />
+      <Row label="自由現金流" value={yi(data.free_cash_flow)} />
+      <Row label="投資現金流" value={yi(data.investing_cash_flow)} />
+      <Row label="籌資現金流" value={yi(data.financing_cash_flow)} />
+      <Row label="營業CF趨勢" value={trendTxt[data.operating_cf_trend] ?? '—'} />
+    </Card>
+  );
+}
+
 // ── Macro ─────────────────────────────────────────────────────────────────────
 
 function MacroCard({ data }: { data: MacroEnvironmentSummary }) {
@@ -161,6 +189,14 @@ function MacroCard({ data }: { data: MacroEnvironmentSummary }) {
       <Row label="Nasdaq" value={fmtNum(data.nasdaq ? Math.round(data.nasdaq) : null)} />
       <Row label="黃金 (USD/oz)" value={fmt(data.gold_price, 0)} />
       <Row label="WTI 原油" value={fmt(data.oil_wti, 2)} />
+      {data.fut_foreign_net_oi != null && (
+        <Row label="外資台指期淨未平倉" value={
+          <span className={data.fut_foreign_net_oi >= 0 ? 'text-green-600' : 'text-red-500'}>
+            {data.fut_foreign_net_oi >= 0 ? '淨多 ' : '淨空 '}{fmtNum(Math.abs(data.fut_foreign_net_oi))}
+            {data.fut_foreign_net_oi_change != null ? ` (${data.fut_foreign_net_oi_change >= 0 ? '+' : ''}${fmtNum(data.fut_foreign_net_oi_change)})` : ''}
+          </span>
+        } />
+      )}
       {data.status === 'mock' && (
         <p className="mt-2 text-xs text-amber-500">* 模擬資料</p>
       )}
@@ -175,6 +211,7 @@ interface Props {
   valuation_summary?: ValuationSummary | null;
   institutional_summary?: InstitutionalSummary | null;
   chip_risk_summary?: ChipRiskSummary | null;
+  cashflow_summary?: CashFlowSummary | null;
   macro_summary?: MacroEnvironmentSummary | null;
 }
 
@@ -183,10 +220,11 @@ export default function TwDetailedAnalysis({
   valuation_summary,
   institutional_summary,
   chip_risk_summary,
+  cashflow_summary,
   macro_summary,
 }: Props) {
   const hasAny = revenue_summary || valuation_summary || institutional_summary
-    || chip_risk_summary || macro_summary;
+    || chip_risk_summary || cashflow_summary || macro_summary;
 
   if (!hasAny) return null;
 
@@ -198,6 +236,7 @@ export default function TwDetailedAnalysis({
         {valuation_summary && <ValuationCard data={valuation_summary} />}
         {institutional_summary && <InstitutionalCard data={institutional_summary} />}
         {chip_risk_summary && <ChipRiskCard data={chip_risk_summary} />}
+        {cashflow_summary && <CashFlowCard data={cashflow_summary} />}
       </div>
       {macro_summary && <MacroCard data={macro_summary} />}
     </div>

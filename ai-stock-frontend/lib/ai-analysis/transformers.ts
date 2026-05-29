@@ -12,6 +12,7 @@ import type {
   TechnicalState,
   CrossHorizonState,
   DowTrendStructure,
+  MultiAgentAnalysis,
   WyckoffPhase,
 } from '@/types/aiAnalysis';
 import { TECHNICAL_STATE_LABELS } from './i18n';
@@ -315,6 +316,182 @@ function buildPivots(data: TaiwanStockAnalysisResponse) {
   ];
 }
 
+function formatMaybeNumber(value: number | null | undefined, suffix = ''): string {
+  if (value == null || !Number.isFinite(value)) return '缺資料';
+  return `${Number(value).toLocaleString('zh-TW', { maximumFractionDigits: 2 })}${suffix}`;
+}
+
+function latestCandleDate(data: TaiwanStockAnalysisResponse): string | null {
+  return data.chart_data.at(-1)?.time ?? null;
+}
+
+function buildMultiAgentAnalysis(data: TaiwanStockAnalysisResponse): MultiAgentAnalysis {
+  const priceDate = latestCandleDate(data);
+  const revenue = data.revenue_summary;
+  const valuation = data.valuation_summary;
+  const institutional = data.institutional_summary;
+  const chipRisk = data.chip_risk_summary;
+  const macro = data.macro_summary;
+  const hasNews = data.recent_news.length > 0 || Boolean(data.news?.summary);
+  const evidencePacks: MultiAgentAnalysis['evidence_packs'] = [
+    {
+      id: 'price',
+      label: '價格與量能',
+      source: 'FinMind',
+      status: data.chart_data.length > 0 ? 'available' : 'missing',
+      latest_date: priceDate,
+      summary: `收盤 ${formatMaybeNumber(data.current_price)}，漲跌幅 ${formatMaybeNumber(data.price_change_percent, '%')}，成交量 ${formatMaybeNumber(data.volume)}。`,
+      key_values: [
+        { label: '現價', value: formatMaybeNumber(data.current_price) },
+        { label: '漲跌幅', value: formatMaybeNumber(data.price_change_percent, '%') },
+        { label: '成交量', value: formatMaybeNumber(data.volume) },
+      ],
+      warnings: data.chart_data.length > 0 ? [] : ['價格序列缺資料'],
+    },
+    {
+      id: 'revenue',
+      label: '月營收',
+      source: 'FinMind',
+      status: revenue ? revenue.status === 'mock' ? 'partial' : 'available' : 'missing',
+      latest_date: revenue?.latest_revenue ?? null,
+      summary: revenue
+        ? `YoY ${formatMaybeNumber(revenue.yoy_pct, '%')}，MoM ${formatMaybeNumber(revenue.mom_pct, '%')}，可用月份 ${revenue.available_months}。`
+        : '月營收資料未提供。',
+      key_values: [
+        { label: 'YoY', value: formatMaybeNumber(revenue?.yoy_pct, '%') },
+        { label: 'MoM', value: formatMaybeNumber(revenue?.mom_pct, '%') },
+        { label: '月份數', value: revenue ? String(revenue.available_months) : '缺資料' },
+      ],
+      warnings: revenue ? [] : ['月營收缺資料'],
+    },
+    {
+      id: 'valuation',
+      label: '估值',
+      source: 'FinMind',
+      status: valuation ? valuation.status === 'mock' ? 'partial' : 'available' : 'missing',
+      latest_date: priceDate,
+      summary: valuation
+        ? `PER ${formatMaybeNumber(valuation.per)}，PBR ${formatMaybeNumber(valuation.pbr)}，殖利率 ${formatMaybeNumber(valuation.dividend_yield, '%')}。`
+        : '估值資料未提供。',
+      key_values: [
+        { label: 'PER', value: formatMaybeNumber(valuation?.per) },
+        { label: 'PBR', value: formatMaybeNumber(valuation?.pbr) },
+        { label: '殖利率', value: formatMaybeNumber(valuation?.dividend_yield, '%') },
+      ],
+      warnings: valuation ? [] : ['PER/PBR 缺資料'],
+    },
+    {
+      id: 'institutional',
+      label: '法人籌碼',
+      source: 'FinMind',
+      status: institutional ? institutional.status === 'mock' ? 'partial' : 'available' : 'missing',
+      latest_date: priceDate,
+      summary: institutional
+        ? `法人方向：${institutional.direction}；外資 5 日 ${formatMaybeNumber(institutional.foreign_net_5d)}，投信 5 日 ${formatMaybeNumber(institutional.trust_net_5d)}。`
+        : '法人籌碼資料未提供。',
+      key_values: [
+        { label: '外資 5D', value: formatMaybeNumber(institutional?.foreign_net_5d) },
+        { label: '投信 5D', value: formatMaybeNumber(institutional?.trust_net_5d) },
+        { label: '自營 5D', value: formatMaybeNumber(institutional?.dealer_net_5d) },
+      ],
+      warnings: institutional ? [] : ['法人買賣超缺資料'],
+    },
+    {
+      id: 'margin',
+      label: '融資融券 / 籌碼風險',
+      source: 'FinMind',
+      status: chipRisk ? chipRisk.status === 'mock' ? 'partial' : 'available' : 'missing',
+      latest_date: priceDate,
+      summary: chipRisk
+        ? `籌碼方向：${chipRisk.chip_direction}；風險等級：${chipRisk.risk_level}。`
+        : '融資融券與籌碼風險資料未提供。',
+      key_values: [
+        { label: '融資餘額', value: formatMaybeNumber(chipRisk?.margin_balance) },
+        { label: '融券餘額', value: formatMaybeNumber(chipRisk?.short_balance) },
+        { label: '風險', value: chipRisk?.risk_level ?? '缺資料' },
+      ],
+      warnings: chipRisk ? [] : ['融資融券缺資料'],
+    },
+    {
+      id: 'macro-news',
+      label: '新聞與宏觀',
+      source: hasNews ? 'Yahoo' : 'Backend',
+      status: hasNews || macro ? 'partial' : 'missing',
+      latest_date: data.recent_news[0]?.published_at ?? data.analyzed_at,
+      summary: data.news?.summary ?? (hasNews ? `取得 ${data.recent_news.length} 則新聞。` : '新聞與宏觀資料有限。'),
+      key_values: [
+        { label: '新聞數', value: String(data.recent_news.length) },
+        { label: '美元台幣', value: formatMaybeNumber(macro?.usd_twd) },
+        { label: 'NASDAQ', value: formatMaybeNumber(macro?.nasdaq) },
+      ],
+      warnings: hasNews ? [] : ['新聞來源不足'],
+    },
+  ];
+
+  const availableCount = evidencePacks.filter((pack) => pack.status === 'available').length;
+  const missingData = evidencePacks.flatMap((pack) => pack.warnings);
+  const conflicts: string[] = [];
+  if (data.price_change_percent > 0 && institutional?.direction?.includes('賣')) {
+    conflicts.push('價格偏強，但法人籌碼方向偏保守');
+  }
+  if (Math.abs(data.price_change_percent) > 1 && chipRisk?.risk_level && chipRisk.risk_level !== 'low') {
+    conflicts.push('價格波動擴大，同時籌碼風險不低');
+  }
+  if (data.technical?.trend && data.chip?.summary && data.chip.summary.includes('賣')) {
+    conflicts.push('技術趨勢與籌碼摘要存在分歧');
+  }
+
+  const keyPoints = [
+    `價格與量能：${evidencePacks[0].summary}`,
+    revenue ? `營收：${evidencePacks[1].summary}` : '營收：目前缺少可用 FinMind 月營收摘要。',
+    institutional ? `籌碼：${evidencePacks[3].summary}` : '籌碼：法人買賣超資料不足。',
+    valuation ? `估值：${evidencePacks[2].summary}` : '估值：PER/PBR 資料不足。',
+    hasNews ? `消息：${evidencePacks[5].summary}` : '消息：新聞來源不足，事件判讀保守。',
+  ];
+
+  const confidence: MultiAgentAnalysis['claude_final']['confidence'] =
+    availableCount >= 4 && missingData.length <= 2 ? 'High' : availableCount >= 2 ? 'Medium' : 'Low';
+  const status: MultiAgentAnalysis['claude_final']['status'] =
+    missingData.length >= 4 ? 'Insufficient_Data'
+      : data.price_change_percent > 0.5 && conflicts.length <= 1 ? 'Strong'
+        : data.price_change_percent < -1 ? 'Weak'
+          : 'Neutral';
+
+  const conclusion = status === 'Insufficient_Data'
+    ? '目前資料覆蓋不足，結論應以資料補齊後再確認。'
+    : status === 'Strong'
+      ? '目前資料組合偏正向，但仍需檢查籌碼與量能是否同步。'
+      : status === 'Weak'
+        ? '目前價格或風險訊號偏弱，需優先觀察風險來源是否持續。'
+        : '目前訊號偏混合，較適合視為條件觀察而非單一方向判斷。';
+
+  return {
+    pipeline_version: 'finmind-gemini-claude-ui-v1',
+    agents: [
+      { name: 'FinMind Agent', role: '蒐集價格、營收、估值、法人、融資融券與宏觀資料', status: data.data_source === 'mock' ? 'fallback' : 'completed' },
+      { name: 'Gemini Agent', role: '將 FinMind 資料壓縮成主題重點、矛盾訊號與資料缺口', status: 'fallback' },
+      { name: 'Claude Agent', role: '審核 Gemini 重點，產出固定格式最終判讀', status: 'fallback' },
+    ],
+    evidence_packs: evidencePacks,
+    gemini_structured: {
+      key_points: keyPoints,
+      conflicts,
+      missing_data: missingData,
+      coverage_notes: evidencePacks.map((pack) => `${pack.label}: ${pack.status}`),
+    },
+    claude_final: {
+      status,
+      confidence,
+      conclusion,
+      supporting_evidence: keyPoints.filter((point) => !point.includes('不足') && !point.includes('缺少')).slice(0, 4),
+      key_risks: [...data.risks.slice(0, 3), ...missingData.slice(0, 2)],
+      conflicting_signals: conflicts,
+      data_limitations: missingData,
+      manual_review_required: missingData.length ? ['資料缺口需人工確認', '若要接正式 Agent，需由後端提供來源逐筆引用'] : [],
+    },
+  };
+}
+
 export function transformTaiwanAnalysisToAI(data: TaiwanStockAnalysisResponse): AIAnalysisResult {
   const overallDirection = directionFromTrend(data.trend, data.price_change_percent);
   const confidence = normalizedConfidence(data.confidence);
@@ -394,6 +571,7 @@ export function transformTaiwanAnalysisToAI(data: TaiwanStockAnalysisResponse): 
       scope_horizons: ['short_term', 'swing'],
     },
     evidence_ledger: buildEvidence(data),
+    multi_agent_analysis: buildMultiAgentAnalysis(data),
     structure_panel: {
       dow_structure: overallStructure.dow,
       wyckoff_phase: overallStructure.wyckoff,

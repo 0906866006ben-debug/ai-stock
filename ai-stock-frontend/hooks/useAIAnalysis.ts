@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TaiwanStockAnalysisResponse } from '@/lib/types';
 import type { AIAnalysisResult } from '@/types/aiAnalysis';
-import { fetchAIAnalysis, fetchAIAnalysisV2Overlay, fromTaiwanAnalysis, getMockAIAnalysis } from '@/lib/ai-analysis/client';
+import {
+  fetchAIAnalysis,
+  fetchAIAnalysisV2Overlay,
+  fetchMultiAgentOverlay,
+  fromTaiwanAnalysis,
+  getMockAIAnalysis,
+} from '@/lib/ai-analysis/client';
 
 interface UseAIAnalysisOptions {
   sourceData?: TaiwanStockAnalysisResponse | null;
@@ -24,8 +30,10 @@ export function useAIAnalysis(symbol: string, options: UseAIAnalysisOptions = {}
     if (transformedSourceData) {
       setData(transformedSourceData);
       setError(null);
-      const enriched = await fetchAIAnalysisV2Overlay(symbol, transformedSourceData);
-      setData(enriched);
+      const withV2 = await fetchAIAnalysisV2Overlay(symbol, transformedSourceData);
+      setData(withV2);
+      const withAgents = await fetchMultiAgentOverlay(symbol, withV2);
+      setData(withAgents);
       return;
     }
 
@@ -49,7 +57,7 @@ export function useAIAnalysis(symbol: string, options: UseAIAnalysisOptions = {}
   }, [load]);
 
   return {
-    data: transformedSourceData ?? data,
+    data: data ?? transformedSourceData,
     isLoading,
     error,
     refetch: load,

@@ -9,6 +9,7 @@ import os
 import random
 import json
 from pydantic_ai import Agent
+from backend.app.agents.retry import run_with_backoff
 from backend.app.models.schemas import (
     AnalystConsensus,
     AnalystEntry,
@@ -33,6 +34,7 @@ from backend.app.services.gemini_diagnostics import (
     get_gemini_model_chain,
     is_gemini_enabled,
     log_gemini_diagnostics,
+    to_pydantic_ai_model_id,
 )
 
 
@@ -574,7 +576,7 @@ async def analyze_equity_research(
                 fallback_models=model_chain[1:],
             )
             agent = Agent(
-                model=model_name,
+                model=to_pydantic_ai_model_id(model_name),
                 output_type=EquityResearch,
                 system_prompt="""你是一位資深的台灣股票精英分析師，具有20年投資銀行與資產管理經驗。
     
@@ -685,7 +687,8 @@ async def analyze_equity_research(
             )
     
             # Call agent with structured prompt (including real financial metrics)
-            result = await agent.run(
+            result = await run_with_backoff(
+                agent,
                 f"""請基於以下詳細數據，撰寫一份精英級股票研究報告：
     
     {formatted_data}

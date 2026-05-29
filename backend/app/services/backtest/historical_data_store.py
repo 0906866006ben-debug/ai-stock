@@ -71,6 +71,16 @@ class HistoricalDataStore:
 
     def _initialize_schema(self) -> None:
         with self._connect() as conn:
+            # Phase 9.8 speedup: PRAGMA tuning for concurrent backtest workers.
+            # WAL mode lets multiple readers + 1 writer run without blocking each
+            # other (default rollback-journal mode serializes ALL access).
+            # synchronous=NORMAL drops fsync-per-write while still safe-on-crash.
+            # cache_size=-64000 = 64 MB page cache (default ~2 MB).
+            # temp_store=MEMORY puts sorts/joins in RAM.
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA cache_size=-64000")
+            conn.execute("PRAGMA temp_store=MEMORY")
             conn.executescript(_SCHEMA_SQL)
 
     # ── Write paths ─────────────────────────────────────────────────────────

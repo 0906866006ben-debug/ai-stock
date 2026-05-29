@@ -42,6 +42,7 @@ from backend.app.services.backtest.optimization_loop import (
     LoopConfig,
     _apply_patch_to_search_space,
     _detect_regression,
+    _select_promotable_result,
     run_closed_loop,
 )
 from backend.app.services.backtest.optimizer_config import (
@@ -60,8 +61,8 @@ from backend.app.services.backtest.search_space_validator import (
 )
 
 
-BOUNDS_CONFIG_PATH = Path("backend/app/services/backtest/allowed_bounds.yaml")
-SEARCH_SPACE_PATH = Path("backend/app/services/backtest/optimizer_search_space.yaml")
+BOUNDS_CONFIG_PATH = Path("backend/app/services/backtest/v1/allowed_bounds.yaml")
+SEARCH_SPACE_PATH = Path("backend/app/services/backtest/v1/optimizer_search_space.yaml")
 PRODUCTION_RULES_PATH = Path("backend/app/services/rules_v1.yaml")
 
 
@@ -110,7 +111,7 @@ def _fake_run_optimization_factory(trials_pattern: list[TrialResult]):
     """Return a fake `run_optimization` that yields one trial per call."""
     counter = {"i": 0}
 
-    def _fake(opt_config, search_space, progress_callback=None):
+    def _fake(opt_config, search_space, *, progress_callback=None, external_pool=None):
         i = counter["i"]
         counter["i"] += 1
         if i >= len(trials_pattern):
@@ -297,6 +298,46 @@ def test_validator_truncates_long_lists(bounds_config):
     assert len(result.cleaned.next_search_space["min_return_60d"]) <= 7
 
 
+def test_validator_enforces_bounds_for_dotted_keys(bounds_config):
+    """Claude often returns rules dotted paths; they must not bypass bounds."""
+    payload = {
+        "action": "update_search_space",
+        "confidence": 0.5,
+        "next_search_space": {
+            "price_position.pre_breakout_return_60d_strict_max": [0.15, 0.25, 0.30],
+        },
+        "weight_patch": {},
+        "stop": False,
+        "short_reason_codes": [],
+    }
+
+    result = validate(json.dumps(payload), bounds_config)
+
+    assert result.valid is True
+    # Dotted path is normalized to the short whitelist key, then translated later.
+    assert result.cleaned.next_search_space["max_return_60d_for_pre_breakout"] == [0.15, 0.25]
+    assert any("0.3" in warning for warning in result.warnings)
+
+
+def test_validator_enforces_core_invariants_for_dotted_keys(bounds_config):
+    payload = {
+        "action": "update_search_space",
+        "confidence": 0.5,
+        "next_search_space": {
+            "classification.pre_breakout_ema_transition_score_min": [20, 30, 40],
+        },
+        "weight_patch": {},
+        "stop": False,
+        "short_reason_codes": [],
+    }
+
+    result = validate(json.dumps(payload), bounds_config)
+
+    assert result.valid is True
+    assert result.cleaned.next_search_space["min_ema_down_to_up_transition_score"] == [30.0, 40.0]
+    assert any("20" in warning for warning in result.warnings)
+
+
 # ───────────────────────────────────────────────────────────────────────
 # Loop-level tests with mocked run_optimization
 # ───────────────────────────────────────────────────────────────────────
@@ -327,7 +368,7 @@ def test_repair_flow_triggers_on_backtest_failure(monkeypatch, tmp_path, initial
     # First call raises, then succeeds
     state = {"calls": 0}
 
-    def flaky(opt_config, search_space, progress_callback=None):
+    def flaky(opt_config, search_space, *, progress_callback=None, external_pool=None):
         state["calls"] += 1
         if state["calls"] == 1:
             raise RuntimeError("simulated backtest failure")
@@ -350,7 +391,7 @@ def test_repair_flow_triggers_on_backtest_failure(monkeypatch, tmp_path, initial
 def test_repair_attempts_limit(monkeypatch, tmp_path, initial_search_space):
     _patch_optimizer_writes(monkeypatch)
 
-    def always_fail(opt_config, search_space, progress_callback=None):
+    def always_fail(opt_config, search_space, *, progress_callback=None, external_pool=None):
         raise RuntimeError("always fails")
 
     monkeypatch.setattr(loop_mod, "run_optimization", always_fail)
@@ -376,6 +417,67 @@ def test_detect_regression_helper():
     assert _detect_regression(prev, cur_regressed) is not None
     assert _detect_regression(prev, cur_ok) is None
     assert _detect_regression(None, cur_ok) is None
+
+
+def test_select_promotable_result_skips_overfit_top():
+    overfit_top = _make_trial(
+        trial_id=1,
+        obj=500.0,
+        n=20,
+        success=False,
+        overfit=True,
+    )
+    robust = _make_trial(
+        trial_id=2,
+        obj=100.0,
+        n=20,
+        success=False,
+        overfit=False,
+    )
+
+    selected = _select_promotable_result([overfit_top, robust], GateConfig(min_trades=30))
+
+    assert selected == robust
+
+
+def test_closed_loop_promotes_robust_candidate_when_top_is_overfit(
+    monkeypatch,
+    tmp_path,
+    initial_search_space,
+):
+    _patch_optimizer_writes(monkeypatch)
+    overfit_top = _make_trial(
+        trial_id=1,
+        obj=500.0,
+        n=20,
+        success=False,
+        overfit=True,
+    )
+    robust = _make_trial(
+        trial_id=2,
+        obj=100.0,
+        n=20,
+        success=False,
+        overfit=False,
+    )
+
+    def fake_run(opt_config, search_space, *, progress_callback=None, external_pool=None):
+        return [overfit_top, robust], overfit_top
+
+    monkeypatch.setattr(loop_mod, "run_optimization", fake_run)
+    loop_cfg = _build_loop_config(tmp_path, max_iterations=1, stop_on_success=False)
+
+    global_best, _history = run_closed_loop(
+        loop_config=loop_cfg,
+        advisor=FakeAdvisor(),
+        initial_search_space=initial_search_space,
+    )
+
+    assert global_best is not None
+    assert global_best["promoted_trial_id"] == robust.trial_id
+    assert global_best["top_trial_id"] == overfit_top.trial_id
+    assert global_best["best_obj"] == robust.objective_score
+    assert global_best["overfit_warning"] is False
 
 
 # 13. next_search_space.yaml written each iter
@@ -479,6 +581,42 @@ def test_stagnation_stops_loop(monkeypatch, tmp_path, initial_search_space):
     )
     # First iter sets baseline; +2 stagnant iters trigger stop → total <= 3
     assert len(history) <= 3
+
+
+def test_closed_loop_uses_adaptive_sampler_by_default(monkeypatch, tmp_path, initial_search_space):
+    _patch_optimizer_writes(monkeypatch)
+    captured = {}
+
+    def fake_run(opt_config, search_space, *, progress_callback=None, external_pool=None):
+        captured["method"] = opt_config.method
+        trial = _make_trial()
+        return [trial], trial
+
+    monkeypatch.setattr(loop_mod, "run_optimization", fake_run)
+    loop_cfg = _build_loop_config(tmp_path, max_iterations=1)
+
+    run_closed_loop(loop_config=loop_cfg, advisor=FakeAdvisor(),
+                    initial_search_space=initial_search_space)
+
+    assert captured["method"] == "adaptive"
+
+
+def test_closed_loop_can_override_sampler_to_random(monkeypatch, tmp_path, initial_search_space):
+    _patch_optimizer_writes(monkeypatch)
+    captured = {}
+
+    def fake_run(opt_config, search_space, *, progress_callback=None, external_pool=None):
+        captured["method"] = opt_config.method
+        trial = _make_trial()
+        return [trial], trial
+
+    monkeypatch.setattr(loop_mod, "run_optimization", fake_run)
+    loop_cfg = _build_loop_config(tmp_path, max_iterations=1, sampler_method="random")
+
+    run_closed_loop(loop_config=loop_cfg, advisor=FakeAdvisor(),
+                    initial_search_space=initial_search_space)
+
+    assert captured["method"] == "random"
 
 
 # ───────────────────────────────────────────────────────────────────────

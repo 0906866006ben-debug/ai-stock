@@ -1,0 +1,600 @@
+meta:
+  version: "v1"
+  tuning_required: true
+  source: "Docs/research/canslim_oneil_strategy.md"
+  status: "hypothesis"
+
+growth:
+  rules:
+    G-1:
+      rule_name: "revenue_yoy_acceleration"
+      mapping: "C_leading"
+      horizons: ["swing_term"]
+      thresholds:
+        latest_month_revenue_yoy_min: 0.20
+        invalidation_month_revenue_yoy_below: 0.10
+        min_months_required: 3
+        publish_lag_days: 10
+      effects:
+        signal_delta: 15
+        risk_delta: 0
+        confidence_delta_complete: 10
+        confidence_delta_missing: -10
+        missing_data_confidence_delta: -5
+    G-2:
+      rule_name: "quarterly_eps_yoy_strong"
+      mapping: "C"
+      horizons: ["swing_term", "long_term"]
+      thresholds:
+        quarterly_eps_yoy_min: 0.25
+        invalidation_eps_yoy_below: 0.10
+        invalidation_eps_yoy_prior_multiplier: 0.50
+        filing_buffer_trading_days: 1
+      effects:
+        signal_delta: 20
+        confidence_delta: 15
+        missing_data_confidence_delta: -15
+    G-3:
+      rule_name: "eps_cagr_3y"
+      mapping: "A"
+      horizons: ["long_term"]
+      thresholds:
+        annual_eps_cagr_3y_min: 0.25
+        annual_eps_years: 3
+        annual_eps_positive_required: true
+        cyclical_rolling_years_candidate: 5
+        invalidation_latest_to_prior_eps_min: 0.80
+      effects:
+        signal_delta: 25
+        confidence_delta: 20
+        missing_data_confidence_delta: -20
+    G-4:
+      rule_name: "roe_strong"
+      mapping: "A"
+      horizons: ["long_term"]
+      thresholds:
+        roe_ttm_min: 0.15
+        invalidation_roe_ttm_below: 0.05
+      effects:
+        signal_delta: 10
+        confidence_delta: 5
+        missing_data_confidence_delta: -5
+    G-5:
+      rule_name: "op_margin_stable_or_rising"
+      mapping: "A_quality"
+      horizons: ["long_term"]
+      thresholds:
+        quarters_required: 4
+        latest_vs_prior_mean_min_multiplier: 0.95
+        downtrend_bps_over_4q: 200
+        monotonic_decline_quarters: 4
+      effects:
+        signal_delta: 8
+        risk_delta_if_downtrend: 10
+        confidence_delta: 5
+        missing_data_confidence_delta: -5
+
+technical:
+  rules:
+    T-1:
+      rule_name: "rs_60d_top_quartile"
+      mapping: "L"
+      horizons: ["swing_term"]
+      thresholds:
+        rank_percentile_min: 0.75
+        # Legacy annotation only (NOT read by code). RS is now ranked cross-sectionally
+        # against the broad per-date PIT universe (~1000+), not the original 53-name list.
+        universe_size_reference: 0
+        lookback_days: 60
+        invalidation_rank_percentile_below: 0.50
+      effects:
+        signal_delta: 15
+        risk_delta: 0
+        confidence_delta: 10
+        missing_data_confidence_delta: -10
+    T-2:
+      rule_name: "near_52w_high"
+      mapping: "N"
+      horizons: ["short_term", "swing_term"]
+      thresholds:
+        close_to_high_252d_min: 0.97
+        breakout_high_252d_multiplier: 0.999
+        risk_pct_from_52w_high_above: 0.05
+        invalidation_high_252d_multiplier: 0.95
+        bars_required: 252
+      effects:
+        signal_delta: 12
+        risk_delta_if_extended: 5
+        confidence_delta: 10
+    T-3:
+      rule_name: "ma_stage2_alignment"
+      mapping: "L"
+      horizons: ["swing_term", "long_term"]
+      thresholds:
+        ma_fast_days: 20
+        ma_mid_days: 60
+        ma_slow_days: 120
+        ma120_slope_lookback_bars: 20
+        ma120_slope_min: 0.0
+      effects:
+        signal_delta: 15
+        confidence_delta: 10
+    T-4:
+      rule_name: "box_breakout"
+      mapping: "N"
+      horizons: ["short_term"]
+      thresholds:
+        box_lookback_days: 20
+        breakout_multiplier: 1.005
+        box_range_pct_max: 0.15
+        invalidation_days_inside_box: 3
+      effects:
+        signal_delta: 18
+        risk_delta: 0
+        confidence_delta: 8
+    T-5:
+      rule_name: "volume_breakout"
+      mapping: "S_N"
+      horizons: ["short_term"]
+      thresholds:
+        avg_volume_days: 50
+        volume_multiple_min: 1.5
+        invalidation_sub_average_volume_days: 3
+      effects:
+        signal_delta: 20
+        confidence_delta: 10
+
+supply:
+  rules:
+    SD-1:
+      rule_name: "liquidity_floor"
+      mapping: "S"
+      horizons: ["short_term", "swing_term", "long_term"]
+      thresholds:
+        avg_turnover_20_min_twd: 30000000
+        invalidation_consecutive_days_below_floor: 5
+      effects:
+        signal_delta: 0
+        risk_effect_on_fail: "HARD_BLOCK"
+        confidence_delta: 0
+    SD-2:
+      rule_name: "up_day_volume_expansion"
+      mapping: "S"
+      horizons: ["swing_term"]
+      thresholds:
+        lookback_bars: 10
+        up_to_down_volume_ratio_min: 1.3
+        invalidation_ratio_below: 1.0
+      effects:
+        signal_delta: 10
+        confidence_delta: 5
+    SD-3:
+      rule_name: "daytrade_ratio_high"
+      mapping: "S_anti_signal"
+      horizons: ["short_term"]
+      thresholds:
+        day_trade_ratio_high: 0.50
+        invalidation_ratio_below: 0.30
+        data_available: false
+      effects:
+        signal_delta: 0
+        risk_delta: 15
+        confidence_delta_missing: -5
+    SD-4:
+      rule_name: "chip_concentration_rising"
+      mapping: "S"
+      horizons: ["swing_term", "long_term"]
+      thresholds:
+        top_holder_weeks_required: 4
+        data_available: false
+      effects:
+        signal_delta: 8
+        confidence_delta: 5
+
+institutional:
+  rules:
+    I-1:
+      rule_name: "foreign_consecutive_buy"
+      mapping: "I"
+      horizons: ["swing_term"]
+      thresholds:
+        lookback_days: 5
+        consecutive_days_min: 3
+        cumulative_avg_volume_20_min_ratio: 0.02
+        invalidation_consecutive_sell_days: 2
+        data_lag_days: 1
+      effects:
+        signal_delta: 15
+        confidence_delta: 10
+        missing_data_confidence_delta: -10
+    I-2:
+      rule_name: "investment_trust_confirms"
+      mapping: "I"
+      horizons: ["swing_term", "long_term"]
+      thresholds:
+        lookback_days: 5
+        net_buy_days_min: 3
+        invalidation_net_selling_days_min: 3
+      effects:
+        signal_delta: 10
+        confidence_delta: 8
+    I-3:
+      rule_name: "foreign_and_trust_aligned"
+      mapping: "I"
+      horizons: ["swing_term"]
+      thresholds:
+        require_I_1: true
+        require_I_2: true
+        same_day_required: true
+      effects:
+        signal_delta: 8
+        confidence_delta: 5
+    I-4:
+      rule_name: "proprietary_discount"
+      mapping: "I_anti_signal"
+      horizons: ["swing_term"]
+      thresholds:
+        assumed_hedging_ratio: 0.50
+        hedge_breakdown_available: false
+      effects:
+        proprietary_alone_signal_delta: 0
+        confidence_delta: 0
+
+market:
+  rules:
+    M-1:
+      rule_name: "taiex_30w_ma_uptrend"
+      mapping: "M"
+      horizons: ["short_term", "swing_term", "long_term"]
+      thresholds:
+        ma_days: 150
+        slope_lookback_bars: 20
+        slope_min: 0.0
+      effects:
+        signal_delta: 0
+        risk_delta_on_fail: 30
+        regime_on_fail: "risk_off"
+    M-2:
+      rule_name: "tpex_30w_confirms"
+      mapping: "M"
+      horizons: ["short_term", "swing_term", "long_term"]
+      thresholds:
+        ma_days: 150
+        slope_lookback_bars: 20
+        slope_min: 0.0
+      effects:
+        signal_delta: 0
+        risk_delta_if_disagrees_with_taiex: 10
+    M-3:
+      rule_name: "breadth_positive"
+      mapping: "M"
+      horizons: ["short_term", "swing_term", "long_term"]
+      thresholds:
+        universe_above_ma60_pct_min: 0.60
+        risk_pct_below: 0.40
+        ma_days: 60
+      effects:
+        signal_delta: 0
+        risk_delta_if_below: 10
+        confidence_delta_if_met: 5
+    M-4:
+      rule_name: "sox_nasdaq_supportive"
+      mapping: "M_external"
+      horizons: ["swing_term"]
+      thresholds:
+        external_ma_days: 60
+        require_sox_above_ma: true
+        require_nasdaq_above_ma: true
+        priority_categories: ["cat_2_foundry", "cat_3_packaging", "cat_5_system_integration"]
+      effects:
+        signal_delta: 5
+        risk_delta_if_both_below: 10
+        confidence_delta: 3
+
+risk:
+  rules:
+    R-1:
+      rule_name: "extended_from_ma20"
+      horizons: ["short_term", "swing_term"]
+      thresholds:
+        close_to_ma20_multiplier_above: 1.15
+      effects:
+        risk_delta: 20
+    R-2:
+      rule_name: "price_volume_divergence"
+      horizons: ["swing_term"]
+      thresholds:
+        lookback_bars: 20
+        volume_decline_pct_min: 0.20
+      effects:
+        risk_delta: 15
+    R-3:
+      rule_name: "institutional_selling"
+      horizons: ["swing_term"]
+      thresholds:
+        lookback_days: 3
+        net_seller_days_min: 2
+      effects:
+        risk_delta: 25
+    R-4:
+      rule_name: "event_window_active"
+      horizons: ["short_term", "swing_term", "long_term"]
+      thresholds:
+        earnings_window_days_before: 3
+        earnings_window_days_after: 1
+        ex_rights_window_days_before: 1
+        ex_rights_window_days_after: 5
+      effects:
+        risk_delta: 15
+        new_entry_observation_block: true
+    R-5:
+      rule_name: "market_risk_off"
+      horizons: ["short_term", "swing_term", "long_term"]
+      thresholds:
+        condition_m1_fail: true
+        condition_m2_and_m3_fail: true
+      effects:
+        short_term_risk_effect: "HARD_BLOCK"
+        swing_long_risk_delta: 30
+    R-6:
+      rule_name: "low_liquidity_hard"
+      horizons: ["short_term", "swing_term", "long_term"]
+      thresholds:
+        avg_turnover_20_below_twd: 30000000
+      effects:
+        risk_effect: "HARD_BLOCK"
+    R-7:
+      rule_name: "high_daytrade_ratio"
+      horizons: ["short_term"]
+      thresholds:
+        mirrors_rule: "SD-3"
+        day_trade_ratio_high: 0.50
+        data_available: false
+      effects:
+        risk_effect: "risk_filter_when_available"
+    R-8:
+      rule_name: "valuation_growth_mismatch"
+      horizons: ["long_term"]
+      thresholds:
+        pe_ttm_above: 40
+        quarterly_eps_yoy_below: 0.15
+      effects:
+        risk_delta: 20
+
+base_geometry:
+  cup_and_handle:
+    cup_depth_min: 0.12
+    cup_depth_max: 0.35
+    handle_pullback_max_preferred: 0.10
+    handle_pullback_max_upper: 0.15
+    handle_location: "upper_half"
+    base_length_min_weeks: 7
+    handle_volume_dryup_min: 0.20
+    breakout_volume_increase_min: 0.40
+    breakout_volume_increase_preferred: 0.50
+  flat_base:
+    box_range_pct_max: 0.15
+    breakout_multiplier: 1.005
+
+scoring:
+  signal:
+    range_min: 0
+    range_max: 100
+    pillar_caps:
+      growth_quality: 30
+      technical_leadership: 25
+      breakout_catalyst: 20
+      supply_demand: 10
+      institutional: 15
+  grades:
+    S_signal_min: 75
+    A_signal_min: 55
+    A_signal_min_tunable: true
+    B_signal_min: 35
+    B_signal_min_tunable: true
+    C_signal_min: 0
+  risk:
+    range_min: 0
+    range_max: 100
+    components:
+      market_regime_max: 30
+      institutional_reversal_max: 25
+      technical_overheat_max: 20
+      event_window_max: 15
+      daytrade_divergence_max: 15
+      valuation_mismatch_max: 20
+    hard_blocks:
+      - "R-6"
+      - "R-5_short_term"
+      - "R-4"
+  confidence:
+    range_min: 0
+    range_max: 100
+    baseline: 50
+    complete_data_bonus_each: 10
+    missing_data_penalty_each: -10
+    hard_block_penalty: -20
+    low_confidence_below: 40
+    requirements:
+      month_revenue_history_months: 12
+      quarterly_eps_quarters: 4
+      ohlcv_bars: 150
+      institutional_data_current: true
+      taiex_tpex_available: true
+
+backtest:
+  liquidity_floor_twd: 30000000
+  pyramiding:
+    initial_allocation_pct: 0.50
+    add_1_allocation_pct: 0.30
+    add_1_profit_trigger_min: 0.02
+    add_1_profit_trigger_max: 0.03
+    add_2_allocation_pct: 0.20
+    add_2_profit_trigger_min: 0.04
+    add_2_profit_trigger_max: 0.05
+  stops:
+    initial_stop_pct: 0.07
+    atr_stop_multiplier: 1.0
+    hard_stop_pct: 0.10
+  costs:
+    buy_commission_pct: 0.001425
+    sell_commission_pct: 0.001425
+    transaction_tax_pct: 0.003
+    buy_slippage_pct: 0.001
+    sell_slippage_pct: 0.001
+    round_trip_cost_pct: 0.00685
+  walk_forward:
+    train_years: 4
+    test_months: 6
+    step_months: 6
+    windows: 5
+  canslim:
+    horizon: "swing_term"
+    min_entry_grade: "B"
+    min_entry_grade_tunable: true
+    max_hold_days: 30
+    max_hold_days_tunable: true
+    pyramiding_enabled: false
+    regime_entry_gate: true
+
+screening:
+  meta:
+    tunable_required: true
+    description: "Per-pillar CANSLIM screening verdict bands; screening layer only, not signal math."
+  staleness:
+    max_trading_days: 5
+    max_calendar_days: 10
+  C:
+    c_pass: 0.25
+    c_weak: 0.10
+    # Revenue fallback (used only when quarterly EPS YoY is unavailable, e.g. a
+    # loss-base quarter). Rigour: a single positive month is not enough — require a
+    # meaningful YoY AND sustained growth across recent months before granting Weak.
+    revenue_fallback_weak_min: 0.05            # latest month_revenue_yoy must clear this
+    revenue_sustained_lookback_months: 5
+    revenue_sustained_min_positive_fraction: 0.6
+    # O'Neil earnings ACCELERATION (transparency + guard). Uses the quarterly EPS YoY
+    # series. Accelerating = latest YoY > prior YoY -> positive driver note. Severe
+    # DEceleration (latest YoY falls below this fraction of the prior quarter's YoY,
+    # e.g. growth more than halved) caps a Pass to Weak — never a hard Fail.
+    accel_decel_ratio_floor: 0.5
+    accel_min_quarters: 3
+  A:
+    a_cagr_pass: 0.25
+    a_cagr_weak: 0.15
+    # ROE pass floor: O'Neil/IBD cite ~17%; deliberately TW-calibrated to 15% because
+    # TW's large hardware/electronics cohort runs structurally lower ROE. Tunable.
+    a_roe_pass: 0.15
+    a_roe_fail: 0.10
+    # Stability guard: 3y CAGR is endpoint-only, so a mid-period collapse can still
+    # pass. If any year-over-year step fell below this floor, annual growth is not
+    # steady -> cap A to Weak (never a hard Fail, anti-zero-signal).
+    annual_eps_stability_decline_floor: -0.10
+  N:
+    close_to_high_pass: 0.97
+    close_to_high_weak: 0.95
+    price_floor_twd: 10.0
+    # AI catalyst score (0-100) from news_pillar (Gemini summary -> Claude classify).
+    # Hybrid N: the new-high (price) signal is the backbone and can Pass on its own;
+    # the AI catalyst score is a graded MODIFIER (a strong catalyst can upgrade a
+    # near-breakout). News alone never rescues a stock far from its high.
+    catalyst_strong_min: 60        # >= this = strong AI-verified catalyst
+    catalyst_present_min: 30       # >= this = a meaningful (non-noise) catalyst
+  S:
+    liquidity_floor_twd: 30000000
+    up_down_volume_ratio_pass: 1.30
+    # S2 — volume must not be CONTRACTING for a Pass. recent-20d vs prior-20d volume
+    # at/below this = "上漲量縮" -> cap to Weak. Missing data is NOT penalised (we only
+    # downgrade on observed contraction), so it stays backward-compatible.
+    volume_contracting_at_or_below: 1.0
+    # S1 — overheating / blow-off guard: an extreme single-day volume spike while the
+    # price is already pinned near its 52-week high looks like a climax/speculative
+    # surge, not a healthy breakout -> cap to Weak + raise risk. Set the multiple high
+    # so normal breakout volume does not trip it.
+    overheat_volume_spike_mult: 4.0       # latest volume / 20d-avg volume at/above this
+    overheat_extension_min: -0.03         # AND price within 3% of (or above) 52w high
+    # O'Neil supply (D): cross-sectional float-SIZE percentile across the universe
+    # (0 = smallest share float, 1 = largest). Small float = supply bonus (driver note);
+    # top-decile bloated float caps a Pass to Weak. Screening overlay only; no signal
+    # math. Approximate (shares ≈ CapitalStock/par10; total shares, not free float).
+    float_small_pct_max: 0.40             # bottom 40% by float size -> small-float bonus
+    float_mega_pct_min: 0.90              # top 10% by float size -> bloated supply downgrade
+  L:
+    l_rs_pass: 0.75
+    l_rs_fail: 0.50
+  I:
+    net_buy_days_min: 3
+    # I strength gate: both groups net-positive is necessary but not sufficient — the
+    # accumulation must also be MEANINGFUL in size. Cumulative net buy over the window
+    # divided by 20d avg volume must clear this for a full Pass; lighter accumulation
+    # stays Weak. Units verified comparable (both shares). Missing avg volume -> no gate.
+    net_buy_strength_min: 0.30
+  M:
+    severe_breadth_below: 0.40
+
+# ── Consolidated CANSLIM output (presentation layer) ────────────────────────
+# Derives display fields (overall_score / pass_status / confidence / risk_level /
+# per-factor / suggested_strategy) from the validated ScreeningResult. Does NOT
+# change signal/score/grade math. Confidence is driven by EXTENSION (N-pillar
+# proximity to 52w-high) + REGIME, not by the grade letter — per the 2026-05-26
+# diagnostic (grade ordering is not OOS-stable; extension+regime is).
+presentation:
+  meta:
+    tunable_required: true
+    description: "CANSLIM consolidated-output presentation layer; not signal math."
+  factor_score_bands:        # pillar status -> representative 0-100 score
+    Pass: 85
+    Weak: 60
+    Fail: 25
+    Neutral: 50               # AI_Review_Required / Insufficient_Data -> null (in code)
+  factor_weights:            # O'Neil-leaning; overall_score = weighted mean of non-null
+    C: 1.3
+    A: 1.3
+    N: 1.0
+    S: 0.8
+    L: 1.2
+    I: 1.2
+    M: 0.8
+  core_factors: ["C", "A", "L", "I", "M"]   # a null core factor blocks HIGH confidence
+  coverage_floor: 0.6        # fraction of 7 factors with a non-null score
+  confidence:
+    high_requires_regime: ["risk_on"]       # HIGH only in a confirmed supportive regime
+    high_requires_n_status: ["Pass"]        # HIGH only when near/at 52w-high (extension proxy)
+    block_high_when_mock: true
+    insufficient_core_missing_min: 2        # >= this many null core factors -> LOW + INSUFFICIENT_DATA
+  risk:
+    severe_regime_level: "HIGH"
+    unknown_regime_min_level: "MEDIUM"
+    high_score_at_or_above: 60              # validated risk score -> enum cutpoints
+    medium_score_at_or_above: 35
+  pass_status:
+    pass_grades: ["S", "A"]
+    fail_grades: ["D"]
+  suggested_strategy_templates:
+    insufficient: "資料不足，CANSLIM 條件狀態需人工檢視。"
+    fail: "未達 CANSLIM 成長股觀察門檻，僅供條件追蹤。"
+    conservative: "市場方向偏弱或未確認，即使個股條件佳，目前僅適合觀察、不宜追高。"
+    watchlist_near_high: "符合多項 CANSLIM 成長/強勢條件且貼近高點，可列入觀察；須等待帶量突破確認。"
+    watchlist_default: "符合部分 CANSLIM 觀察條件，信心中等，續觀察資料補強與量價確認。"
+  invalidation_templates:
+    - "若跌破近期均線支撐或量價背離，技術與 N 條件失效。"
+    - "若市場方向轉為 risk_off/severe，須降低積極度。"
+  observation_templates:
+    - "觀察是否帶量突破前高（N）。"
+    - "觀察法人是否延續買超（I）與量價是否同步（S）。"
+
+# ── CANSLIM output-quality reviewer (deterministic judge) ───────────────────
+reviewer:
+  meta:
+    tunable_required: true
+    description: "Deterministic CANSLIM output-quality reviewer; audits, does not re-score."
+  dimensions:                # name -> weight (sum 100)
+    factor_completeness: 20
+    evidence_traceability: 20
+    confidence_missing_data_control: 20
+    risk_invalidation_quality: 15
+    market_direction_handling: 10
+    conditional_recommendation_compliance: 10
+    backtestability: 5
+  approve_min_score: 80
+  needs_revision_min_score: 50

@@ -1,6 +1,94 @@
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+PillarStatus = Literal["Pass", "Weak", "Fail", "AI_Review_Required", "Neutral", "Insufficient_Data"]
+
+
+class Evidence(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    pillar: str
+    source_url: Optional[str] = None
+    published_date: Optional[str] = None
+    summary: str
+    catalyst_type: Optional[str] = None
+
+
+class ScreeningResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    stock_id: str
+    as_of_date: str
+    is_mock: bool = False
+    candidate_grade: Literal["S", "A", "B", "C", "D"]
+    canslim_match: str
+    pillars: dict[str, PillarStatus]
+    pillar_metrics: dict[str, str] = Field(default_factory=dict)
+    scores: dict[str, int] = Field(default_factory=dict)
+    market_regime: Literal["risk_on", "risk_off", "severe", "unknown"]
+    n_catalyst_score: Optional[int] = None
+    interpretation: str
+    evidence: list[Evidence] = Field(default_factory=list)
+    data_warnings: list[str] = Field(default_factory=list)
+    needs_manual_review: list[str] = Field(default_factory=list)
+    action_type: Literal["Watchlist Candidate", "Manual Review Required", "Track Only"]
+
+
+class CanslimFactorScore(BaseModel):
+    """One CANSLIM factor in the consolidated output. score is null when the
+    factor's data is insufficient / requires review (never fabricated)."""
+    model_config = ConfigDict(frozen=True)
+
+    factor: Literal["C", "A", "N", "S", "L", "I", "M"]
+    status: PillarStatus
+    score: Optional[int] = None
+    reason: str = ""
+    data_used: list[str] = Field(default_factory=list)
+    missing_data: list[str] = Field(default_factory=list)
+
+
+class CanslimReviewResult(BaseModel):
+    """Output of the deterministic CANSLIM Reviewer/Judge agent."""
+    model_config = ConfigDict(frozen=True)
+
+    review_score: int = 0
+    review_status: Literal["APPROVED", "NEEDS_REVISION", "REJECTED"] = "NEEDS_REVISION"
+    dimension_scores: list[dict[str, Any]] = Field(default_factory=list)
+    critical_issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    overconfidence_flags: list[str] = Field(default_factory=list)
+    required_fixes: list[str] = Field(default_factory=list)
+    final_comment: str = ""
+
+
+class CanslimFullResult(BaseModel):
+    """Consolidated, decision-support CANSLIM output. Derived additively from the
+    validated ScreeningResult; embeds it for traceability. Grade is a match-degree
+    label, NOT an OOS-validated trading tier — confidence is driven by extension
+    (N-pillar) + regime + data quality, not by the grade letter."""
+    model_config = ConfigDict(frozen=True)
+
+    stock_id: str
+    as_of_date: str
+    overall_score: int = 0
+    grade: Literal["S", "A", "B", "C", "D"]
+    pass_status: Literal["PASS", "WATCHLIST", "FAIL", "INSUFFICIENT_DATA"]
+    confidence: Literal["HIGH", "MEDIUM", "LOW"]
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"]
+    per_factor_scores: list[CanslimFactorScore] = Field(default_factory=list)
+    positive_reasons: list[str] = Field(default_factory=list)
+    negative_reasons: list[str] = Field(default_factory=list)
+    missing_data: list[str] = Field(default_factory=list)
+    invalidation_signals: list[str] = Field(default_factory=list)
+    observation_conditions: list[str] = Field(default_factory=list)
+    suggested_strategy: str = ""
+    data_quality: Literal["HIGH", "MEDIUM", "LOW"] = "LOW"
+    is_mock_or_fallback_data: bool = False
+    reviewer_result: Optional[CanslimReviewResult] = None
+    screening_result: ScreeningResult
 
 
 class CandidateScores(BaseModel):
@@ -10,6 +98,9 @@ class CandidateScores(BaseModel):
     volume_score: int
     ema_convergence_score: int
     relative_strength_score: int
+    canslim_signal: Optional[int] = None
+    canslim_risk: Optional[int] = None
+    canslim_confidence: Optional[int] = None
 
 
 class CandidateMetrics(BaseModel):
@@ -60,6 +151,32 @@ class CandidateMetrics(BaseModel):
     recent_base_window_bars: int = 0
     recent_base_range_pct: float = 0.0
     recent_base_contraction_ratio: float = 1.0
+    # Phase 11: 0=no tiered entry, 1=CORE, 2=QUALITY, 3=PREMIUM.
+    entry_tier: int = 0
+    # Phase R2: user-facing alias for the legacy entry_tier. entry_tier remains
+    # populated for backward compatibility with backtests and older clients.
+    candidate_grade: Optional[str] = None
+    canslim_grade: Optional[str] = None
+    canslim_signal: Optional[int] = None
+    canslim_risk: Optional[int] = None
+    canslim_confidence: Optional[int] = None
+    canslim_hard_blocked: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def populate_candidate_grade_alias(self) -> "CandidateMetrics":
+        if self.candidate_grade:
+            return self
+        if self.canslim_grade in {"S", "A", "B", "C", "D"}:
+            self.candidate_grade = self.canslim_grade
+            return self
+        tier_labels = {
+            3: "Premium",
+            2: "Quality",
+            1: "Core",
+            0: "Unclassified",
+        }
+        self.candidate_grade = tier_labels.get(int(self.entry_tier or 0), "Unclassified")
+        return self
 
 
 class SurgeCandidateResult(BaseModel):
@@ -67,6 +184,7 @@ class SurgeCandidateResult(BaseModel):
     stock_id: str
     stock_name: str
     candidate_type: str
+    screening_status: Optional[str] = None
     surge_candidate_score: int
     confidence_score: int
     risk_score: int
@@ -80,6 +198,12 @@ class SurgeCandidateResult(BaseModel):
     data_quality_flags: list[str]
     source_info: dict[str, Any] = Field(default_factory=dict)
     extras: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def populate_screening_status_alias(self) -> "SurgeCandidateResult":
+        if self.screening_status is None:
+            self.screening_status = self.candidate_type
+        return self
 
 
 class ScreenerResponse(BaseModel):

@@ -69,6 +69,20 @@ def get_gemini_model_chain() -> list[str]:
     return unique_models
 
 
+def to_pydantic_ai_model_id(model: str) -> str:
+    """Return a provider-qualified model id for PydanticAI.
+
+    Keep public config values unchanged (`gemini-...`) while avoiding
+    PydanticAI's deprecated provider-less model syntax at the call site.
+    """
+    cleaned = str(model).strip()
+    if ":" in cleaned:
+        return cleaned
+    if cleaned.startswith("gemini-"):
+        return f"google-gla:{cleaned}"
+    return cleaned
+
+
 def log_gemini_diagnostics(
     *,
     context: str,

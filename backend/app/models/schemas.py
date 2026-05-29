@@ -1,5 +1,7 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, Literal, Any
+
+from backend.app.models.screener_schemas import CanslimFullResult, ScreeningResult
 
 
 class HealthResponse(BaseModel):
@@ -83,12 +85,19 @@ class StockAnalysisResponse(BaseModel):
     summary: str
     risks: list[str]
     catalysts: list[str]
+    screening_summary: Optional[str] = None
     recommendation: str
     recent_news: list[NewsItem]
     financial_summary: dict[str, str]
     chart_data: list["CandlePoint"]
     data_source: str
     fundamentals: Optional[FundamentalsData] = None
+
+    @model_validator(mode="after")
+    def populate_screening_summary(self) -> "StockAnalysisResponse":
+        if not self.screening_summary:
+            self.screening_summary = _verb_free_screening_summary(self.summary, self.trend, self.confidence)
+        return self
 
 
 # ── Taiwan analysis detail sub-models ────────────────────────────────────────
@@ -127,6 +136,17 @@ class ChipRiskSummary(BaseModel):
     status: str = "no_data"
 
 
+class CashFlowSummary(BaseModel):
+    period: Optional[str] = None
+    operating_cash_flow: Optional[float] = None
+    investing_cash_flow: Optional[float] = None
+    financing_cash_flow: Optional[float] = None
+    free_cash_flow: Optional[float] = None
+    operating_cf_positive: Optional[bool] = None
+    operating_cf_trend: str = "unknown"
+    status: str = "no_data"
+
+
 class MacroEnvironmentSummary(BaseModel):
     usd_twd: Optional[float] = None
     fed_rate: Optional[float] = None
@@ -135,6 +155,10 @@ class MacroEnvironmentSummary(BaseModel):
     oil_wti: Optional[float] = None
     sp500: Optional[float] = None
     nasdaq: Optional[float] = None
+    fut_foreign_net_oi: Optional[int] = None
+    fut_foreign_net_oi_change: Optional[int] = None
+    fut_foreign_direction: Optional[str] = None
+    fut_foreign_trend: Optional[str] = None
     status: str = "no_data"
 
 
@@ -145,6 +169,84 @@ class ETFSummary(BaseModel):
     dividend_frequency: Optional[str] = None
     tracking_index: Optional[str] = None
     status: str = "no_data"
+
+
+class CanslimSummary(BaseModel):
+    grades: dict[str, str] = {}
+    scores: dict[str, dict] = {}
+    hard_blocked: dict[str, bool] = {}
+    data_warnings: list[str] = []
+    is_mock: bool = False
+
+
+# ── FinMind → Gemini → Claude agent analysis ────────────────────────────────
+
+AgentDataStatus = Literal["available", "partial", "missing", "stale"]
+AgentConfidence = Literal["High", "Medium", "Low"]
+AgentFinalStatus = Literal["Strong", "Neutral", "Weak", "Insufficient_Data"]
+AgentRunStatus = Literal["completed", "fallback", "pending", "error"]
+
+
+class AgentKeyValue(BaseModel):
+    label: str
+    value: str
+
+
+class AgentEvidencePack(BaseModel):
+    id: str
+    label: str
+    source: Literal["FinMind", "Backend", "Yahoo", "Derived"]
+    status: AgentDataStatus = "missing"
+    latest_date: Optional[str] = None
+    summary: str
+    key_values: list[AgentKeyValue] = []
+    warnings: list[str] = []
+
+
+class GeminiStructuredInsight(BaseModel):
+    key_points: list[str] = []
+    conflicts: list[str] = []
+    missing_data: list[str] = []
+    coverage_notes: list[str] = []
+
+
+class ClaudeFinalReview(BaseModel):
+    status: AgentFinalStatus = "Insufficient_Data"
+    confidence: AgentConfidence = "Low"
+    conclusion: str
+    supporting_evidence: list[str] = []
+    key_risks: list[str] = []
+    conflicting_signals: list[str] = []
+    data_limitations: list[str] = []
+    manual_review_required: list[str] = []
+
+
+class AgentStage(BaseModel):
+    name: Literal["FinMind Agent", "Gemini Agent", "Claude Agent"]
+    role: str
+    status: AgentRunStatus = "pending"
+
+
+class MultiAgentAnalysis(BaseModel):
+    pipeline_version: str = "finmind-gemini-claude-v1"
+    agents: list[AgentStage] = []
+    evidence_packs: list[AgentEvidencePack] = []
+    gemini_structured: GeminiStructuredInsight
+    claude_final: ClaudeFinalReview
+
+
+class AgentAnalysisRequest(BaseModel):
+    symbol: str
+    question: Optional[str] = None
+    include_raw_data: bool = False
+
+
+class AgentAnalysisResponse(BaseModel):
+    symbol: str
+    analysis_date: str
+    is_mock: bool = False
+    data_warnings: list[str] = []
+    analysis: MultiAgentAnalysis
 
 
 # ── Taiwan stock response ─────────────────────────────────────────────────────
@@ -186,6 +288,7 @@ class TaiwanStockAnalysisResponse(BaseModel):
     summary: str
     risks: list[str]
     catalysts: list[str]
+    screening_summary: Optional[str] = None
     recommendation: str
     recent_news: list[NewsItem] = []
     chart_data: list[CandlePoint]
@@ -199,6 +302,7 @@ class TaiwanStockAnalysisResponse(BaseModel):
     valuation_summary: Optional[ValuationSummary] = None
     institutional_summary: Optional[InstitutionalSummary] = None
     chip_risk_summary: Optional[ChipRiskSummary] = None
+    cashflow_summary: Optional[CashFlowSummary] = None
     macro_summary: Optional[MacroEnvironmentSummary] = None
     etf_summary: Optional[ETFSummary] = None
     # Phase 2 enrichments (backward-compatible — nullable)
@@ -212,6 +316,56 @@ class TaiwanStockAnalysisResponse(BaseModel):
     comprehensive_analysis: Optional["ComprehensiveAnalysis"] = None
     # Phase 4: elite equity research framework (backward-compatible — nullable)
     equity_research: Optional["EquityResearch"] = None
+    # CAN SLIM observation cards summary (backward-compatible — nullable, opt-in)
+    canslim_summary: Optional[CanslimSummary] = None
+    # CAN SLIM screening result (backward-compatible — nullable, opt-in)
+    screening_result: Optional[ScreeningResult] = None
+    # CAN SLIM consolidated output + reviewer (backward-compatible — nullable, opt-in)
+    canslim_full: Optional[CanslimFullResult] = None
+
+    @model_validator(mode="after")
+    def populate_screening_summary(self) -> "TaiwanStockAnalysisResponse":
+        if not self.screening_summary:
+            self.screening_summary = _verb_free_screening_summary(self.summary, self.trend, self.confidence)
+        return self
+
+
+def _verb_free_screening_summary(summary: str, trend: str, confidence: float) -> str:
+    """Neutral public summary; recommendation remains a deprecated/internal field."""
+    clean_summary = _strip_action_language(summary).strip()
+    if not clean_summary:
+        clean_summary = "條件資料已彙整，請以各面向分數與風險提示交叉檢視。"
+    trend_text = _strip_action_language(str(trend)).strip() or "中立"
+    confidence_pct = round(max(0.0, min(1.0, float(confidence))) * 100)
+    return f"條件狀態：{trend_text}；信心分數：{confidence_pct}%。{clean_summary}"
+
+
+def _strip_action_language(text: str) -> str:
+    replacements = {
+        "buy": "positive",
+        "sell": "negative",
+        "hold": "neutral",
+        "target price": "valuation reference",
+        "price target": "valuation reference",
+        "買進": "正向",
+        "買入": "正向",
+        "賣出": "負向",
+        "賣掉": "負向",
+        "持有": "中性",
+        "續抱": "中性",
+        "目標價": "估值參考",
+        "目標價格": "估值參考",
+        "建議布局": "條件偏正向",
+        "建議佈局": "條件偏正向",
+        "建議減碼": "風險偏高",
+        "建議觀望": "條件中性",
+    }
+    cleaned = str(text)
+    for source, target in replacements.items():
+        cleaned = cleaned.replace(source, target)
+        cleaned = cleaned.replace(source.upper(), target)
+        cleaned = cleaned.replace(source.title(), target)
+    return cleaned
 
 
 # ── Competitor / peers ────────────────────────────────────────────────────────

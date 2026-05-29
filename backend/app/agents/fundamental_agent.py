@@ -11,6 +11,7 @@ Generates Traditional Chinese narrative explaining:
 """
 import os
 from pydantic_ai import Agent
+from backend.app.agents.retry import run_with_backoff
 from backend.app.models.schemas import FundamentalAnalysis, FundamentalMetrics
 from backend.app.services.fintech_fundamentals import get_tw_fundamentals
 
@@ -86,7 +87,7 @@ async def analyze_fundamental(
             output_type=FundamentalAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )
-        result = await agent.run(user_prompt)
+        result = await run_with_backoff(agent, user_prompt)
         analysis = result.output
 
         # Ensure metrics and is_mock are set

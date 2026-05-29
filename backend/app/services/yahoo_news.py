@@ -1,9 +1,13 @@
 """Yahoo Finance news fetcher with 8-category classification."""
 import asyncio
 import httpx
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote
+from xml.etree import ElementTree
 
 YAHOO_QUERY_URL = "https://query2.finance.yahoo.com/v1/finance/search"
+GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
 
 _CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "market": ["台股", "加權指數", "櫃買", "外資", "成交量", "大盤", "集中市場"],
@@ -197,6 +201,143 @@ async def get_tw_stock_news(symbol: str, company_name: str = "") -> list[dict]:
 
     except Exception:
         return []
+
+
+_AI_TECH_NAME_CACHE: dict[str, str] | None = None
+
+
+def _tw_company_name(symbol: str) -> str:
+    """Best-effort symbol→company-name from the AI-tech sector json (free, offline).
+
+    Returns "" when unknown; the caller then searches Yahoo by the bare code,
+    which still returns TW news for the ticker.
+    """
+    global _AI_TECH_NAME_CACHE
+    if _AI_TECH_NAME_CACHE is None:
+        import json
+        from pathlib import Path
+
+        _AI_TECH_NAME_CACHE = {}
+        try:
+            path = Path(__file__).resolve().parent.parent.parent / "data" / "sectors" / "ai_tech_tw.json"
+            with path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            for cat in data.get("categories", {}).values():
+                for stock in cat.get("stocks", []):
+                    code = str(stock.get("code", "")).strip()
+                    name = str(stock.get("name", "")).strip()
+                    if code and name:
+                        _AI_TECH_NAME_CACHE[code] = name
+        except Exception:
+            _AI_TECH_NAME_CACHE = {}
+    return _AI_TECH_NAME_CACHE.get(str(symbol).strip(), "")
+
+
+async def _fetch_google_news_rss(query: str) -> list[dict]:
+    """Per-stock news via Google News RSS (free, no API key).
+
+    Yahoo's query2 search endpoint no longer returns a `news` array, so this is
+    the working free source for per-stock catalysts. Returns rows shaped like
+    `_fetch_yahoo_news` ({title, url, published_at, source, category}).
+    """
+    url = f"{GOOGLE_NEWS_RSS_URL}?q={quote(query)}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
+    try:
+        async with httpx.AsyncClient(
+            timeout=10.0,
+            headers={"User-Agent": "Mozilla/5.0"},
+            follow_redirects=True,
+        ) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            root = ElementTree.fromstring(resp.content)
+    except Exception:
+        return []
+
+    items: list[dict] = []
+    for item in root.iterfind(".//item"):
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        if not title or not link:
+            continue
+        pub_raw = (item.findtext("pubDate") or "").strip()
+        pub_str: str | None = None
+        if pub_raw:
+            try:
+                pub_str = parsedate_to_datetime(pub_raw).astimezone(timezone.utc).strftime("%Y-%m-%d")
+            except (TypeError, ValueError):
+                pub_str = None
+        source_el = item.find("{http://news.google.com/rss}source") or item.find("source")
+        source = (source_el.text or "").strip() if source_el is not None and source_el.text else "Google News"
+        items.append({
+            "title": title,
+            "url": link,
+            "source": source,
+            "published_at": pub_str,
+            "category": _classify(title),
+        })
+    return items
+
+
+async def _fetch_finmind_news(symbol: str, days: int = 4) -> list[dict]:
+    """Per-stock news via FinMind `TaiwanStockNews` (free, structured: title+link+
+    date+source). The dataset only returns ONE day per request, so we query the
+    last few calendar days. Returns [] when no token / on error (caller falls back
+    to Google News RSS). Loop-free per day (cannot trigger an IP ban)."""
+    from datetime import date, timedelta
+
+    from backend.app.services.finmind_query import query_finmind
+
+    items: list[dict] = []
+    seen: set[str] = set()
+    today = date.today()
+    for offset in range(days):
+        day = (today - timedelta(days=offset)).strftime("%Y-%m-%d")
+        res = await query_finmind("TaiwanStockNews", data_id=symbol, start_date=day)
+        if res.get("status") != "ok":
+            if res.get("status") in {"no_token", "ip_banned", "rate_limited"}:
+                break  # FinMind unusable now → let caller fall back
+            continue
+        for row in res.get("rows") or []:
+            title = str(row.get("title") or "").strip()
+            link = str(row.get("link") or "").strip()
+            if not title or not link or title in seen:
+                continue
+            seen.add(title)
+            items.append({
+                "title": title,
+                "url": link,
+                "published_at": str(row.get("date") or "")[:10],
+                "source": str(row.get("source") or "FinMind"),
+                "category": _classify(title),
+            })
+    items.sort(key=lambda x: x.get("published_at") or "", reverse=True)
+    return items[:10]
+
+
+async def get_tw_stock_news_yahoo(symbol: str, company_name: str = "") -> list[dict]:
+    """Free per-stock news for the CANSLIM N pillar (no key required for the RSS path).
+
+    Primary: FinMind `TaiwanStockNews` (structured title+link+date+source — best fit
+    for the N-pillar source contract). Fallback: Google News RSS searched by company
+    name + symbol. Returns up to 10 newest items shaped
+    {title, url, published_at, source}; [] on total failure (caller handles fallback).
+    """
+    try:
+        finmind_items = await _fetch_finmind_news(symbol)
+    except Exception:
+        finmind_items = []
+    if finmind_items:
+        return finmind_items
+
+    name = (company_name or _tw_company_name(symbol)).strip()
+    query = f"{name} {symbol}".strip() if name else str(symbol).strip()
+    try:
+        items = await _fetch_google_news_rss(query)
+    except Exception:
+        return []
+    items = [it for it in items if it.get("title") and it.get("url")]
+    items.sort(key=lambda x: x.get("published_at") or "", reverse=True)
+    return items[:10]
 
 
 async def get_external_news(category: str | None = None) -> dict:

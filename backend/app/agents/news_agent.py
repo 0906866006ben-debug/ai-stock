@@ -10,6 +10,7 @@ Generates Traditional Chinese narrative explaining:
 """
 import os
 from pydantic_ai import Agent
+from backend.app.agents.retry import run_with_backoff
 from backend.app.models.schemas import NewsAnalysis
 from backend.app.services.tw_news_sentiment import get_tw_news, calculate_sentiment_aggregate
 
@@ -81,13 +82,65 @@ async def analyze_news(symbol: str, company_name: str) -> NewsAnalysis:
             output_type=NewsAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )
-        result = await agent.run(user_prompt)
+        result = await run_with_backoff(agent, user_prompt)
         analysis = result.output
+        analysis.sentiment_aggregate = _normalize_sentiment_aggregate(
+            analysis.sentiment_aggregate,
+            sentiment,
+        )
         analysis.is_mock = is_mock
         return analysis
 
     except Exception:
         return _mock_news_analysis(symbol, company_name, news_list, sentiment, is_mock)
+
+
+def _normalize_sentiment_aggregate(raw: dict, fallback: dict) -> dict:
+    """Normalize LLM-shaped sentiment keys back to the internal schema."""
+    normalized = dict(fallback)
+    if isinstance(raw, dict):
+        normalized.update(raw)
+
+    if "overall_score" not in normalized:
+        for alias in ("score", "sentiment_score", "aggregate_score"):
+            if alias in normalized:
+                normalized["overall_score"] = normalized[alias]
+                break
+
+    alias_pairs = {
+        "bullish_count": ("positive", "positive_count", "bullish"),
+        "neutral_count": ("neutral", "neutral_count"),
+        "bearish_count": ("negative", "negative_count", "bearish"),
+    }
+    for canonical, aliases in alias_pairs.items():
+        if canonical in normalized:
+            continue
+        for alias in aliases:
+            if alias in normalized:
+                normalized[canonical] = normalized[alias]
+                break
+
+    try:
+        score = float(normalized.get("overall_score", fallback.get("overall_score", 0.5)))
+    except (TypeError, ValueError):
+        score = float(fallback.get("overall_score", 0.5))
+    normalized["overall_score"] = max(0.0, min(1.0, score))
+
+    if normalized.get("trend") not in {"improving", "stable", "deteriorating"}:
+        if normalized["overall_score"] > 0.65:
+            normalized["trend"] = "improving"
+        elif normalized["overall_score"] < 0.35:
+            normalized["trend"] = "deteriorating"
+        else:
+            normalized["trend"] = "stable"
+
+    for key in ("bullish_count", "neutral_count", "bearish_count"):
+        try:
+            normalized[key] = int(normalized.get(key, fallback.get(key, 0)))
+        except (TypeError, ValueError):
+            normalized[key] = int(fallback.get(key, 0))
+
+    return normalized
 
 
 def _format_news_for_prompt(news_list: list[dict]) -> str:

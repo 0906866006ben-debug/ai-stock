@@ -270,6 +270,62 @@ export interface V2QuantAnalysisResult {
   hypothesis_ids: string[];
 }
 
+export type AgentDataStatus = 'available' | 'partial' | 'missing' | 'stale';
+export type AgentConfidence = 'High' | 'Medium' | 'Low';
+export type AgentFinalStatus = 'Strong' | 'Neutral' | 'Weak' | 'Insufficient_Data';
+
+export interface AgentEvidencePack {
+  id: string;
+  label: string;
+  source: 'FinMind' | 'Backend' | 'Yahoo' | 'Derived';
+  status: AgentDataStatus;
+  latest_date?: string | null;
+  summary: string;
+  key_values: Array<{
+    label: string;
+    value: string;
+  }>;
+  warnings: string[];
+}
+
+export interface GeminiStructuredInsight {
+  key_points: string[];
+  conflicts: string[];
+  missing_data: string[];
+  coverage_notes: string[];
+}
+
+export interface ClaudeFinalReview {
+  status: AgentFinalStatus;
+  confidence: AgentConfidence;
+  conclusion: string;
+  supporting_evidence: string[];
+  key_risks: string[];
+  conflicting_signals: string[];
+  data_limitations: string[];
+  manual_review_required: string[];
+}
+
+export interface MultiAgentAnalysis {
+  pipeline_version: string;
+  agents: Array<{
+    name: 'FinMind Agent' | 'Gemini Agent' | 'Claude Agent';
+    role: string;
+    status: 'completed' | 'fallback' | 'pending' | 'error';
+  }>;
+  evidence_packs: AgentEvidencePack[];
+  gemini_structured: GeminiStructuredInsight;
+  claude_final: ClaudeFinalReview;
+}
+
+export interface AgentAnalysisResponse {
+  symbol: string;
+  analysis_date: string;
+  is_mock: boolean;
+  data_warnings: string[];
+  analysis: MultiAgentAnalysis;
+}
+
 export interface AIAnalysisResult {
   symbol: string;
   symbol_name: string;
@@ -292,6 +348,7 @@ export interface AIAnalysisResult {
   evidence_ledger: EvidenceItem[];
   structure_panel: StructurePanelData;
   v2_quant_analysis?: V2QuantAnalysisResult;
+  multi_agent_analysis?: MultiAgentAnalysis;
   report_sections: ReportSection[];
   data_sources: string[];
   models_used: string[];

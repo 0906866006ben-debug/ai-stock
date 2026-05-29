@@ -19,7 +19,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 import pandas as pd
 
@@ -30,8 +30,13 @@ from backend.app.services.screener_service import (
     _compute_base_features,
     evaluate_surge_candidate,
 )
+from backend.app.services.strategy.canslim.observer import observe as observe_canslim
+from backend.app.services.strategy.canslim.params import load_params as load_canslim_params
+from backend.app.services.strategy.canslim.types import MarketFeatures
 
 logger = logging.getLogger(__name__)
+
+CANSLIM_CANDIDATE_TYPE = "CANSLIM觀察"
 
 
 _SCHEMA_SQL = """
@@ -54,6 +59,24 @@ CREATE TABLE IF NOT EXISTS backtest_signals (
     base_high REAL,
     base_low REAL,
     avg_volume_50 REAL,
+    return_90d REAL,
+    avg_turnover_20 REAL,
+    base_range_pct REAL,
+    volume_today_shares REAL,
+    close_to_base_high_ratio REAL,
+    ema5_slope REAL,
+    ema10_slope REAL,
+    ema20_slope REAL,
+    ema_micro_upturn_score INTEGER,
+    base_compression_score INTEGER,
+    ema_down_to_up_transition_score INTEGER,
+    trend_template_ok INTEGER,
+    entry_tier INTEGER DEFAULT 0,
+    canslim_horizon TEXT,
+    canslim_grade TEXT,
+    canslim_signal_raw INTEGER,
+    canslim_signal_achievable_max INTEGER,
+    atr20 REAL,
     PRIMARY KEY (run_id, signal_date, stock_id)
 );
 CREATE INDEX IF NOT EXISTS idx_signals_date ON backtest_signals(signal_date);
@@ -71,7 +94,29 @@ def _migrate_signals_schema(conn: sqlite3.Connection) -> None:
     """
     cursor = conn.execute("PRAGMA table_info(backtest_signals)")
     existing = {row[1] for row in cursor.fetchall()}
-    for col, typ in (("base_high", "REAL"), ("base_low", "REAL"), ("avg_volume_50", "REAL")):
+    for col, typ in (
+        ("base_high", "REAL"),
+        ("base_low", "REAL"),
+        ("avg_volume_50", "REAL"),
+        ("return_90d", "REAL"),
+        ("avg_turnover_20", "REAL"),
+        ("base_range_pct", "REAL"),
+        ("volume_today_shares", "REAL"),
+        ("close_to_base_high_ratio", "REAL"),
+        ("ema5_slope", "REAL"),
+        ("ema10_slope", "REAL"),
+        ("ema20_slope", "REAL"),
+        ("ema_micro_upturn_score", "INTEGER"),
+        ("base_compression_score", "INTEGER"),
+        ("ema_down_to_up_transition_score", "INTEGER"),
+        ("trend_template_ok", "INTEGER"),
+        ("entry_tier", "INTEGER DEFAULT 0"),
+        ("canslim_horizon", "TEXT"),
+        ("canslim_grade", "TEXT"),
+        ("canslim_signal_raw", "INTEGER"),
+        ("canslim_signal_achievable_max", "INTEGER"),
+        ("atr20", "REAL"),
+    ):
         if col not in existing:
             try:
                 conn.execute(f"ALTER TABLE backtest_signals ADD COLUMN {col} {typ}")
@@ -88,8 +133,15 @@ class ReplayConfig:
     end_date: str              # YYYY-MM-DD inclusive
     stock_universe: list[str]  # list of stock_ids to test
     target_candidate_types: list[str] = field(default_factory=lambda: ["起漲前觀察"])
-    lookback_bars: int = 150   # how many bars of history each evaluation needs
+    lookback_bars: int = 220   # enough bars for Phase 11 EMA200 Trend Template
     market_df: Optional[pd.DataFrame] = None  # TAIEX history for RS computation
+    canslim_fin_metrics_by_stock: dict[str, dict] = field(default_factory=dict)
+    canslim_detail_by_stock: dict[str, dict] = field(default_factory=dict)
+    canslim_market: MarketFeatures | dict | None = None
+    canslim_universe_returns_60d: dict[str, float] | None = None
+    canslim_universe_returns_252d: dict[str, float] | None = None
+    canslim_eps_filing_dates_by_stock: dict[str, str] = field(default_factory=dict)
+    canslim_event_window_by_stock: dict[str, bool] = field(default_factory=dict)
 
 
 @dataclass
@@ -117,7 +169,7 @@ class ReplaySummary:
 # `reset_feature_cache()`.
 # ───────────────────────────────────────────────────────────────────────────
 
-_FEATURE_CACHE: dict[tuple[str, str, str], Optional[dict]] = {}
+_FEATURE_CACHE: dict[tuple[str, int, str, str], Optional[dict]] = {}
 
 
 # Rule keys whose values affect _compute_base_features output.
@@ -165,14 +217,25 @@ def feature_cache_size() -> int:
     return len(_FEATURE_CACHE)
 
 
+_SCHEMA_INITIALIZED: set[str] = set()
+
+
 def initialize_replay_schema(db_path: Path | str) -> None:
+    # Phase 9.8: skip if already done in this process (called per trial otherwise).
+    key = str(Path(db_path).resolve())
+    if key in _SCHEMA_INITIALIZED:
+        return
     conn = sqlite3.connect(db_path)
     try:
+        # Phase 9.8 speedup: WAL + relaxed sync for concurrent worker writes.
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         conn.executescript(_SCHEMA_SQL)
         _migrate_signals_schema(conn)
         conn.commit()
     finally:
         conn.close()
+    _SCHEMA_INITIALIZED.add(key)
 
 
 def replay_signals(
@@ -197,14 +260,42 @@ def replay_signals(
     rows_to_persist: list[dict] = []
     by_type_counter: dict[str, int] = {t: 0 for t in config.target_candidate_types}
     days_processed = 0
+    wants_canslim = CANSLIM_CANDIDATE_TYPE in config.target_candidate_types
+    wants_legacy = any(candidate_type != CANSLIM_CANDIDATE_TYPE for candidate_type in config.target_candidate_types)
+    canslim_params = load_canslim_params() if wants_canslim else None
+    canslim_cfg = canslim_params["backtest"]["canslim"] if canslim_params else {}
+    canslim_horizon = str(canslim_cfg.get("horizon", "swing_term"))
+    canslim_min_grade = str(canslim_cfg.get("min_entry_grade", "B"))
 
     # Resolve cache namespace ONCE for this session — the shape rules don't
     # change between trials, so this hash is constant for the whole replay.
     cur_rules = load_surge_candidate_rules()
     namespace = _cache_namespace(cur_rules)
 
+    # ── Fast-fail pre-filter ──────────────────────────────────────────────
+    # Phase 11 keeps this intentionally loose: only immutable Flat Base entry
+    # structure is checked here. Quality gates are handled by entry_tier and
+    # position sizing after evaluate_surge_candidate computes scores.
+    pre_filter_active = wants_legacy and (
+        len(config.target_candidate_types) == 1
+        and "起漲前觀察" in config.target_candidate_types
+    )
+    pp = cur_rules.get("price_position", {})
+    em = cur_rules.get("ema", {})
+    vol = cur_rules.get("volume", {})
+    cls = cur_rules.get("classification", {})
+    pf_range_min = max(float(pp.get("pre_breakout_range_90d_min", 0.10)), 0.10)
+    pf_range_max = min(float(pp.get("pre_breakout_range_90d_max", 0.30)), 0.30)
+    pf_return_90d_min = -0.25
+    pf_ema_spread_max = 0.08
+    pf_vol_contraction_max = min(float(vol.get("pre_breakout_volume_contraction_max", 1.0)), 1.0)
+    pf_close_to_base_high_max = 1.08
+    pf_turnover_min = 30_000_000.0
+    pf_breakout_buffer = float(cls.get("breakout_pivot_buffer", 0.001))
+
     cache_hits = 0
     cache_misses = 0
+    pre_filter_skipped = 0
 
     for day_idx, as_of_date in enumerate(trading_dates):
         # Point-in-time market frame (TAIEX up to this date)
@@ -217,6 +308,22 @@ def replay_signals(
             if len(df_hist) < 65:   # need history.minimum_days
                 continue
 
+            if wants_canslim:
+                canslim_row = _build_canslim_signal_row(
+                    config,
+                    stock_id,
+                    as_of_date,
+                    df_hist,
+                    canslim_horizon,
+                    canslim_min_grade,
+                )
+                if canslim_row is not None:
+                    rows_to_persist.append(canslim_row)
+                    by_type_counter[CANSLIM_CANDIDATE_TYPE] = by_type_counter.get(CANSLIM_CANDIDATE_TYPE, 0) + 1
+
+            if not wants_legacy:
+                continue
+
             # Rename columns to PascalCase (evaluate_surge_candidate's _canonicalize_ohlcv expects this)
             df_eval = df_hist.rename(
                 columns={"open": "Open", "high": "High", "low": "Low",
@@ -224,7 +331,7 @@ def replay_signals(
             )
 
             # ── Feature cache lookup ────────────────────────────────────
-            cache_key = (namespace, stock_id, as_of_date)
+            cache_key = (namespace, config.lookback_bars, stock_id, as_of_date)
             cached_features = _FEATURE_CACHE.get(cache_key)
             if cached_features is None and cache_key not in _FEATURE_CACHE:
                 # Cache miss — compute features once and store. We replicate the
@@ -260,13 +367,47 @@ def replay_signals(
             if cached_features is None:
                 continue   # negative cache — known invalid
 
+            # ── Phase 9.8.1 fast-fail: skip full evaluate when basic 起漲前觀察 ──
+            # ── gates fail. Saves ~5-7 ms on 80-90% of (date, stock) pairs. ─────
+            if pre_filter_active:
+                r90 = cached_features.get("range_90d", 0.0)
+                if not (pf_range_min <= r90 <= pf_range_max):
+                    pre_filter_skipped += 1
+                    continue
+                r90d = cached_features.get("return_90d", 0.0)
+                if r90d < pf_return_90d_min:
+                    pre_filter_skipped += 1
+                    continue
+                es = cached_features.get("ema_spread", 1.0)
+                if es > pf_ema_spread_max:
+                    pre_filter_skipped += 1
+                    continue
+                vcr = cached_features.get("volume_contraction_ratio", 1.0)
+                if vcr > pf_vol_contraction_max:
+                    pre_filter_skipped += 1
+                    continue
+                ctbh = cached_features.get("close_to_base_high_ratio", 0.0)
+                # close_to_base_high too high = already extended past buy zone
+                if ctbh > pf_close_to_base_high_max:
+                    pre_filter_skipped += 1
+                    continue
+                close_today = cached_features.get("close_today", 0.0)
+                base_high = cached_features.get("base_high", 0.0)
+                if base_high <= 0 or close_today <= base_high * (1.0 + pf_breakout_buffer):
+                    pre_filter_skipped += 1
+                    continue
+                avg_turnover_20 = cached_features.get("avg_turnover_20", 0.0)
+                if avg_turnover_20 < pf_turnover_min:
+                    pre_filter_skipped += 1
+                    continue
+
             try:
                 result = evaluate_surge_candidate(
                     stock_id,
                     stock_id,  # company_name placeholder
                     df_eval,
                     market_slice,
-                    include_unfit=False,
+                    include_unfit=pre_filter_active,
                     precomputed_features=cached_features,
                 )
             except Exception as exc:
@@ -275,20 +416,31 @@ def replay_signals(
 
             if result is None:
                 continue
-            if result.candidate_type not in config.target_candidate_types:
+            entry_tier = int(getattr(result.metrics, "entry_tier", 0) or 0)
+            tiered_entry_match = (
+                entry_tier > 0
+                and "起漲前觀察" in config.target_candidate_types
+            )
+            if result.candidate_type not in config.target_candidate_types and not tiered_entry_match:
                 continue
+            row_candidate_type = (
+                result.candidate_type
+                if result.candidate_type != "不符合"
+                else "起漲前觀察"
+            )
 
             # Phase 9.8: persist base_high/base_low/avg_volume_50 for downstream
             # dynamic Measured Move target computation in trade_simulator.
             base_high = float(cached_features.get("base_high", 0.0)) if cached_features else 0.0
             base_low = float(cached_features.get("base_low", 0.0)) if cached_features else 0.0
             avg_volume_50 = float(cached_features.get("avg_volume_50_shares", 0.0)) if cached_features else 0.0
+            volume_today_shares = float(cached_features.get("volume_today_shares", 0.0)) if cached_features else 0.0
 
             rows_to_persist.append({
                 "run_id": config.run_id,
                 "signal_date": as_of_date,
                 "stock_id": stock_id,
-                "candidate_type": result.candidate_type,
+                "candidate_type": row_candidate_type,
                 "surge_candidate_score": int(result.surge_candidate_score),
                 "pre_breakout_score": int(result.metrics.pre_breakout_score),
                 "confidence_score": int(result.confidence_score),
@@ -296,6 +448,7 @@ def replay_signals(
                 "close_price": float(df_eval["Close"].iloc[-1]),
                 "range_90d": float(result.metrics.range_90d),
                 "return_60d": float(result.metrics.return_60d),
+                "return_90d": float(result.metrics.return_90d),
                 "return_20d": float(result.metrics.return_20d),
                 "volume_contraction_ratio": float(result.metrics.volume_contraction_ratio),
                 "ema_spread": float(result.metrics.ema_spread),
@@ -303,8 +456,25 @@ def replay_signals(
                 "base_high": base_high,
                 "base_low": base_low,
                 "avg_volume_50": avg_volume_50,
+                "avg_turnover_20": float(result.metrics.avg_turnover_20),
+                "base_range_pct": float(result.metrics.base_range_pct),
+                "volume_today_shares": volume_today_shares,
+                "close_to_base_high_ratio": float(result.metrics.close_to_base_high_ratio),
+                "ema5_slope": float(result.metrics.ema5_slope),
+                "ema10_slope": float(result.metrics.ema10_slope),
+                "ema20_slope": float(result.metrics.ema20_slope),
+                "ema_micro_upturn_score": int(result.metrics.ema_micro_upturn_score),
+                "base_compression_score": int(result.scores.base_compression_score),
+                "ema_down_to_up_transition_score": int(result.metrics.ema_down_to_up_transition_score),
+                "trend_template_ok": int(bool(cached_features.get("trend_template_ok", False))) if cached_features else 0,
+                "entry_tier": entry_tier,
+                "canslim_horizon": None,
+                "canslim_grade": None,
+                "canslim_signal_raw": None,
+                "canslim_signal_achievable_max": None,
+                "atr20": _atr20(df_hist),
             })
-            by_type_counter[result.candidate_type] = by_type_counter.get(result.candidate_type, 0) + 1
+            by_type_counter[row_candidate_type] = by_type_counter.get(row_candidate_type, 0) + 1
 
         days_processed += 1
         if progress_callback and (day_idx % 10 == 0):
@@ -313,17 +483,157 @@ def replay_signals(
     _persist_signals(db_path, rows_to_persist)
 
     if cache_hits + cache_misses > 0:
-        logger.info("feature cache hits=%d misses=%d hit_rate=%.1f%% (size=%d)",
+        logger.info("feature cache hits=%d misses=%d hit_rate=%.1f%% (size=%d) "
+                    "pre_filter_skipped=%d (saved %.1f%% of evaluate calls)",
                     cache_hits, cache_misses,
                     100.0 * cache_hits / max(1, cache_hits + cache_misses),
-                    len(_FEATURE_CACHE))
+                    len(_FEATURE_CACHE),
+                    pre_filter_skipped,
+                    100.0 * pre_filter_skipped / max(1, cache_hits + cache_misses))
 
-    return ReplaySummary(
+    summary = ReplaySummary(
         run_id=config.run_id,
         days_processed=days_processed,
         signals_generated=len(rows_to_persist),
         by_type=by_type_counter,
     )
+    # Phase 9.8 speedup: also return rows so caller can skip a load_signals DB read.
+    summary.signal_rows = rows_to_persist  # type: ignore[attr-defined]
+    return summary
+
+
+def _build_canslim_signal_row(
+    config: ReplayConfig,
+    stock_id: str,
+    as_of_date: str,
+    df_hist: pd.DataFrame,
+    horizon: str,
+    min_grade: str,
+) -> dict | None:
+    try:
+        cards = observe_canslim(
+            stock_id,
+            as_of_date,
+            store=_ReplayStoreAdapter(stock_id, df_hist),
+            market=config.canslim_market or MarketFeatures(),
+            fin_metrics=config.canslim_fin_metrics_by_stock.get(stock_id),
+            detail=config.canslim_detail_by_stock.get(stock_id),
+            universe_returns_60d=config.canslim_universe_returns_60d,
+            universe_returns_252d=config.canslim_universe_returns_252d,
+            event_window_active=config.canslim_event_window_by_stock.get(stock_id, False),
+            eps_filing_date=config.canslim_eps_filing_dates_by_stock.get(stock_id),
+        )
+    except Exception as exc:
+        logger.debug("CANSLIM observe failed for %s on %s: %s", stock_id, as_of_date, exc)
+        return None
+
+    card = cards.get(horizon)
+    if card is None:
+        return None
+    grade = str(card.scores.get("grade", "C"))
+    if bool(card.scores.get("hard_blocked", False)) or not _grade_at_least(grade, min_grade):
+        return None
+
+    latest = df_hist.iloc[-1]
+    base_high = _tail_float(df_hist["high"], 20, "max")
+    base_low = _tail_float(df_hist["low"], 20, "min")
+    avg_volume_50 = _tail_float(df_hist["volume"], 50, "mean")
+    close = float(latest["close"])
+    return {
+        "run_id": config.run_id,
+        "signal_date": as_of_date,
+        "stock_id": stock_id,
+        "candidate_type": CANSLIM_CANDIDATE_TYPE,
+        "surge_candidate_score": int(card.scores.get("signal", 0) or 0),
+        "pre_breakout_score": int(card.scores.get("signal", 0) or 0),
+        "confidence_score": int(card.scores.get("confidence", 0) or 0),
+        "risk_score": int(card.scores.get("risk", 0) or 0),
+        "close_price": close,
+        "range_90d": _range_pct(df_hist.tail(90)),
+        "return_60d": _return_pct(df_hist["close"], 60),
+        "return_90d": _return_pct(df_hist["close"], 90),
+        "return_20d": _return_pct(df_hist["close"], 20),
+        "volume_contraction_ratio": 0.0,
+        "ema_spread": 0.0,
+        "sector_category": None,
+        "base_high": base_high,
+        "base_low": base_low,
+        "avg_volume_50": avg_volume_50,
+        "avg_turnover_20": _tail_float(df_hist["turnover"], 20, "mean") if "turnover" in df_hist else 0.0,
+        "base_range_pct": ((base_high - base_low) / base_low) if base_low else 0.0,
+        "volume_today_shares": float(latest["volume"]),
+        "close_to_base_high_ratio": (close / base_high) if base_high else 0.0,
+        "ema5_slope": 0.0,
+        "ema10_slope": 0.0,
+        "ema20_slope": 0.0,
+        "ema_micro_upturn_score": 0,
+        "base_compression_score": 0,
+        "ema_down_to_up_transition_score": 0,
+        "trend_template_ok": 0,
+        "entry_tier": 0,
+        "canslim_horizon": horizon,
+        "canslim_grade": grade,
+        "canslim_signal_raw": int(card.scores.get("signal_raw", 0) or 0),
+        "canslim_signal_achievable_max": int(card.scores.get("signal_achievable_max", 0) or 0),
+        "atr20": _atr20(df_hist),
+    }
+
+
+class _ReplayStoreAdapter:
+    def __init__(self, stock_id: str, df_hist: pd.DataFrame) -> None:
+        self.stock_id = stock_id
+        self.df_hist = df_hist
+
+    def get_ohlcv_as_of(self, stock_id: str, as_of_date: str, lookback_bars: int) -> pd.DataFrame:
+        if stock_id != self.stock_id:
+            return pd.DataFrame(columns=self.df_hist.columns)
+        filtered = self.df_hist[self.df_hist["date"] <= as_of_date]
+        return filtered.tail(lookback_bars).reset_index(drop=True)
+
+
+def _grade_at_least(grade: str, minimum: str) -> bool:
+    rank = {"C": 0, "B": 1, "A": 2, "S": 3}
+    return rank.get(grade, -1) >= rank.get(minimum, 1)
+
+
+def _tail_float(series: pd.Series, length: int, op: str) -> float:
+    values = pd.to_numeric(series.tail(length), errors="coerce").dropna()
+    if values.empty:
+        return 0.0
+    if op == "max":
+        return float(values.max())
+    if op == "min":
+        return float(values.min())
+    return float(values.mean())
+
+
+def _return_pct(close: pd.Series, lookback: int) -> float:
+    values = pd.to_numeric(close, errors="coerce").dropna()
+    if len(values) <= lookback:
+        return 0.0
+    prior = float(values.iloc[-lookback - 1])
+    return (float(values.iloc[-1]) - prior) / prior if prior else 0.0
+
+
+def _range_pct(frame: pd.DataFrame) -> float:
+    if frame.empty:
+        return 0.0
+    high = float(pd.to_numeric(frame["high"], errors="coerce").max())
+    low = float(pd.to_numeric(frame["low"], errors="coerce").min())
+    return (high - low) / low if low else 0.0
+
+
+def _atr20(frame: pd.DataFrame) -> float:
+    if len(frame) < 21:
+        return 0.0
+    bars = frame.tail(21).reset_index(drop=True)
+    true_ranges = []
+    for idx in range(1, len(bars)):
+        high = float(bars.loc[idx, "high"])
+        low = float(bars.loc[idx, "low"])
+        prev_close = float(bars.loc[idx - 1, "close"])
+        true_ranges.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
+    return float(sum(true_ranges[-20:]) / 20) if true_ranges else 0.0
 
 
 def _slice_market_to_date(market_df: pd.DataFrame, as_of_date: str, lookback_bars: int) -> Optional[pd.DataFrame]:
@@ -345,14 +655,29 @@ def _persist_signals(db_path: Path | str, rows: Iterable[dict]) -> int:
           (run_id, signal_date, stock_id, candidate_type, surge_candidate_score,
            pre_breakout_score, confidence_score, risk_score, close_price,
            range_90d, return_60d, return_20d, volume_contraction_ratio,
-           ema_spread, sector_category, base_high, base_low, avg_volume_50)
+           ema_spread, sector_category, base_high, base_low, avg_volume_50,
+           return_90d, avg_turnover_20, base_range_pct, volume_today_shares,
+           close_to_base_high_ratio, ema5_slope, ema10_slope, ema20_slope,
+           ema_micro_upturn_score, base_compression_score,
+           ema_down_to_up_transition_score, trend_template_ok,
+           entry_tier, canslim_horizon, canslim_grade, canslim_signal_raw,
+           canslim_signal_achievable_max, atr20)
         VALUES (:run_id, :signal_date, :stock_id, :candidate_type, :surge_candidate_score,
                 :pre_breakout_score, :confidence_score, :risk_score, :close_price,
                 :range_90d, :return_60d, :return_20d, :volume_contraction_ratio,
-                :ema_spread, :sector_category, :base_high, :base_low, :avg_volume_50)
+                :ema_spread, :sector_category, :base_high, :base_low, :avg_volume_50,
+                :return_90d, :avg_turnover_20, :base_range_pct, :volume_today_shares,
+                :close_to_base_high_ratio, :ema5_slope, :ema10_slope, :ema20_slope,
+                :ema_micro_upturn_score, :base_compression_score,
+                :ema_down_to_up_transition_score, :trend_template_ok,
+                :entry_tier, :canslim_horizon, :canslim_grade, :canslim_signal_raw,
+                :canslim_signal_achievable_max, :atr20)
     """
     conn = sqlite3.connect(db_path)
     try:
+        # WAL was set at schema init; reapply synchronous=NORMAL on this conn
+        # so this write also benefits.
+        conn.execute("PRAGMA synchronous=NORMAL")
         conn.executemany(sql, rows)
         conn.commit()
     finally:
