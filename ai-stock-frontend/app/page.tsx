@@ -30,6 +30,7 @@ import EarningsCalendar from './components/EarningsCalendar';
 import ETFHoldingsCard from './components/ETFHoldingsCard';
 import { AIAnalysisPage } from './components/ai-analysis/AIAnalysisPage';
 import ScreenerView from './components/ScreenerView';
+import CanslimGradeCard from './components/CanslimGradeCard';
 import BoldPlanView from './components/BoldPlanView';
 import MarketHeatmapView from './components/MarketHeatmapView';
 
@@ -638,6 +639,20 @@ export default function DashboardPage() {
                             <ETFHoldingsCard data={twResult.etf_holdings} />
                           )}
                         </section>
+
+                        {!twResult.is_etf && (
+                          <section className="space-y-4">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                                CANSLIM
+                              </p>
+                              <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                                CANSLIM 七大面向分級
+                              </h2>
+                            </div>
+                            <CanslimGradeCard symbol={twResult.symbol} />
+                          </section>
+                        )}
 
                         <section className="space-y-4">
                           <div>

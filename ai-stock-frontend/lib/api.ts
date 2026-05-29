@@ -13,6 +13,7 @@ import type {
   EarningsCalendarResponse,
   ETFHoldingsResponse,
   CandlePoint,
+  CanslimFullResult,
 } from './types';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim().replace(/\/+$/, '');
@@ -58,6 +59,16 @@ export async function analyzeTW(symbol: string): Promise<TaiwanStockAnalysisResp
   const { data } = await axios.get<TaiwanStockAnalysisResponse>(`${API_BASE}/analyze/tw`, {
     params: { symbol: symbol.trim() },
   });
+  return data;
+}
+
+export async function getTwScreenFull(
+  symbol: string,
+  asOfDate?: string
+): Promise<CanslimFullResult> {
+  const params: Record<string, string> = { symbol: symbol.trim() };
+  if (asOfDate) params.as_of_date = asOfDate;
+  const { data } = await axios.get<CanslimFullResult>(`${API_BASE}/tw/screen/full`, { params });
   return data;
 }
 
@@ -195,4 +206,5 @@ export type {
   DividendCalendarResponse,
   EarningsCalendarResponse,
   ETFHoldingsResponse,
+  CanslimFullResult,
 };

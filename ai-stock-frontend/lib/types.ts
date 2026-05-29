@@ -596,6 +596,56 @@ export interface ExternalNewsResponse {
   status: string;
 }
 
+// ── CANSLIM full grading (/tw/screen/full → CanslimFullResult) ────────────────
+
+export type CanslimFactor = 'C' | 'A' | 'N' | 'S' | 'L' | 'I' | 'M';
+export type PillarStatus =
+  | 'Pass'
+  | 'Weak'
+  | 'Fail'
+  | 'AI_Review_Required'
+  | 'Neutral'
+  | 'Insufficient_Data';
+export type CanslimGrade = 'S' | 'A' | 'B' | 'C' | 'D';
+export type CanslimPassStatus = 'PASS' | 'WATCHLIST' | 'FAIL' | 'INSUFFICIENT_DATA';
+export type CanslimLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+export type StructureStatus = 'intact' | 'weakening' | 'invalidated' | 'profit_watch';
+
+export interface CanslimFactorScore {
+  factor: CanslimFactor;
+  status: PillarStatus;
+  score: number | null;
+  reason: string;
+  data_used: string[];
+  missing_data: string[];
+}
+
+export interface CanslimFullResult {
+  stock_id: string;
+  as_of_date: string;
+  overall_score: number;
+  grade: CanslimGrade;
+  pass_status: CanslimPassStatus;
+  confidence: CanslimLevel;
+  risk_level: CanslimLevel;
+  per_factor_scores: CanslimFactorScore[];
+  positive_reasons: string[];
+  negative_reasons: string[];
+  missing_data: string[];
+  invalidation_signals: string[];
+  observation_conditions: string[];
+  suggested_strategy: string;
+  data_quality: CanslimLevel;
+  is_mock_or_fallback_data: boolean;
+  // Embedded ScreeningResult carries the swing structure/exit fields.
+  screening_result?: {
+    market_regime?: 'risk_on' | 'risk_off' | 'severe' | 'unknown';
+    structure_status?: StructureStatus;
+    exit_signals?: string[];
+    data_warnings?: string[];
+  } | null;
+}
+
 // ── Portfolio (client-side) ───────────────────────────────────────────────────
 
 export interface Position {
