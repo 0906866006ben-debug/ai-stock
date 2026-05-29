@@ -120,3 +120,18 @@ def test_cohort_rows_end_to_end(tmp_path: Path, monkeypatch):
     assert row["pass_status"] in {"PASS", "WATCHLIST"}
     assert row["C_status"] == "Pass"
     assert abs(row["fwd_1m"] - (220.0 / 200.0 - 1.0)) < 1e-6
+
+
+def test_cohort_rows_forwards_max_staleness_days(tmp_path: Path, monkeypatch):
+    """Survivorship correction: _cohort_rows must pass max_staleness_days through to
+    get_universe_as_of so delisted names drop on their last trading day."""
+    store, dates = _store(tmp_path)
+    captured: dict = {}
+
+    def fake_universe(as_of, data_store, **kwargs):
+        captured.update(kwargs)
+        return []  # empty → loop continues, no rows needed for this assertion
+
+    monkeypatch.setattr(cb, "get_universe_as_of", fake_universe)
+    cb._cohort_rows(store, None, load_params(), ["AAA"], [dates[100]], max_staleness_days=10)
+    assert captured.get("max_staleness_days") == 10

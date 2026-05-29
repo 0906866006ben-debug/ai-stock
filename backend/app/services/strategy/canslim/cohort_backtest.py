@@ -110,6 +110,7 @@ def _cohort_rows(
     dates: list[str],
     *,
     turnover_floor: float | None = None,
+    max_staleness_days: int | None = None,
 ) -> pd.DataFrame:
     """Screen the PIT universe at each date and attach forward returns. Pure over the
     injected stores so it can be unit-tested without the Cached layer."""
@@ -117,7 +118,10 @@ def _cohort_rows(
     taiex_cache: dict[str, dict[str, Any] | None] = {}
     rows: list[dict[str, Any]] = []
     for idx, as_of in enumerate(dates, start=1):
-        universe = get_universe_as_of(as_of, data_store, turnover_floor=turnover_floor, candidate_symbols=candidates)
+        universe = get_universe_as_of(
+            as_of, data_store, turnover_floor=turnover_floor,
+            candidate_symbols=candidates, max_staleness_days=max_staleness_days,
+        )
         if not universe:
             continue
         market = _market_features_for_entry(as_of, market=None, data_store=data_store, universe=universe, cache=market_cache)
@@ -281,6 +285,7 @@ def run_cohort_backtest(
     output_dir: Path | str = "artifacts/canslim_cohort",
     candidate_symbols: list[str] | None = None,
     turnover_floor: float | None = None,
+    max_staleness_days: int | None = None,
 ) -> CohortReport:
     started = time.time()
     out_dir = Path(output_dir)
@@ -300,7 +305,10 @@ def run_cohort_backtest(
     pit_store = CachedPitFundamentalsStore(pit_db_path, universe=candidates)
     params = load_params()
     dates = cadence_grid(data_store, start_date, end_date, cadence_days=cadence_days)
-    df = _cohort_rows(data_store, pit_store, params, candidates, dates, turnover_floor=turnover_floor)
+    df = _cohort_rows(
+        data_store, pit_store, params, candidates, dates,
+        turnover_floor=turnover_floor, max_staleness_days=max_staleness_days,
+    )
 
     df.to_csv(rows_csv, index=False, encoding="utf-8-sig")
     report = CohortReport(
