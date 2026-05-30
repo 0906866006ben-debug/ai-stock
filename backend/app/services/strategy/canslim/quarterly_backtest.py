@@ -287,22 +287,79 @@ def run_quarterly_backtest(
     return report
 
 
+def _close_series(store, symbol: str, start: str, end: str, lookback: int = 180) -> pd.Series | None:
+    """Daily close series (index = 'YYYY-MM-DD') for [start, end], or None."""
+    bars = store.get_ohlcv_as_of(symbol, end, lookback)
+    if bars is None or bars.empty:
+        return None
+    b = bars.copy()
+    b["_d"] = b["date"].astype(str).str[:10]
+    b = b[(b["_d"] >= start) & (b["_d"] <= end)]
+    if b.empty:
+        return None
+    s = pd.Series(pd.to_numeric(b["close"], errors="coerce").values, index=b["_d"].values).dropna()
+    return s if not s.empty else None
+
+
+def _trading_days(store, entry: str, exit_: str) -> list[str]:
+    """TAIEX trading days in (entry, exit] — the daily mark-to-market grid for a quarter."""
+    s = _close_series(store, "TAIEX", entry, exit_)
+    if s is None:
+        return [exit_]
+    days = [d for d in s.index if d > entry]
+    return days or [exit_]
+
+
+def _quarter_daily_equity(store, basket, entry, exit_, start_equity, cfg: QuarterlyConfig):
+    """DAILY mark-to-market equity for the equal-weight basket held entry->exit, so maxDD
+    captures intra-quarter troughs (quarterly-point sampling hides them). Round-trip cost +
+    slippage applied once at entry as a haircut. Limit-up-locked / no-data names are skipped
+    (no fill). Delisted-mid-quarter names carry at their last available close.
+    Returns (list[{date, equity}] over (entry, exit], end_equity, n_filled)."""
+    held: dict[str, float] = {}
+    for sym in basket:
+        ec, locked = _entry_close(store, sym, entry)
+        if ec and ec > 0 and not locked:
+            held[sym] = ec
+    if not held:
+        return [{"date": exit_, "equity": start_equity}], start_equity, 0
+    base = start_equity * (1.0 - (cfg.round_trip_cost + cfg.slippage))
+    series = {sym: _close_series(store, sym, entry, exit_) for sym in held}
+    rows: list[dict[str, Any]] = []
+    end_equity = base
+    for d in _trading_days(store, entry, exit_):
+        rets: list[float] = []
+        for sym, ec in held.items():
+            s = series.get(sym)
+            if s is None:
+                rets.append(1.0)
+                continue
+            sub = s[s.index <= d]
+            c = float(sub.iloc[-1]) if len(sub) else ec     # carry last close (delisted) / entry
+            rets.append(c / ec)
+        factor = sum(rets) / len(rets)
+        end_equity = base * factor
+        rows.append({"date": d, "equity": end_equity})
+    return rows, end_equity, len(held)
+
+
 def _simulate_arm(data_store, pit_store, dates, ranked_by_date, cfg: QuarterlyConfig) -> QuarterlyResult:
     equity = float(cfg.initial_capital)
     curve_rows: list[dict[str, Any]] = [{"date": dates[0], "equity": equity}]
     rebal_rows: list[dict[str, Any]] = []
     for entry, exit_ in zip(dates[:-1], dates[1:]):
-        ranked = ranked_by_date.get(entry)
-        basket = select_basket(ranked, pit_store, entry, cfg)
-        net, n_filled = basket_quarter_return(data_store, basket, entry, exit_, cfg) if basket else (0.0, 0)
-        equity *= 1.0 + net
-        curve_rows.append({"date": exit_, "equity": equity})
-        rebal_rows.append({"date": entry, "n_eligible": len(basket), "n_held": n_filled, "net_return": round(net, 4)})
-    curve = pd.DataFrame(curve_rows)
+        basket = select_basket(ranked_by_date.get(entry), pit_store, entry, cfg)
+        day_rows, end_equity, n_filled = _quarter_daily_equity(data_store, basket, entry, exit_, equity, cfg)
+        curve_rows.extend(day_rows)
+        net = end_equity / equity - 1.0 if equity else 0.0
+        rebal_rows.append({"date": entry, "n_selected": len(basket), "n_held": n_filled, "net_return": round(net, 4)})
+        equity = end_equity
+    curve = pd.DataFrame(curve_rows).drop_duplicates(subset="date", keep="last").reset_index(drop=True)
     years = max((pd.Timestamp(dates[-1]) - pd.Timestamp(dates[0])).days / 365.25, 1e-9)
-    metrics = _metrics_from_curve(curve, years)
-    annual = _annual_returns(curve)
-    return QuarterlyResult(arm=cfg.arm, metrics=metrics, annual_returns=annual, equity_curve=curve, rebalances=pd.DataFrame(rebal_rows))
+    return QuarterlyResult(
+        arm=cfg.arm, metrics=_metrics_from_curve(curve, years), annual_returns=_annual_returns(curve),
+        equity_curve=curve, rebalances=pd.DataFrame(rebal_rows),
+    )
 
 
 def _annual_returns(curve: pd.DataFrame) -> dict[str, float]:
@@ -318,12 +375,13 @@ def _annual_returns(curve: pd.DataFrame) -> dict[str, float]:
 
 
 def _benchmark(data_store, dates) -> dict[str, Any]:
-    eq = [1.0]
-    for entry, exit_ in zip(dates[:-1], dates[1:]):
-        ec = _exit_close(data_store, "TAIEX", entry)
-        xc = _exit_close(data_store, "TAIEX", exit_)
-        eq.append(eq[-1] * (xc / ec if ec and xc and ec > 0 else 1.0))
-    curve = pd.DataFrame({"date": dates, "equity": eq[: len(dates)]})
+    # Daily TAIEX so its maxDD is comparable to the daily-MTM strategy curve (quarterly-point
+    # sampling understated it, e.g. the smoke's deceptive -1.8%).
+    s = _close_series(data_store, "TAIEX", dates[0], dates[-1], lookback=6000)
+    if s is None or s.empty:
+        return {"metrics": _metrics_from_curve(pd.DataFrame(columns=["date", "equity"]), 1.0), "annual_returns": {}}
+    base = float(s.iloc[0])
+    curve = pd.DataFrame({"date": list(s.index), "equity": (s.values / base)})
     years = max((pd.Timestamp(dates[-1]) - pd.Timestamp(dates[0])).days / 365.25, 1e-9)
     return {"metrics": _metrics_from_curve(curve, years), "annual_returns": _annual_returns(curve)}
 

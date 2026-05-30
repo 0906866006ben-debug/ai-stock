@@ -90,6 +90,30 @@ def test_basket_quarter_return_applies_cost(tmp_path):
     assert abs(net - (0.10 - 0.007)) < 1e-6
 
 
+def test_daily_mtm_captures_intra_quarter_dip(tmp_path):
+    store = HistoricalDataStore(tmp_path / "ohlcv.db")
+    start = pd.Timestamp("2020-01-01")
+    n = 40
+    # V-shaped price: 100 -> ~70 trough -> recover to 108. Quarterly-point sampling (entry
+    # 100, exit 108) would report ZERO drawdown; daily MTM must see the -30% trough.
+    prices = [100, 98, 92, 85, 78, 72, 70, 75, 82, 90, 95, 98, 100, 101, 102, 103, 104, 105, 106, 107] + [108] * 20
+    rows = []
+    for i in range(n):
+        d = (start + pd.Timedelta(days=i)).strftime("%Y-%m-%d")
+        rows.append({"stock_id": "TAIEX", "date": d, "open": 1000, "high": 1000, "low": 1000, "close": 1000, "volume": 1, "turnover": 1000})
+        c = prices[i]
+        rows.append({"stock_id": "DIP", "date": d, "open": c, "high": c, "low": c, "close": c, "volume": 1, "turnover": c})
+    store.upsert_rows(rows)
+    entry = start.strftime("%Y-%m-%d")
+    exit_ = (start + pd.Timedelta(days=n - 1)).strftime("%Y-%m-%d")
+    cfg = QuarterlyConfig(arm="ni", round_trip_cost=0.0, slippage=0.0)
+    eq_rows, end_eq, n_held = qb._quarter_daily_equity(store, ["DIP"], entry, exit_, 1.0, cfg)
+    assert n_held == 1
+    equities = [r["equity"] for r in eq_rows]
+    assert min(equities) < 0.80          # daily MTM saw the ~-30% intra-quarter trough
+    assert end_eq > min(equities)        # recovered by quarter end (quarterly sampling would miss the dip)
+
+
 def test_select_basket_two_arms():
     ranked = pd.DataFrame({
         "stock_id": ["AAA", "BBB", "CCC", "DDD"],
