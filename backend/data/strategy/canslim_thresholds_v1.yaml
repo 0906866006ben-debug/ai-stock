@@ -564,19 +564,23 @@ presentation:
     Fail: 25
     Neutral: 50               # AI_Review_Required / Insufficient_Data -> null (in code)
   factor_weights:            # overall_score = weighted mean of non-null factor scores.
-    # Evidence-informed (2026-05-29 15yr cohort): N (near/at 52w-high) and I (institutional
-    # accumulation) carry consistent forward-return edge at every horizon -> weighted up.
-    # S was anti-predictive (S-Pass underperformed) -> halved. C/A are quality SUPPORT
-    # (weak/neutral forward predictors on their own) -> demoted from the old 1.3.
-    # Directional tilt only (not fine-tuned); tunable; re-validate on a survivorship-free
-    # broader universe before trusting exact values.
-    N: 1.5
-    I: 1.4
-    L: 1.2
+    # Evidence-informed (2026-05-30 SURVIVORSHIP-FREE 15yr cohort, cohort_surv, 1333 names
+    # incl. delisted): N (near/at 52w-high) and I (institutional accumulation) carry the
+    # only consistent, survivorship-robust forward-return edge -> weighted up. A held up as
+    # the robust TOP grade tier (A-band n=665 survived: +1.68%/1M, median +0.37%) -> bumped.
+    # L turned NEGATIVE at 12M (Pass +5.5 vs +9.6) and S-pillar Pass stayed anti-predictive
+    # (1M +0.58 vs +1.02) -> both demoted hard. M does not differentiate cross-sectionally
+    # (market-wide; it gates via regime in confidence/pass_status) -> low score weight.
+    # NOTE: the overall_score >=80 ("S") band was survivorship-INFLATED noise (n=68, +3.04%
+    # -> +0.86% after correction); this tilt rebuilds the high band from N/I/A, not extension
+    # alone. Directional only (not fine-tuned); tunable; re-run cohort_surv to revalidate.
+    N: 1.6
+    I: 1.5
+    A: 1.2
     C: 1.0
-    A: 1.0
-    M: 0.8
-    S: 0.4
+    L: 0.6
+    M: 0.6
+    S: 0.3
   core_factors: ["C", "A", "L", "I", "M"]   # a null core factor blocks HIGH confidence
   coverage_floor: 0.6        # fraction of 7 factors with a non-null score
   confidence:

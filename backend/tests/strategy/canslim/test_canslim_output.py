@@ -45,6 +45,15 @@ def test_insufficient_core_data_returns_insufficient_and_low_confidence():
     assert c_factor.score is None and c_factor.missing_data
 
 
+def test_single_growth_pillar_fail_blocks_pass_but_not_fail():
+    # Growth eligibility gate: A-pillar Fail alone (C still ok) -> cannot PASS, but not FAIL.
+    full = build_full_result(_result({"A": "Fail"}, grade="A", regime="risk_on"))
+    assert full.pass_status == "WATCHLIST"
+    # Same for C-pillar Fail alone.
+    full_c = build_full_result(_result({"C": "Fail"}, grade="A", regime="risk_on"))
+    assert full_c.pass_status == "WATCHLIST"
+
+
 def test_weak_market_forces_conservative_strategy():
     full = build_full_result(_result({}, grade="A", regime="severe"))
     assert "觀察" in full.suggested_strategy
@@ -62,6 +71,14 @@ def test_grade_alone_does_not_grant_high_confidence():
     # S grade but regime unknown -> must not be HIGH (grade is not a confidence input).
     full = build_full_result(_result({}, grade="S", regime="unknown"))
     assert full.confidence != "HIGH"
+
+
+def test_grade_capped_at_a_folds_s_in():
+    # The >=80 "S" band is confirmed noise; user-facing grade tops out at A.
+    full = build_full_result(_result({}, grade="S", regime="risk_on"))
+    assert full.grade == "A"
+    # Non-S grades pass through unchanged.
+    assert build_full_result(_result({}, grade="B")).grade == "B"
 
 
 def test_no_action_verbs_in_output():

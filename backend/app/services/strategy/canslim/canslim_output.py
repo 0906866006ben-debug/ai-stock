@@ -64,11 +64,18 @@ def build_full_result(result: ScreeningResult, *, params: Mapping[str, Any] | No
     observation = clean_string_list(cfg.get("observation_templates", []))
     suggested = _suggested_strategy(result, pass_status, by_factor, cfg)
 
+    # Grade is capped at "A" (2026-05-30 redesign): the overall-score >=80 ("S") band was
+    # confirmed survivorship-robust NOISE — cohort_surv/_v2 show ~+0.5%/1M (BELOW baseline),
+    # n~80/15yr, an over-extension mean-reversion that reweighting could NOT rescue. A (70-79)
+    # is the validated top tier (+1.96%/1M, median +0.37%, 52% win). So S folds into A for the
+    # user-facing grade; pass_status still treats the underlying candidate_grade normally.
+    display_grade = "A" if result.candidate_grade == "S" else result.candidate_grade
+
     return CanslimFullResult(
         stock_id=result.stock_id,
         as_of_date=result.as_of_date,
         overall_score=overall_score,
-        grade=result.candidate_grade,
+        grade=display_grade,
         pass_status=pass_status,
         confidence=confidence,
         risk_level=risk_level,
@@ -163,10 +170,16 @@ def _pass_status(result, by_factor, core_missing, confidence, cfg) -> str:
         return "FAIL"
     if by_factor["C"].status == "Fail" and by_factor["A"].status == "Fail":
         return "FAIL"
+    # Growth eligibility gate (2026-05-30 redesign): CANSLIM is a GROWTH screen, so a single
+    # failing earnings pillar (C or A) blocks PASS even when grade/regime/confidence qualify
+    # — such a name can still be WATCHLIST, never a clean growth PASS. C/A are gates here,
+    # not score drivers (their standalone forward-return edge is weak; see factor_weights).
+    ca_gate_ok = by_factor["C"].status != "Fail" and by_factor["A"].status != "Fail"
     if (
         result.candidate_grade in list(ps["pass_grades"])
         and result.market_regime != "severe"
         and confidence in {"HIGH", "MEDIUM"}
+        and ca_gate_ok
     ):
         return "PASS"
     return "WATCHLIST"
