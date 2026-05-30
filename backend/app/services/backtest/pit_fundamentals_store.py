@@ -255,10 +255,19 @@ class CachedPitFundamentalsStore:
         stock_filter = set(str(stock) for stock in universe) if universe else None
         with self._underlying._connect() as conn:
             for table in self._TABLES:
-                df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
-                if stock_filter is not None and not df.empty:
-                    df = df[df["stock_id"].astype(str).isin(stock_filter)]
                 sort_col = "filing_date" if table in self._PERIOD_TABLES else "date"
+                # Read in chunks and keep only universe rows per chunk, so a bounded
+                # universe never materializes the whole (multi-GB) table in RAM. On a
+                # small-RAM host an unfiltered SELECT * of a large table OOMs.
+                parts: list[pd.DataFrame] = []
+                for chunk in pd.read_sql_query(f"SELECT * FROM {table}", conn, chunksize=200_000):
+                    if stock_filter is not None and not chunk.empty:
+                        chunk = chunk[chunk["stock_id"].astype(str).isin(stock_filter)]
+                    if not chunk.empty:
+                        parts.append(chunk)
+                if not parts:
+                    continue
+                df = pd.concat(parts, ignore_index=True)
                 for stock_id, frame in df.groupby("stock_id", sort=False):
                     frame = frame.sort_values(sort_col).reset_index(drop=True)
                     self._frames[table][str(stock_id)] = frame
