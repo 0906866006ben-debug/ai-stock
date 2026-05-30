@@ -51,10 +51,27 @@ def test_durable_high_quality_scores_high():
     detail = {"foreign_net_5": [10, 5, 8, 12, 3], "trust_net_5": [4, 2, 1, 5, 2]}
     res = compute_durability(fin_metrics=fin_metrics, detail=detail, financials=inc, balance_sheet=bs, params=PARAMS)
     assert res.score >= 60
-    assert res.missing == []                                  # all 6 components computable
+    assert res.missing == ["cfo_quality"]                     # all but CFO (no cash flow passed)
     assert res.components["op_margin_stability"] > 0.9        # zero CV -> ~1.0
     assert res.components["earnings_purity"] == 1.0           # operating drives net income
     assert res.fscore is not None
+
+
+def test_cfo_quality_and_full_fscore_with_cash_flow():
+    inc = _income(12, rev=100, opi=30, gp=55, ni=28)          # FY2021 NI = 4*28 = 112
+    bs = _balance(["2021-09-30", "2021-12-31"])
+    cash_flow = pd.DataFrame([{"period_end": "2021-12-31", "cfo": 150.0}])   # CFO/NI = 150/112 > 1
+    res = compute_durability(fin_metrics={"roe": 0.25, "annual_eps": [2.0, 3.0, 4.0]},
+                             detail={}, financials=inc, balance_sheet=bs, params=PARAMS, cash_flow=cash_flow)
+    assert "cfo_quality" not in res.missing
+    assert res.components["cfo_quality"] == 1.0               # CFO comfortably exceeds NI
+    assert res.fscore is not None                              # now includes the 2 cash-flow points
+
+    # Low cash conversion (CFO << NI) -> earnings-quality warning.
+    weak_cf = pd.DataFrame([{"period_end": "2021-12-31", "cfo": 30.0}])      # 30/112 < floor 0.5
+    res2 = compute_durability(fin_metrics={"roe": 0.25}, detail={}, financials=inc,
+                              balance_sheet=bs, params=PARAMS, cash_flow=weak_cf)
+    assert res2.components["cfo_quality"] == 0.0
 
 
 def test_non_operating_driven_earnings_low_purity():

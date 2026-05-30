@@ -53,6 +53,7 @@ def compute_durability(
     financials: pd.DataFrame | None,
     balance_sheet: pd.DataFrame | None,
     params: Mapping[str, Any],
+    cash_flow: pd.DataFrame | None = None,
 ) -> DurabilityResult:
     cfg = params.get("durability", {}) if isinstance(params, Mapping) else {}
     weights: dict[str, float] = dict(cfg.get("weights", {}))
@@ -60,6 +61,9 @@ def compute_durability(
     detail = detail or {}
     inc = _periodic_items(financials)          # sorted [(period, items)]
     bs = _periodic_items(balance_sheet)
+    # Cash flow is CUMULATIVE-YTD in FinMind, so the latest full fiscal year (Dec) CFO is the
+    # annual figure directly; pair with that fiscal year's net income. None when unavailable.
+    cfo_fy, ni_fy = _latest_fy_cfo_ni(cash_flow, inc)
 
     comps: dict[str, float] = {}
     missing: list[str] = []
@@ -69,7 +73,8 @@ def compute_durability(
     _set(comps, missing, "multiyear_consistency", _multiyear_consistency(fin_metrics, cfg))
     _set(comps, missing, "earnings_purity", _earnings_purity(inc, cfg))
     _set(comps, missing, "inst_continuity", _inst_continuity(detail, cfg))
-    fscore, fscore_sub = _partial_fscore(inc, bs, cfg)
+    _set(comps, missing, "cfo_quality", _cfo_quality(cfo_fy, ni_fy, cfg))   # None until cash flow loaded
+    fscore, fscore_sub = _partial_fscore(inc, bs, cfg, cfo=cfo_fy, ni=ni_fy)
     _set(comps, missing, "partial_fscore", fscore_sub)
 
     if not comps:
@@ -144,6 +149,36 @@ def _earnings_purity(inc: list[tuple[str, dict]], cfg: Mapping[str, Any]) -> flo
     return max(0.0, min(1.0, (ratio - floor) / (1.0 - floor))) if ratio < 1.0 else 1.0
 
 
+def _cfo_quality(cfo_fy: float | None, ni_fy: float | None, cfg: Mapping[str, Any]) -> float | None:
+    """Earnings backed by real operating cash: full-year CFO / net income. >=good -> 1.0,
+    <=floor -> 0 (profit not converting to cash = accrual/bubble risk). None until cash flow loaded."""
+    if cfo_fy is None or ni_fy is None or ni_fy <= 0:
+        return None
+    ratio = cfo_fy / ni_fy
+    floor = float(cfg.get("cfo_ratio_floor", 0.5))
+    good = float(cfg.get("cfo_ratio_good", 1.0))
+    return _ramp_up(ratio, floor, good)
+
+
+def _latest_fy_cfo_ni(cash_flow: pd.DataFrame | None, inc: list[tuple[str, dict]]) -> tuple[float | None, float | None]:
+    """(full-year CFO, full-year net income) for the latest complete fiscal year. CFO is the
+    Dec cumulative-YTD value (= the annual figure); NI is that year's 4 per-quarter sums."""
+    if cash_flow is None or cash_flow.empty or "cfo" not in cash_flow.columns:
+        return None, None
+    cf = cash_flow.sort_values("period_end")
+    dec = cf[cf["period_end"].astype(str).str[5:7] == "12"]
+    if dec.empty:
+        return None, None
+    row = dec.iloc[-1]
+    cfo = _f(row.get("cfo"))
+    if cfo is None:
+        return None, None
+    year = str(row["period_end"])[:4]
+    ni_vals = [it.get(_NI) for pe, it in inc if pe[:4] == year and it.get(_NI) is not None]
+    ni_fy = sum(ni_vals) if len(ni_vals) >= 3 else None     # need ~full year of quarters
+    return cfo, ni_fy
+
+
 def _inst_continuity(detail: Mapping[str, Any], cfg: Mapping[str, Any]) -> float | None:
     """Sustained foreign+trust accumulation / no mass distribution (flow proxy for holding-%
     continuity). Score = fraction of recent days with non-negative combined net flow."""
@@ -165,9 +200,10 @@ def _inst_continuity(detail: Mapping[str, Any], cfg: Mapping[str, Any]) -> float
     return frac if cum >= 0 else max(0.0, frac - 0.3)
 
 
-def _partial_fscore(inc: list[tuple[str, dict]], bs: list[tuple[str, dict]], cfg: Mapping[str, Any]) -> tuple[int | None, float | None]:
-    """7 of Piotroski's 9 signals (the 2 cash-flow points need CFO, deferred). Returns
-    (raw 0-7, sub-score 0-1). None when there isn't enough history (need ~8 quarters + 2 BS)."""
+def _partial_fscore(inc: list[tuple[str, dict]], bs: list[tuple[str, dict]], cfg: Mapping[str, Any],
+                    *, cfo: float | None = None, ni: float | None = None) -> tuple[int | None, float | None]:
+    """Piotroski signals: 7 without cash flow, 9 when full-year CFO is supplied (adds CFO>0 and
+    CFO>NI / low-accrual). Returns (raw count, sub-score 0-1). None when history is too thin."""
     roa = _roa(inc, bs, 0)
     roa_prev = _roa(inc, bs, 4)
     cr = _ratio(bs, 0, _CA, _CL)
@@ -190,6 +226,10 @@ def _partial_fscore(inc: list[tuple[str, dict]], bs: list[tuple[str, dict]], cfg
         None if (gm is None or gm_prev is None) else (gm > gm_prev),                 # margin up
         None if (at is None or at_prev is None) else (at > at_prev),                 # asset turnover up
     ]
+    if cfo is not None:
+        checks.append(cfo > 0)                                                       # operating cash positive
+        if ni is not None:
+            checks.append(cfo > ni)                                                  # CFO > NI -> low accruals
     usable = [c for c in checks if c is not None]
     if len(usable) < int(cfg.get("fscore_min_checks", 4)):
         return None, None

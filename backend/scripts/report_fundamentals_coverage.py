@@ -41,7 +41,9 @@ def compute_coverage(
     # screener needs. Balance sheet is reported separately as ROE-enabling (A pillar
     # falls back to the operating-margin proxy when it is absent), so adding it must
     # NOT shrink the screenable universe.
-    core_datasets = [d for d in DATASETS if DATASET_TABLES[d][0] != "balance_sheet"]
+    # balance_sheet (ROE) and cash_flow (CFO/durability) are SUPPLEMENTARY — not every symbol
+    # has them and they are not required for the core CANSLIM screen, so exclude from "fully covered".
+    core_datasets = [d for d in DATASETS if DATASET_TABLES[d][0] not in ("balance_sheet", "cash_flow")]
     if symbols:
         fully_covered = sorted(set.intersection(*(covered_by_dataset[d] for d in core_datasets)))
         any_covered = set.union(*covered_by_dataset.values())
@@ -51,6 +53,7 @@ def compute_coverage(
     no_fundamentals = sorted(symbol for symbol in symbols if symbol not in any_covered)
     progress_absent = _progress_absent_symbols(pit_store) & symbol_set
     roe_ready = sorted(covered_by_dataset.get("TaiwanStockBalanceSheet", set()))
+    cfo_ready = sorted(covered_by_dataset.get("TaiwanStockCashFlowsStatement", set()))
 
     return {
         "ohlcv_universe_count": len(symbols),
@@ -59,6 +62,8 @@ def compute_coverage(
         "fully_covered_symbols": fully_covered,
         "roe_ready_count": len(roe_ready),
         "roe_ready_symbols": roe_ready,
+        "cfo_ready_count": len(cfo_ready),
+        "cfo_ready_symbols": cfo_ready,
         "no_fundamentals_count": len(no_fundamentals),
         "no_fundamentals_symbols": no_fundamentals,
         "finmind_absent_count": len(progress_absent),

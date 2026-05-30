@@ -634,12 +634,15 @@ durability:
     tunable_required: true
     description: "Durable-quality factor score (op-margin stability / ROE / multi-year / earnings purity / institutional continuity / partial F-Score)."
   weights:                       # weighted mean of AVAILABLE components (missing -> omitted)
+    cfo_quality: 1.5             # CFO/NI = earnings backed by real cash (anti-accrual/bubble); top survival signal
     op_margin_stability: 1.5     # pricing power = strongest durability signal
     earnings_purity: 1.3         # 本業真錢, not 業外/one-off
     multiyear_consistency: 1.2
     roe_quality: 1.2
     partial_fscore: 1.0
     inst_continuity: 0.8         # flow proxy (no holding-% data yet)
+  cfo_ratio_floor: 0.5           # full-year CFO/NI <= this -> 0 (profit not converting to cash)
+  cfo_ratio_good: 1.0            # CFO/NI >= this -> 1.0 (high earnings quality)
   op_margin_quarters: 12         # look-back window for operating-margin CV
   op_margin_min_quarters: 6      # need >= this many quarters or component omitted
   op_cv_excellent: 0.15          # operating-margin CV <= this -> 1.0

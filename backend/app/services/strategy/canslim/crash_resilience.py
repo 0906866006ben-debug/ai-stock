@@ -121,10 +121,12 @@ def _durability_at(pit_store, sym: str, t0: str, params) -> int | None:
     try:
         fin = pit_store.get_financials_as_of(sym, t0, limit=20)
         bs = pit_store.get_balance_sheet_as_of(sym, t0, limit=8)
+        cf = pit_store.get_cash_flow_as_of(sym, t0, limit=12) if hasattr(pit_store, "get_cash_flow_as_of") else None
         detail, fin_metrics, _ = build_pit_inputs(sym, t0, pit_store)
     except Exception:
         return None
-    res = compute_durability(fin_metrics=fin_metrics, detail=detail, financials=fin, balance_sheet=bs, params=params)
+    res = compute_durability(fin_metrics=fin_metrics, detail=detail, financials=fin,
+                             balance_sheet=bs, params=params, cash_flow=cf)
     # Require a meaningfully-scored name (enough components), else skip (no fabrication).
     if not res.components or len(res.missing) >= 5:
         return None

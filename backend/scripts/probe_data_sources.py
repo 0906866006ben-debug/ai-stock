@@ -152,6 +152,22 @@ def run_probe(
         cadence_hint="daily",
         pit_hint=True,
     ))
+    results.extend(_probe_finmind_candidates(
+        source="Cash-flow statement (CFO for earnings quality / F-Score)",
+        candidates=[
+            "TaiwanStockCashFlowsStatement",
+            "TaiwanStockCashFlow",
+            "TaiwanStockStatementOfCashFlows",
+        ],
+        catalog_names=catalog_names,
+        token=token,
+        symbol=symbol,
+        start=start,
+        end=today,
+        finmind_get=finmind_get,
+        cadence_hint="quarterly",
+        pit_hint=True,
+    ))
     results.append(_probe_taiwan_stock_info(catalog_names, token, finmind_get))
     results.extend(_probe_yfinance_indices(yf_download, start="2010-01-01"))
 

@@ -115,7 +115,7 @@ def test_backfill_script_monkeypatched_fetch_writes_expected_rows(tmp_path: Path
     )
 
     assert rc == 0
-    assert len(calls) == 6  # 5 core datasets + TaiwanStockBalanceSheet
+    assert len(calls) == 7  # 5 core + TaiwanStockBalanceSheet + TaiwanStockCashFlowsStatement
     store = PitFundamentalsStore(db_path)
     assert store.row_count("month_revenue") == 1
     assert store.row_count("institutional") == 1

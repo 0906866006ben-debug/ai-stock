@@ -57,6 +57,7 @@ DATASETS = (
     "TaiwanStockPER",
     "TaiwanStockFinancialStatements",
     "TaiwanStockBalanceSheet",
+    "TaiwanStockCashFlowsStatement",
 )
 
 DATASET_TABLES = {
@@ -66,6 +67,7 @@ DATASET_TABLES = {
     "TaiwanStockPER": ("per", "date"),
     "TaiwanStockFinancialStatements": ("financials", "period_end"),
     "TaiwanStockBalanceSheet": ("balance_sheet", "period_end"),
+    "TaiwanStockCashFlowsStatement": ("cash_flow", "period_end"),
 }
 
 
@@ -309,7 +311,42 @@ def normalize_dataset(dataset: str, stock_id: str, rows: list[dict]) -> list[dic
         return _normalize_financials(stock_id, rows)
     if dataset == "TaiwanStockBalanceSheet":
         return _normalize_balance_sheet(stock_id, rows)
+    if dataset == "TaiwanStockCashFlowsStatement":
+        return _normalize_cash_flow(stock_id, rows)
     raise ValueError(f"Unsupported dataset: {dataset}")
+
+
+# FinMind cash-flow operating line item (primary, then fallback alias).
+_CFO_TYPES = ("CashFlowsFromOperatingActivities", "NetCashInflowFromOperatingActivities")
+
+
+def _normalize_cash_flow(stock_id: str, rows: list[dict]) -> list[dict]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        period_end = _date_value(row)
+        if not period_end:
+            continue
+        out = grouped.setdefault(
+            period_end,
+            {
+                "stock_id": stock_id,
+                "period_end": period_end,
+                "filing_date": row.get("filing_date") or row.get("announcement_date") or row.get("publish_date"),
+                "cfo": None,
+                "raw_rows": [],
+            },
+        )
+        type_code = str(row.get("type") or "")
+        value = _float_value(row, "value", "Value")
+        if value is not None and type_code in _CFO_TYPES and out["cfo"] is None:
+            out["cfo"] = value
+        out["raw_rows"].append(row)
+    normalized = []
+    for out in grouped.values():
+        raw_rows = out.pop("raw_rows")
+        out["raw_json"] = json.dumps(raw_rows, ensure_ascii=False, sort_keys=True)
+        normalized.append(out)
+    return normalized
 
 
 def _normalize_balance_sheet(stock_id: str, rows: list[dict]) -> list[dict]:
@@ -502,6 +539,8 @@ def _upsert_dataset(store: PitFundamentalsStore, dataset: str, rows: list[dict])
         return store.upsert_financials(rows)
     if dataset == "TaiwanStockBalanceSheet":
         return store.upsert_balance_sheet(rows)
+    if dataset == "TaiwanStockCashFlowsStatement":
+        return store.upsert_cash_flow(rows)
     raise ValueError(f"Unsupported dataset: {dataset}")
 
 

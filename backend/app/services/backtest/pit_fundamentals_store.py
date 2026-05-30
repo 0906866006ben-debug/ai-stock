@@ -76,12 +76,21 @@ CREATE TABLE IF NOT EXISTS balance_sheet (
     raw_json TEXT,
     PRIMARY KEY (stock_id, period_end)
 );
+CREATE TABLE IF NOT EXISTS cash_flow (
+    stock_id TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    filing_date TEXT NOT NULL,
+    cfo REAL,
+    raw_json TEXT,
+    PRIMARY KEY (stock_id, period_end)
+);
 CREATE INDEX IF NOT EXISTS idx_month_revenue_date ON month_revenue(stock_id, date);
 CREATE INDEX IF NOT EXISTS idx_institutional_date ON institutional(stock_id, date);
 CREATE INDEX IF NOT EXISTS idx_margin_date ON margin(stock_id, date);
 CREATE INDEX IF NOT EXISTS idx_per_date ON per(stock_id, date);
 CREATE INDEX IF NOT EXISTS idx_financials_filing ON financials(stock_id, filing_date);
 CREATE INDEX IF NOT EXISTS idx_balance_sheet_filing ON balance_sheet(stock_id, filing_date);
+CREATE INDEX IF NOT EXISTS idx_cash_flow_filing ON cash_flow(stock_id, filing_date);
 """
 
 
@@ -198,6 +207,31 @@ class PitFundamentalsStore:
             df = pd.read_sql_query(sql, conn, params=(stock_id, as_of_date, limit))
         return df.iloc[::-1].reset_index(drop=True)
 
+    def get_cash_flow_as_of(self, stock_id: str, as_of_date: str, limit: int = 8) -> pd.DataFrame:
+        sql = """
+            SELECT *
+            FROM cash_flow
+            WHERE stock_id = ? AND filing_date <= ?
+            ORDER BY period_end DESC
+            LIMIT ?
+        """
+        with self._connect() as conn:
+            df = pd.read_sql_query(sql, conn, params=(stock_id, as_of_date, limit))
+        return df.iloc[::-1].reset_index(drop=True)
+
+    def upsert_cash_flow(self, rows: Iterable[dict]) -> int:
+        prepared = []
+        for row in rows:
+            item = dict(row)
+            if not item.get("filing_date"):
+                item["filing_date"] = derive_filing_date(str(item["period_end"]))
+            prepared.append(item)
+        return self._upsert(
+            "cash_flow",
+            prepared,
+            ("stock_id", "period_end", "filing_date", "cfo", "raw_json"),
+        )
+
     def upsert_balance_sheet(self, rows: Iterable[dict]) -> int:
         prepared = []
         for row in rows:
@@ -212,7 +246,7 @@ class PitFundamentalsStore:
         )
 
     def row_count(self, table: str) -> int:
-        if table not in {"month_revenue", "institutional", "margin", "per", "financials", "balance_sheet"}:
+        if table not in {"month_revenue", "institutional", "margin", "per", "financials", "balance_sheet", "cash_flow"}:
             raise ValueError(f"Unknown table: {table}")
         with self._connect() as conn:
             row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
@@ -245,8 +279,8 @@ class PitFundamentalsStore:
 class CachedPitFundamentalsStore:
     """In-memory read cache for PIT fundamentals/chip datasets."""
 
-    _TABLES = ("month_revenue", "institutional", "margin", "per", "financials", "balance_sheet")
-    _PERIOD_TABLES = ("financials", "balance_sheet")
+    _TABLES = ("month_revenue", "institutional", "margin", "per", "financials", "balance_sheet", "cash_flow")
+    _PERIOD_TABLES = ("financials", "balance_sheet", "cash_flow")
 
     def __init__(self, db_path: Path | str, universe: list[str] | None = None) -> None:
         self.db_path = Path(db_path)
@@ -289,6 +323,9 @@ class CachedPitFundamentalsStore:
 
     def get_balance_sheet_as_of(self, stock_id: str, as_of_date: str, limit: int = 8) -> pd.DataFrame:
         return self._get_period_as_of("balance_sheet", stock_id, as_of_date, limit)
+
+    def get_cash_flow_as_of(self, stock_id: str, as_of_date: str, limit: int = 8) -> pd.DataFrame:
+        return self._get_period_as_of("cash_flow", stock_id, as_of_date, limit)
 
     def _get_period_as_of(self, table: str, stock_id: str, as_of_date: str, limit: int) -> pd.DataFrame:
         frame = self._frames[table].get(str(stock_id))
