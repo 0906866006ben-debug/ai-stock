@@ -30,6 +30,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)   # never log request URLs (leak FinMind token)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     load_backend_env()
 
     stocks = args.stocks or HistoricalDataStore(args.db).list_stocks()
