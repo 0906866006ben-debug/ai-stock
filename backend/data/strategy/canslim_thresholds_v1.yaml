@@ -643,6 +643,23 @@ durability:
     inst_continuity: 0.8         # flow proxy (no holding-% data yet)
   cfo_ratio_floor: 0.5           # full-year CFO/NI <= this -> 0 (profit not converting to cash)
   cfo_ratio_good: 1.0            # CFO/NI >= this -> 1.0 (high earnings quality)
+
+# ── Entry-context layer (Task 1A; entry_context.py) ───────────────────────────
+# Verb-free timing/价位 CONDITIONS (no buy/sell). Dual-track price: MAs/52w on ADJUSTED,
+# structural levels on RAW; all levels compared as % from current close. v1 hypotheses, tunable.
+entry_context:
+  meta:
+    tunable_required: true
+    description: "Entry timing/价位 conditions: extension + valuation percentile, support/confluence, add-on structure gate."
+  extension_overheat_pct: 0.15   # close >= MA60 * (1+this) -> 延伸過熱
+  extension_pullback_pct: 0.0    # close <= MA60 -> 回檔區
+  valuation_min_history: 60      # min PER/PBR points to compute a percentile (else omitted)
+  valuation_expensive_pctile: 80 # PE/PB self-5yr percentile >= this -> 偏貴
+  valuation_cheap_pctile: 30     # <= this -> 偏便宜
+  structural_lookback: 60        # bars for box low / neckline (raw price)
+  confluence_tolerance_pct: 0.02 # dynamic & structural support within this %-of-price -> Confluence zone
+  at_support_pct: 0.03           # within this % of a support level -> "回檔至支撐"
+  volume_confirm_mult: 1.0       # latest volume >= 20d-avg * this -> volume not contracting
   op_margin_quarters: 12         # look-back window for operating-margin CV
   op_margin_min_quarters: 6      # need >= this many quarters or component omitted
   op_cv_excellent: 0.15          # operating-margin CV <= this -> 1.0
