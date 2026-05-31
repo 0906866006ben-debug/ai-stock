@@ -14,6 +14,7 @@ import type {
   ETFHoldingsResponse,
   CandlePoint,
   CanslimFullResult,
+  EntryContext,
 } from './types';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim().replace(/\/+$/, '');
@@ -69,6 +70,13 @@ export async function getTwScreenFull(
   const params: Record<string, string> = { symbol: symbol.trim() };
   if (asOfDate) params.as_of_date = asOfDate;
   const { data } = await axios.get<CanslimFullResult>(`${API_BASE}/tw/screen/full`, { params });
+  return data;
+}
+
+export async function getTwEntryContext(symbol: string): Promise<EntryContext> {
+  const { data } = await axios.get<EntryContext>(`${API_BASE}/tw/entry-context`, {
+    params: { symbol: symbol.trim() },
+  });
   return data;
 }
 

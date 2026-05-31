@@ -646,6 +646,47 @@ export interface CanslimFullResult {
   } | null;
 }
 
+// ── Entry context (/tw/entry-context → Task 1A timing/价位 conditions) ─────────
+
+export type Expensiveness = '偏便宜' | '合理' | '偏貴' | 'unknown';
+export type EntryStructureStatus = 'intact' | 'weakening' | 'invalidated' | 'unknown';
+
+export interface EntrySupportLevel {
+  kind: string;            // dynamic_ma60 | dynamic_ma200 | structural_box_low | structural_neckline
+  price: number;
+  pct_below: number;       // (price/current - 1), negative = below current
+}
+
+export interface EntryContext {
+  symbol: string;
+  current_price: number | null;
+  extension: {
+    pct_from_ma20?: number;
+    pct_from_ma60?: number;
+    pct_from_52w_high?: number;
+    label?: string;
+  };
+  valuation: {
+    pe?: number;
+    pe_percentile?: number;
+    pb?: number;
+    pb_percentile?: number;
+    label?: string;
+  };
+  expensiveness: Expensiveness;
+  supports: EntrySupportLevel[];
+  confluence_zones: { low: number; high: number; pct_below: number; kinds: string[] }[];
+  structure_status: EntryStructureStatus;
+  add_on_context: {
+    structure_ok?: boolean;
+    at_support?: boolean;
+    volume_confirmed?: boolean | null;
+    note?: string;
+  };
+  data_quality: { adjusted_available?: boolean; dividend_events?: number };
+  missing: string[];
+}
+
 // ── Portfolio (client-side) ───────────────────────────────────────────────────
 
 export interface Position {
