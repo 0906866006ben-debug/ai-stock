@@ -266,3 +266,40 @@ def _percentile_of_last(hist: list[float] | None, min_n: int) -> float | None:
 
 def _last(vals: list[float] | None) -> float | None:
     return float(vals[-1]) if vals else None
+
+
+# ── live convenience: assemble the dual-track inputs from the stores ──────────
+def entry_context_for_symbol(symbol: str, *, days: int = 280, store=None, pit_store=None, params=None) -> EntryContext:
+    """Fetch dual-track inputs (adjusted closes for MAs, raw OHLCV for structural levels,
+    PER/PBR history for valuation) and compute the entry context for live single-stock use."""
+    import pandas as pd
+    from backend.app.services.backtest.historical_data_store import HistoricalDataStore, DEFAULT_DB_PATH
+    from backend.app.services.backtest.pit_fundamentals_store import PitFundamentalsStore, DEFAULT_PIT_DB_PATH
+    from backend.app.services.tw_adjusted_prices import get_adjusted_prices
+    from backend.app.services.strategy.canslim.params import load_params
+
+    params = params or load_params()
+    store = store or HistoricalDataStore(DEFAULT_DB_PATH)
+    pit_store = pit_store or PitFundamentalsStore(DEFAULT_PIT_DB_PATH)
+
+    adj = get_adjusted_prices(symbol, days=days, store=store)
+    adj_closes = [r["adj_close"] for r in adj.get("rows", []) if r.get("adj_close") is not None]
+    as_of = adj["rows"][-1]["date"] if adj.get("rows") else None
+    if as_of is None:
+        return EntryContext(symbol=symbol, missing=["price"],
+                            data_quality={"adjusted_available": False, "dividend_events": adj.get("events", 0)})
+
+    df = store.get_ohlcv_as_of(symbol, as_of, days)
+    def _col(name):
+        return pd.to_numeric(df[name], errors="coerce").dropna().tolist() if df is not None and not df.empty else None
+    raw_closes, raw_highs, raw_lows, vols = _col("close"), _col("high"), _col("low"), _col("volume")
+
+    per = pit_store.get_per_as_of(symbol, as_of, limit=1300)
+    per_h = pd.to_numeric(per["per"], errors="coerce").dropna().tolist() if per is not None and not per.empty else None
+    pbr_h = pd.to_numeric(per["pbr"], errors="coerce").dropna().tolist() if per is not None and not per.empty else None
+
+    return compute_entry_context(
+        symbol, adj_closes=adj_closes, raw_closes=raw_closes, raw_highs=raw_highs, raw_lows=raw_lows,
+        volumes=vols, per_history=per_h, pbr_history=pbr_h, params=params,
+        adjusted_available=adj.get("events", 0) > 0, dividend_events=adj.get("events", 0),
+    )

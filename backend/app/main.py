@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Request
+from fastapi.concurrency import run_in_threadpool
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 from fastapi.middleware.cors import CORSMiddleware
@@ -546,6 +547,24 @@ async def screen_tw_full(
             detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
         )
     return await screen_symbol_full(symbol, as_of_date=as_of_date)
+
+
+@app.get("/tw/entry-context")
+async def entry_context_tw(
+    symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)"),
+):
+    """Verb-free entry timing/价位 conditions (Task 1A): 貴不貴 (extension + valuation
+    percentile), 等哪裡 (support/confluence), 能不能加 (structure gate). NOT a buy/sell signal."""
+    symbol = symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(status_code=422, detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).")
+    from dataclasses import asdict
+    from backend.app.services.strategy.canslim.entry_context import entry_context_for_symbol
+    try:
+        ctx = await run_in_threadpool(entry_context_for_symbol, symbol)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"entry-context unavailable: {type(exc).__name__}")
+    return asdict(ctx)
 
 
 @app.get("/tw/agent-analysis", response_model=AgentAnalysisResponse)
