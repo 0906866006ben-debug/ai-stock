@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Request
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Request, Body
 from fastapi.concurrency import run_in_threadpool
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -565,6 +565,28 @@ async def entry_context_tw(
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"entry-context unavailable: {type(exc).__name__}")
     return asdict(ctx)
+
+
+@app.post("/tw/allocate")
+async def allocate_tw(payload: dict = Body(...)):
+    """Verb-free capital ALLOCATION calculator (Task 1B): given the user's portfolio_parameters
+    + chosen symbols, returns base allocation / pyramiding-ladder / risk-dashboard tables. It is
+    arithmetic on the user's own inputs — NOT a buy/sell recommendation."""
+    from dataclasses import asdict
+    from backend.app.services.strategy.canslim.allocation import allocate_for_watchlist
+    symbols = [str(s).strip() for s in (payload.get("symbols") or []) if str(s).strip()]
+    params = payload.get("portfolio_parameters") or {}
+    sectors = payload.get("sectors") or {}
+    if not symbols:
+        raise HTTPException(status_code=422, detail="symbols[] required")
+    for s in symbols:
+        if not TW_SYMBOL_RE.match(s):
+            raise HTTPException(status_code=422, detail=f"invalid symbol: {s}")
+    try:
+        res = await run_in_threadpool(lambda: allocate_for_watchlist(symbols, params, sectors=sectors))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"allocation unavailable: {type(exc).__name__}")
+    return asdict(res)
 
 
 @app.get("/tw/agent-analysis", response_model=AgentAnalysisResponse)

@@ -49,6 +49,7 @@ class EntryContext:
     confluence_zones: list[dict[str, Any]] = field(default_factory=list)   # {low, high, kinds}
     # C — 能不能加
     structure_status: str = "unknown"                          # intact / weakening / invalidated
+    atr_14: float | None = None                                # 14-bar ATR (raw price units; for position sizing)
     add_on_context: dict[str, Any] = field(default_factory=dict)   # structure_ok, at_support, volume_confirmed, note
     data_quality: dict[str, Any] = field(default_factory=dict)     # adjusted_available, dividend_events, missing
     missing: list[str] = field(default_factory=list)
@@ -86,12 +87,13 @@ def compute_entry_context(
 
     structure = _structure_status(adj_closes, raw_lows, current, cfg, missing)
     add_on = _add_on_context(structure, supports, volumes, current, cfg)
+    atr_14 = _atr(raw_highs, raw_lows, raw_closes, 14)
 
     return EntryContext(
         symbol=symbol, current_price=round(current, 4),
         extension=extension, valuation=valuation, expensiveness=expensiveness,
         supports=supports, confluence_zones=confluence,
-        structure_status=structure, add_on_context=add_on,
+        structure_status=structure, atr_14=(round(atr_14, 4) if atr_14 else None), add_on_context=add_on,
         data_quality={"adjusted_available": bool(adjusted_available), "dividend_events": int(dividend_events)},
         missing=missing,
     )
@@ -262,6 +264,20 @@ def _percentile_of_last(hist: list[float] | None, min_n: int) -> float | None:
     cur = vals[-1]
     below = sum(1 for v in vals if v < cur)
     return 100.0 * below / len(vals)
+
+
+def _atr(highs: list[float] | None, lows: list[float] | None, closes: list[float] | None, n: int) -> float | None:
+    """Average True Range over the last n bars (raw price units). None if too few bars."""
+    if not highs or not lows or not closes:
+        return None
+    m = min(len(highs), len(lows), len(closes))
+    if m < n + 1:
+        return None
+    trs: list[float] = []
+    for i in range(m - n, m):
+        tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+        trs.append(tr)
+    return sum(trs) / len(trs) if trs else None
 
 
 def _last(vals: list[float] | None) -> float | None:

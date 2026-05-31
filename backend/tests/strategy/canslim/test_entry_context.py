@@ -85,3 +85,11 @@ def test_missing_data_omits_reads():
 def test_no_price_returns_safe_empty():
     c = _ctx()
     assert c.missing == ["price"] and c.current_price is None
+
+
+def test_atr_14_computed():
+    # Constant TR of 4 (H-L=4 dominates) over >14 bars -> ATR14 = 4.
+    n = 20
+    c = _ctx(adj_closes=[100.0] * n, raw_closes=[100.0] * n,
+             raw_highs=[102.0] * n, raw_lows=[98.0] * n)
+    assert c.atr_14 == 4.0
