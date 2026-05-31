@@ -687,6 +687,60 @@ export interface EntryContext {
   missing: string[];
 }
 
+// ── Capital allocation (/tw/allocate → Task 1B calculator) ────────────────────
+
+export interface AllocationBaseRow {
+  symbol: string;
+  target_lots: number;
+  target_odd: number;
+  est_capital_req: number;
+  final_weight: number;
+  status: string;
+}
+
+export interface AllocationLadderRow {
+  symbol: string;
+  level: string;
+  target_price: number | null;
+  target_shares: number;
+  target_lots: number;
+  target_odd: number;
+  est_capital_req: number;
+  condition_flag: string;
+}
+
+export interface AllocationResult {
+  base_matrix: AllocationBaseRow[];
+  ladder_matrix: AllocationLadderRow[];
+  risk_dashboard: {
+    total_active_capital?: number;
+    total_active_pct?: number;
+    total_reserve_capital?: number;
+    reserve_returned_to_pool?: number;
+    max_position_pct_active?: number;
+    max_sector?: string;
+    max_sector_pct?: number;
+    sector_limit_pct?: number;
+    n_positions?: number;
+    frozen_symbols?: string[];
+    fee_effective?: number;
+  };
+  notes: string[];
+}
+
+export interface AllocationRequest {
+  symbols: string[];
+  portfolio_parameters: {
+    total_capital_ntd: number;
+    reserve_pct?: number;
+    max_position_pct?: number;
+    sector_limit_pct?: number;
+    fee_discount_rate?: number;
+    min_trade_amt_ntd?: number;
+  };
+  sectors?: Record<string, string>;
+}
+
 // ── Portfolio (client-side) ───────────────────────────────────────────────────
 
 export interface Position {

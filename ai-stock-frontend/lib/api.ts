@@ -15,6 +15,8 @@ import type {
   CandlePoint,
   CanslimFullResult,
   EntryContext,
+  AllocationResult,
+  AllocationRequest,
 } from './types';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim().replace(/\/+$/, '');
@@ -70,6 +72,11 @@ export async function getTwScreenFull(
   const params: Record<string, string> = { symbol: symbol.trim() };
   if (asOfDate) params.as_of_date = asOfDate;
   const { data } = await axios.get<CanslimFullResult>(`${API_BASE}/tw/screen/full`, { params });
+  return data;
+}
+
+export async function postTwAllocation(payload: AllocationRequest): Promise<AllocationResult> {
+  const { data } = await axios.post<AllocationResult>(`${API_BASE}/tw/allocate`, payload);
   return data;
 }
 

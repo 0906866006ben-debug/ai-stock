@@ -23,6 +23,7 @@ import PriceHistoryChart from './components/PriceHistoryChart';
 import StockDirectory from './components/StockDirectory';
 import ExternalNews from './components/ExternalNews';
 import PortfolioDashboard from './components/PortfolioDashboard';
+import AllocationCalculator from './components/AllocationCalculator';
 import Watchlist from './components/Watchlist';
 import AddPosition from './components/AddPosition';
 import DividendCalendar from './components/DividendCalendar';
@@ -832,6 +833,8 @@ export default function DashboardPage() {
                     priceRefreshError={priceRefreshError}
                   />
                 </div>
+
+                <AllocationCalculator defaultSymbols={positions.map((p) => p.stock_code).join(' ')} />
 
                 <div>
                   <div className="mb-3 flex items-center justify-between gap-2">
