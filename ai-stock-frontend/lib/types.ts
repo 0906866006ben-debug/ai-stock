@@ -80,6 +80,69 @@ export interface ETFSummary {
   status: string;
 }
 
+export interface DurabilityComponents {
+  op_margin_stability?: number;
+  roe_quality?: number;
+  roe_trend?: number;
+  multiyear_consistency?: number;
+  multi_year_consistency?: number;
+  earnings_purity?: number;
+  inst_continuity?: number;
+  institutional_flow?: number;
+  cfo_quality?: number;
+  partial_fscore?: number;
+  f_score_partial?: number;
+  [key: string]: number | undefined;
+}
+
+export interface DurabilityMetrics {
+  score: number | null;
+  components: DurabilityComponents;
+  confidence: number;
+  change_yoy: number | null;
+  trend: 'improving' | 'stable' | 'declining' | null;
+  missing?: string[];
+  f_score_partial?: number | null;
+}
+
+export interface CanslimSummary {
+  grades: Record<string, string>;
+  scores: Record<string, Record<string, unknown>>;
+  hard_blocked: Record<string, boolean>;
+  data_warnings: string[];
+  is_mock: boolean;
+  durability_score?: number | null;
+  durability_components?: DurabilityComponents;
+  durability_metrics?: DurabilityMetrics | null;
+}
+
+export interface SnapshotStock {
+  symbol: string;
+  name: string;
+  durability_score: number;
+  durability_components: DurabilityComponents;
+  confidence: number;
+  sector?: string | null;
+  price_at_snapshot?: number | null;
+  market_cap_ntd?: number | null;
+}
+
+export interface QuarterlySnapshot {
+  quarter: string;
+  as_of_date: string;
+  generated_at: string;
+  status?: string;
+  warnings?: string[];
+  snapshot_stocks: SnapshotStock[];
+}
+
+export interface QualityWatchHistoryItem {
+  quarter: string;
+  as_of_date: string;
+  generated_at: string;
+  stock_count: number;
+}
+
 // ── Taiwan stock response ─────────────────────────────────────────────────────
 
 // ── 4-Pillar Analysis Models ──────────────────────────────────────────────────
@@ -370,6 +433,13 @@ export interface TaiwanStockAnalysisResponse {
   comprehensive_analysis?: ComprehensiveAnalysis | null;
   // Phase 4: elite equity research framework
   equity_research?: EquityResearch | null;
+  canslim_summary?: CanslimSummary | null;
+  screening_result?: {
+    durability_score?: number | null;
+    durability_components?: DurabilityComponents;
+    durability_metrics?: DurabilityMetrics | null;
+  } | null;
+  canslim_full?: CanslimFullResult | null;
 }
 
 // ── FMP Fundamentals ─────────────────────────────────────────────────────────
@@ -637,12 +707,18 @@ export interface CanslimFullResult {
   suggested_strategy: string;
   data_quality: CanslimLevel;
   is_mock_or_fallback_data: boolean;
+  durability_score?: number | null;
+  durability_components?: DurabilityComponents;
+  durability_metrics?: DurabilityMetrics | null;
   // Embedded ScreeningResult carries the swing structure/exit fields.
   screening_result?: {
     market_regime?: 'risk_on' | 'risk_off' | 'severe' | 'unknown';
     structure_status?: StructureStatus;
     exit_signals?: string[];
     data_warnings?: string[];
+    durability_score?: number | null;
+    durability_components?: DurabilityComponents;
+    durability_metrics?: DurabilityMetrics | null;
   } | null;
 }
 

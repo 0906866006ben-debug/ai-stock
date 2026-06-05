@@ -45,7 +45,16 @@ def test_resilient_name_recovers(tmp_path):
     m = symbol_crash_metrics(store, "RESIL", EV, trough, impair_thr=0.5, staleness_days=20)
     assert m["drawdown"] < 0          # took a hit
     assert m["recovered"] is True
+    assert m["recovery_days"] < 180   # trading sessions, not calendar days
     assert m["delisted"] is False and m["impaired"] is False
+
+
+def test_recovery_days_count_trading_sessions():
+    series = pd.Series(
+        [80, 90, 100],
+        index=pd.to_datetime(["2020-03-20", "2020-03-23", "2020-03-24"]),
+    )
+    assert cr.measure_recovery_days(series, target_close=100, trough_date="2020-03-19") == 3
 
 
 def test_impaired_name_does_not_recover(tmp_path):
@@ -64,6 +73,23 @@ def test_delisted_name_flagged(tmp_path):
     assert m["impaired"] is True       # delisted implies permanent impairment
 
 
+def test_delisted_effective_recovery_uses_event_deadline(tmp_path):
+    store = _store(tmp_path)
+    trough = cr._trough_date(store, EV.t0, EV.trough_end)
+    event_window_days = cr._event_recovery_window_trading_days(store, EV, trough)
+    m = symbol_crash_metrics(
+        store,
+        "DELIST",
+        EV,
+        trough,
+        impair_thr=0.5,
+        staleness_days=20,
+        event_recovery_window_trading_days=event_window_days,
+    )
+    assert m["recovery_window_trading_days"] == event_window_days
+    assert m["recovery_window_trading_days"] > 200
+
+
 def test_quintiles_and_summary_q1_better():
     # Hand-built: Q1 (high durability) resilient, Q5 (low) impaired/delisted.
     rows = []
@@ -79,5 +105,32 @@ def test_quintiles_and_summary_q1_better():
     q1, q5 = summ["by_quintile"]["Q1"], summ["by_quintile"]["Q5"]
     assert q1["median_drawdown"] > q5["median_drawdown"]    # Q1 less negative
     assert q1["pct_recovered"] > q5["pct_recovered"]
+    assert q5["mean_effective_recovery_days"] is None       # no deadline column in this legacy fixture
     assert q1["impairment_rate"] < q5["impairment_rate"]
     assert summ["Q1_vs_Q5"]["drawdown_gap"] > 0
+
+
+def test_decision_gate_requires_event_direction():
+    good = {
+        "by_quintile": {
+            "Q1": {"mean_effective_recovery_days": 10, "delisting_rate": 0.0},
+            "Q5": {"mean_effective_recovery_days": 30, "delisting_rate": 0.2},
+        },
+        "Q1_vs_Q5": {"mean_drawdown_gap": 0.2, "recovery_days_reduction": 0.67},
+    }
+    bad = {
+        "by_quintile": {
+            "Q1": {"mean_effective_recovery_days": 40, "delisting_rate": 0.1},
+            "Q5": {"mean_effective_recovery_days": 30, "delisting_rate": 0.0},
+        },
+        "Q1_vs_Q5": {"mean_drawdown_gap": -0.05, "recovery_days_reduction": -0.33},
+    }
+    pooled = {
+        "by_quintile": {
+            "Q1": {"mean_effective_recovery_days": 10, "delisting_rate": 0.0},
+            "Q5": {"mean_effective_recovery_days": 30, "delisting_rate": 0.2},
+        },
+    }
+    gate = cr._decision_gate({"good": good, "bad": bad}, pooled)
+    assert gate["checks"]["event_directional"] is False
+    assert gate["status"] == "FAIL"

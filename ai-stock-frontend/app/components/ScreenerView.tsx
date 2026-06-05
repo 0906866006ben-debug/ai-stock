@@ -88,6 +88,12 @@ interface CandidateResult {
   extras?: {
     canslim?: Record<string, HorizonObservation>;
     canslim_error?: string;
+    grade_summary?: {
+      why_grade: string;
+      key_risks: string;
+      durability_note: string;
+      source: string;
+    };
   };
 }
 
@@ -117,7 +123,8 @@ interface ScreenerJob {
   error: string | null;
 }
 
-const GRADE_ORDER: CanslimGrade[] = ['S', 'A', 'B', 'C', 'D', 'NA'];
+// S folds into A (see normalizeGrade) so it is never surfaced as its own tier.
+const GRADE_ORDER: CanslimGrade[] = ['A', 'B', 'C', 'D', 'NA'];
 const GRADE_RANK: Record<CanslimGrade, number> = { S: 5, A: 4, B: 3, C: 2, D: 1, NA: 0 };
 const GRADE_META: Record<CanslimGrade, { label: string; title: string; tone: string; active: string; bar: string }> = {
   S: {
@@ -219,12 +226,31 @@ function readSavedData(): ScreenerData | null {
 
 function normalizeGrade(value: string | null | undefined): CanslimGrade {
   const grade = value?.trim().toUpperCase();
-  if (grade === 'S' || grade === 'A' || grade === 'B' || grade === 'C' || grade === 'D') return grade;
+  // S folds into A by design (the >=75 band was validated as noise, see backend
+  // canslim_output) — so the UI never surfaces a separate S tier.
+  if (grade === 'S' || grade === 'A') return 'A';
+  if (grade === 'B' || grade === 'C' || grade === 'D') return grade;
   return 'NA';
 }
 
 function scoreText(value: number | null | undefined): string {
   return value == null ? '-' : String(Math.round(value));
+}
+
+// Display-only "達成度" (achievement %) for the CANSLIM signal. The internal signal
+// (0-100) tops out around the mid-70s because a perfect score needs every pillar
+// maxed simultaneously, so a strong A can read as a confusing "67/100". This maps
+// the signal onto the VALIDATED grade thresholds (B=35, A=55, S=75) so each grade
+// occupies an intuitive band — internal score/grade math is unchanged.
+function achievementPct(signal: number | null | undefined): number | null {
+  if (signal == null || !Number.isFinite(signal)) return null;
+  const s = Math.max(0, Math.min(100, signal));
+  let pct: number;
+  if (s < 35) pct = (s / 35) * 55;                       // C   -> 0-55%
+  else if (s < 55) pct = 55 + ((s - 35) / 20) * 20;      // B   -> 55-75%
+  else if (s < 75) pct = 75 + ((s - 55) / 20) * 20;      // A   -> 75-95%
+  else pct = 95 + ((s - 75) / 25) * 5;                   // S→A -> 95-100%
+  return Math.round(pct);
 }
 
 function pctText(value: number | null | undefined): string {
@@ -336,7 +362,7 @@ export default function ScreenerView() {
   const [scanStartedAt, setScanStartedAt] = useState(() => Date.now());
   const [scanLimitInput, setScanLimitInput] = useState(String(DEFAULT_SCAN_LIMIT));
   const [aiTechOnly, setAiTechOnly] = useState(true);
-  const [selectedGrades, setSelectedGrades] = useState<Set<CanslimGrade>>(() => new Set(['S', 'A', 'B']));
+  const [selectedGrades, setSelectedGrades] = useState<Set<CanslimGrade>>(() => new Set(['A', 'B']));
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all');
   const [sortBy, setSortBy] = useState<'grade' | 'rs' | 'signal'>('grade');
   const [hideIncomplete, setHideIncomplete] = useState(true);
@@ -888,7 +914,7 @@ export default function ScreenerView() {
           <div className="text-xs text-zinc-500 dark:text-zinc-400">風險阻擋</div>
           <div className="mt-1 text-2xl font-bold text-rose-700 dark:text-rose-300">{blockedCount.toLocaleString()}</div>
         </div>
-        {(['S', 'A', 'B'] as CanslimGrade[]).map(grade => (
+        {(['A', 'B', 'C'] as CanslimGrade[]).map(grade => (
           <div key={grade} className={`rounded-2xl border p-4 ${GRADE_META[grade].tone}`}>
             <div className="text-xs opacity-75">{GRADE_META[grade].title}</div>
             <div className="mt-1 text-2xl font-bold">{gradeCounts[grade].toLocaleString()}</div>
@@ -933,14 +959,14 @@ export default function ScreenerView() {
             </button>
             <button
               type="button"
-              onClick={() => setSelectedGrades(new Set(['S', 'A', 'B']))}
+              onClick={() => setSelectedGrades(new Set(['A', 'B']))}
               className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              S/A/B
+              A/B
             </button>
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-6">
+        <div className="grid gap-3 md:grid-cols-5">
           {GRADE_ORDER.map(grade => {
             const meta = GRADE_META[grade];
             const selected = selectedGrades.has(grade);
@@ -1054,13 +1080,13 @@ export default function ScreenerView() {
                     </div>
                     <div className="grid min-w-[280px] grid-cols-3 gap-2">
                       {[
-                        ['Signal', item.metrics.canslim_signal],
-                        ['Risk', item.metrics.canslim_risk],
-                        ['Confidence', item.metrics.canslim_confidence],
-                      ].map(([label, value]) => (
-                        <div key={label} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/50">
+                        ['達成度', achievementPct(item.metrics.canslim_signal), '%'],
+                        ['Risk', item.metrics.canslim_risk, ''],
+                        ['Confidence', item.metrics.canslim_confidence, ''],
+                      ].map(([label, value, suffix]) => (
+                        <div key={label as string} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/50">
                           <div className="text-xs text-zinc-500 dark:text-zinc-400">{label}</div>
-                          <div className="mt-1 text-lg font-bold text-zinc-950 dark:text-zinc-50">{scoreText(value as number | null | undefined)}</div>
+                          <div className="mt-1 text-lg font-bold text-zinc-950 dark:text-zinc-50">{scoreText(value as number | null | undefined)}{value == null ? '' : suffix}</div>
                           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
                             <div className="h-full rounded-full bg-zinc-950 dark:bg-zinc-100" style={{ width: scoreWidth(value as number | null | undefined) }} />
                           </div>
@@ -1076,6 +1102,37 @@ export default function ScreenerView() {
                     <Metric label="相對強勢 60D" value={pctText(item.metrics.relative_strength_60d)} />
                     <Metric label="20 日均額" value={compactMoney(item.metrics.avg_turnover_20)} />
                   </div>
+
+                  {item.extras?.grade_summary && (
+                    <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">分級說明</span>
+                        <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
+                          {item.extras.grade_summary.source === 'gemini' ? 'AI 統整' : '系統統整'}
+                        </span>
+                      </div>
+                      <dl className="mt-2 space-y-1.5 text-sm">
+                        {item.extras.grade_summary.why_grade && (
+                          <div className="flex gap-2">
+                            <dt className="shrink-0 font-semibold text-zinc-500 dark:text-zinc-400">原因</dt>
+                            <dd className="text-zinc-700 dark:text-zinc-200">{item.extras.grade_summary.why_grade}</dd>
+                          </div>
+                        )}
+                        {item.extras.grade_summary.key_risks && (
+                          <div className="flex gap-2">
+                            <dt className="shrink-0 font-semibold text-amber-600 dark:text-amber-400">風險</dt>
+                            <dd className="text-zinc-700 dark:text-zinc-200">{item.extras.grade_summary.key_risks}</dd>
+                          </div>
+                        )}
+                        {item.extras.grade_summary.durability_note && (
+                          <div className="flex gap-2">
+                            <dt className="shrink-0 font-semibold text-emerald-600 dark:text-emerald-400">耐久度</dt>
+                            <dd className="text-zinc-700 dark:text-zinc-200">{item.extras.grade_summary.durability_note}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    </div>
+                  )}
 
                   <div className="mt-4">
                     <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Evidence</div>

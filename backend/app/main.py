@@ -60,10 +60,14 @@ from .services.tw_etf_holdings import get_etf_holdings
 from .services.fmp_price_history import get_us_price_history
 from backend.technical_analyzer.v1.contracts.input_contract import ContextBundle, OHLCVBar, OHLCVSeries
 from backend.technical_analyzer.v1.orchestration import AIAnalysisResultBuilder
-from .api.routes import screeners
+from .api.routes import quality_watch, screeners
 from backend.screeners.multi_factor_surge.api import router as multi_factor_surge_router
 from backend.app.services.strategy.canslim.observer import observe as observe_canslim
-from backend.app.services.strategy.canslim.live_screening import screen_symbol, screen_symbol_full
+from backend.app.services.strategy.canslim.live_screening import (
+    durability_metrics_for_symbol,
+    screen_symbol,
+    screen_symbol_full,
+)
 from backend.app.services.strategy.canslim.types import MarketFeatures
 from backend.app.services.multi_agent_analysis import run_multi_agent_analysis
 from backend.app.services import file_cache
@@ -77,6 +81,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(screeners.router)
+app.include_router(quality_watch.router)
 app.include_router(multi_factor_surge_router)
 
 SYMBOL_RE = re.compile(r"^[A-Za-z0-9]{1,10}$")
@@ -87,6 +92,7 @@ _tw_price_cache: dict[str, tuple[dict, float]] = {}
 _stocks_cache: tuple[dict | None, float] = (None, 0.0)
 _PRICE_CACHE_TTL = 300
 _STOCKS_CACHE_TTL = 86400
+_STOCKS_CACHE_LIMIT = 10000
 
 
 def _is_reusable_tw_analysis_cache(payload: dict) -> bool:
@@ -174,7 +180,7 @@ class _CandleStoreAdapter:
         return frame.reset_index(drop=True)
 
 
-def _canslim_summary_from_cards(cards: dict) -> CanslimSummary:
+def _canslim_summary_from_cards(cards: dict, durability_metrics: dict | None = None) -> CanslimSummary:
     warnings: list[str] = []
     grades: dict[str, str] = {}
     scores: dict[str, dict] = {}
@@ -196,6 +202,29 @@ def _canslim_summary_from_cards(cards: dict) -> CanslimSummary:
         hard_blocked=hard_blocked,
         data_warnings=list(dict.fromkeys(warnings)),
         is_mock=False,
+        durability_score=durability_metrics.get("score") if durability_metrics else None,
+        durability_components=durability_metrics.get("components", {}) if durability_metrics else {},
+        durability_metrics=durability_metrics,
+    )
+
+
+def _canslim_summary_from_full(full: CanslimFullResult) -> CanslimSummary:
+    return CanslimSummary(
+        grades={"screening": full.grade},
+        scores={
+            "screening": {
+                "overall_score": full.overall_score,
+                "risk_level": full.risk_level,
+                "confidence": full.confidence,
+                "pass_status": full.pass_status,
+            }
+        },
+        hard_blocked={"screening": full.pass_status == "FAIL"},
+        data_warnings=list(full.missing_data),
+        is_mock=full.is_mock_or_fallback_data,
+        durability_score=full.durability_score,
+        durability_components=dict(full.durability_components or {}),
+        durability_metrics=full.durability_metrics,
     )
 
 
@@ -230,6 +259,36 @@ def _detail_to_canslim_inputs(detail: dict) -> tuple[dict, dict]:
         "dealer_net_5": [inst.get("dealer_net_5d")] if inst.get("dealer_net_5d") is not None else None,
     }
     return fin_metrics, detail_inputs
+
+
+async def _build_canslim_summary_for_symbol(
+    symbol: str,
+    *,
+    market: dict | None = None,
+    detail: dict | None = None,
+    durability_metrics: dict | None = None,
+) -> CanslimSummary:
+    market = market if market is not None else (await get_tw_market_data(symbol))[0]
+    detail = detail if detail is not None else await get_tw_detail(symbol)
+    chart_data = market.get("chart_data", [])
+    as_of_date = str(chart_data[-1]["time"]) if chart_data else date.today().isoformat()
+    fin_metrics, canslim_detail = _detail_to_canslim_inputs(detail)
+    durability_metrics = (
+        durability_metrics
+        if durability_metrics is not None
+        else await run_in_threadpool(durability_metrics_for_symbol, symbol, as_of_date)
+    )
+    cards = observe_canslim(
+        symbol,
+        as_of_date,
+        store=_CandleStoreAdapter(symbol, chart_data),
+        market=MarketFeatures(),
+        fin_metrics=fin_metrics,
+        detail=canslim_detail,
+        event_window_active=False,
+        eps_filing_date=None,
+    )
+    return _canslim_summary_from_cards(cards, durability_metrics)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -452,32 +511,32 @@ async def analyze_tw(
     if comprehensive_state and comprehensive_state.get("equity_research"):
         equity_research = comprehensive_state["equity_research"]
 
+    screening_result = None
+    canslim_full = None
+    if include_screening:
+        try:
+            canslim_full = await screen_symbol_full(symbol)
+            screening_result = canslim_full.screening_result
+        except Exception:
+            screening_result = None
+
     canslim_summary = None
     if include_canslim:
         try:
-            chart_data = market.get("chart_data", [])
-            as_of_date = str(chart_data[-1]["time"]) if chart_data else date.today().isoformat()
-            fin_metrics, canslim_detail = _detail_to_canslim_inputs(detail)
-            cards = observe_canslim(
+            canslim_summary = await _build_canslim_summary_for_symbol(
                 symbol,
-                as_of_date,
-                store=_CandleStoreAdapter(symbol, chart_data),
-                market=MarketFeatures(),
-                fin_metrics=fin_metrics,
-                detail=canslim_detail,
-                event_window_active=False,
-                eps_filing_date=None,
+                market=market,
+                detail=detail,
+                durability_metrics=(
+                    canslim_full.durability_metrics
+                    if canslim_full is not None and canslim_full.durability_metrics is not None
+                    else None
+                ),
             )
-            canslim_summary = _canslim_summary_from_cards(cards)
         except Exception as exc:
             canslim_summary = _mock_canslim_summary(f"CANSLIM unavailable: {exc}")
-
-    screening_result = None
-    if include_screening:
-        try:
-            screening_result = await screen_symbol(symbol)
-        except Exception:
-            screening_result = None
+    elif canslim_full is not None:
+        canslim_summary = _canslim_summary_from_full(canslim_full)
 
     response = TaiwanStockAnalysisResponse(
         symbol=symbol,
@@ -514,11 +573,28 @@ async def analyze_tw(
         equity_research=equity_research,
         canslim_summary=canslim_summary,
         screening_result=screening_result,
+        canslim_full=canslim_full,
     )
 
     if _is_reusable_tw_analysis_cache(response.model_dump(mode="json")):
         file_cache.save("analyze_tw", _cache_key, response.model_dump(mode="json"))
     return response
+
+
+@app.get("/tw/canslim-summary", response_model=CanslimSummary)
+async def canslim_summary_tw(
+    symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)"),
+) -> CanslimSummary:
+    symbol = symbol.strip()
+    if not TW_SYMBOL_RE.match(symbol):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
+        )
+    try:
+        return await _build_canslim_summary_for_symbol(symbol)
+    except Exception as exc:
+        return _mock_canslim_summary(f"CANSLIM unavailable: {exc}")
 
 
 @app.get("/tw/screen", response_model=ScreeningResult)
@@ -730,13 +806,15 @@ async def tw_stocks(
     import time as _time
 
     cached, cached_at = _stocks_cache
-    # Only cache the unfiltered list
-    if not q and not stock_type and not industry and cached and (_time.time() - cached_at) < _STOCKS_CACHE_TTL:
-        data = cached
+    # Only cache the unfiltered full list; request-specific limits are applied after cache lookup.
+    if not q and not stock_type and not industry:
+        if cached and (_time.time() - cached_at) < _STOCKS_CACHE_TTL:
+            data = cached
+        else:
+            data = await get_tw_stocks(limit=_STOCKS_CACHE_LIMIT)
+            _stocks_cache = (data, _time.time())
     else:
         data = await get_tw_stocks(q=q, stock_type=stock_type, industry=industry, limit=limit)
-        if not q and not stock_type and not industry:
-            _stocks_cache = (data, _time.time())
 
     stocks = [StockInfo(**s) for s in data["stocks"][:limit]]
     return StockListResponse(

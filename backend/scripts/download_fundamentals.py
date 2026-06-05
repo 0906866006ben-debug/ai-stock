@@ -18,6 +18,10 @@ from typing import Any
 
 import httpx
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from backend.app.services.backtest.historical_data_store import DEFAULT_DB_PATH, HistoricalDataStore
 from backend.app.services.backtest.pit_fundamentals_store import DEFAULT_PIT_DB_PATH, PitFundamentalsStore
 from backend.app.services.strategy.canslim.universe_source import get_all_universe_symbols, get_tech_universe_symbols

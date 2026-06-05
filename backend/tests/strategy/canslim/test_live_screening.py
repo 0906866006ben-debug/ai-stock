@@ -187,7 +187,11 @@ def test_market_features_receives_screenable_universe_for_breadth(tmp_path, monk
 
     result = asyncio.run(live_screening.screen_symbol("2330", ohlcv_store=ohlcv, pit_store=pit))
 
-    assert captured["universe"] == ["2330", "2454"]
+    # RS universe now uses ALL OHLCV symbols (not just PIT-covered) so the
+    # breadth/percentile calculation is as broad as possible.  9999 has OHLCV
+    # but no PIT, so it appears in the RS universe even though its fundamental
+    # pillars will show Insufficient_Data.
+    assert set(captured["universe"]) == {"2330", "2454", "9999"}
     assert result.pillars["M"] != "Insufficient_Data"
 
 

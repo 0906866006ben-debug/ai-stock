@@ -11,6 +11,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend.scripts._env import load_backend_env
 from backend.app.services.backtest.historical_data_store import DEFAULT_DB_PATH
@@ -52,7 +58,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pit-db", default=str(DEFAULT_PIT_DB_PATH))
     p.add_argument("--out", default="artifacts/canslim_crash_resilience")
     p.add_argument("--universe-source", choices=("all", "tech"), default="tech")
-    p.add_argument("--include-delisted", action="store_true", help="Survivorship correction (needed for delisting rate)")
+    p.add_argument(
+        "--include-delisted",
+        dest="include_delisted",
+        action="store_true",
+        default=True,
+        help="Survivorship correction (default; needed for delisting rate)",
+    )
+    p.add_argument(
+        "--exclude-delisted",
+        dest="include_delisted",
+        action="store_false",
+        help="Run current-listed universe only; delisting-rate metric becomes incomplete",
+    )
     args = p.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

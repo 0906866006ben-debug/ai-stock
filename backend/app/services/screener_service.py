@@ -125,37 +125,201 @@ class _DataFrameStoreAdapter:
         return frame.reset_index(drop=True)
 
 
+@dataclass
+class _CanslimScanContext:
+    """Shared CANSLIM inputs for a whole scan, computed ONCE.
+
+    Lets the scan grade each stock with the SAME full pipeline single-stock
+    `/tw/screen/full` uses (broad-market RS percentile + market regime + PIT
+    fundamentals), instead of the OHLCV-only lightweight path. Without this the
+    scan can never fire the RS (T-1), market (M), or growth/institutional
+    (C/A/I/G) pillars, so every stock collapses to grade C.
+    """
+    bt_store: Any
+    pit_store: Any
+    as_of: str
+    market: Any
+    ur60: dict[str, float]
+    ur252: dict[str, float]
+    covered: set[str]
+    ushares: dict[str, float]
+
+
+def _build_canslim_scan_context(stock_ids: list[str]) -> Optional["_CanslimScanContext"]:
+    """Build shared CANSLIM context from the backtest stores (same data the
+    single-stock screen uses). Returns None if the stores are empty/unavailable,
+    in which case the scan falls back to the OHLCV-only lightweight grade."""
+    try:
+        from backend.app.services.backtest.historical_data_store import HistoricalDataStore
+        from backend.app.services.backtest.pit_fundamentals_store import PitFundamentalsStore
+        from backend.app.services.strategy.canslim.regime import build_market_features
+        from backend.app.services.strategy.canslim.live_screening import universe_returns_for_as_of
+        from backend.app.services.strategy.canslim.pit_inputs import universe_shares_as_of
+
+        # Use the RAW full-history store (NOT a windowed cache) so RS/52w-high are
+        # computed over the exact same data the single-stock screen uses — keeping
+        # scan grades identical to single-stock (the windowed cache drifted borderline
+        # grades). universe_returns_for_as_of is module-cached, so repeat scans on the
+        # same date reuse the heavy computation.
+        bt = HistoricalDataStore()
+        pit = PitFundamentalsStore()
+        all_syms = [str(s) for s in bt.list_stocks() if str(s) not in {"TAIEX", "TPEX"}]
+        if not all_syms:
+            return None
+        # as_of = GLOBAL freshest trading date (single MAX query, not 2517 lookups).
+        # Single-stock screening uses each stock's own latest bar, which for any
+        # actively-traded stock equals this global max — so scanning at the global
+        # max makes scan and single-stock grade at the SAME date.
+        as_of = ""
+        try:
+            with bt._connect() as conn:
+                row = conn.execute("SELECT MAX(date) FROM ohlcv").fetchone()
+                as_of = str(row[0]) if row and row[0] else ""
+        except Exception:
+            as_of = ""
+        if not as_of:
+            return None
+        # RS percentile ranked against the FULL market proxy (all OHLCV symbols),
+        # matching single-stock screenable_universe — so scan and single-stock agree.
+        ur60, ur252 = universe_returns_for_as_of(as_of, store=bt, universe=all_syms, include_symbol=all_syms[0])
+        market = build_market_features(as_of, store=bt, universe=all_syms)
+        ushares = universe_shares_as_of(pit, all_syms, as_of)
+        return _CanslimScanContext(bt, pit, as_of, market, ur60, ur252, set(all_syms), ushares)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("CANSLIM scan context build failed (%s); falling back to lightweight grade", exc)
+        return None
+
+
+def _scan_df_from_store(stock_id: str, ctx: Optional["_CanslimScanContext"], *, bars: int = 260):
+    """Recent OHLCV bars for a scan symbol from the local store (PIT-safe, no live fetch).
+    Returns None when the store is unavailable or lacks the symbol."""
+    if ctx is None or stock_id not in ctx.covered:
+        return None
+    try:
+        df = ctx.bt_store.get_ohlcv_as_of(stock_id, ctx.as_of, bars)
+    except Exception:
+        return None
+    if df is None or df.empty or "date" not in df.columns:
+        return None
+    return df
+
+
 def _attach_canslim_observation(
     result: SurgeCandidateResult,
     stock_id: str,
     df: pd.DataFrame,
     as_of_date: str,
+    ctx: Optional["_CanslimScanContext"] = None,
 ) -> None:
     try:
-        cards = observe_canslim(
-            stock_id,
-            as_of_date,
-            store=_DataFrameStoreAdapter(stock_id, df),
-            market=MarketFeatures(),
-            event_window_active=None,
-        )
-        swing = cards["swing_term"]
-        result.metrics.canslim_grade = str(swing.scores.get("grade"))
-        result.metrics.canslim_signal = int(swing.scores.get("signal", 0))
-        result.metrics.canslim_risk = int(swing.scores.get("risk", 0))
-        result.metrics.canslim_confidence = int(swing.scores.get("confidence", 0))
-        result.metrics.canslim_hard_blocked = bool(swing.scores.get("hard_blocked", False))
-        result.scores.canslim_signal = result.metrics.canslim_signal
-        result.scores.canslim_risk = result.metrics.canslim_risk
-        result.scores.canslim_confidence = result.metrics.canslim_confidence
-        result.extras["canslim"] = {
-            horizon: card.model_dump()
-            for horizon, card in cards.items()
-        }
-        if result.candidate_type == "不符合" and result.metrics.canslim_signal and result.metrics.canslim_signal > 0:
+        if ctx is not None and stock_id in ctx.covered:
+            # FULL pipeline — identical to single-stock /tw/screen/full so the scan
+            # grade matches the single-stock grade (incl. the C&A-both-fail cap and
+            # regime). raw_grade = regime-independent display grade.
+            from backend.app.services.strategy.canslim.pit_inputs import build_pit_inputs
+            from backend.app.services.strategy.canslim.screening import build_screening_result
+            detail, fin_metrics, filing = build_pit_inputs(stock_id, ctx.as_of, ctx.pit_store)
+            screen = build_screening_result(
+                stock_id,
+                ctx.as_of,
+                store=ctx.bt_store,
+                market=ctx.market,
+                fin_metrics=fin_metrics,
+                detail=detail,
+                universe_returns_60d=ctx.ur60,
+                universe_returns_252d=ctx.ur252,
+                eps_filing_date=filing,
+                universe_shares=ctx.ushares,
+            )
+            grade = str(screen.raw_grade or screen.candidate_grade)
+            signal = int(screen.scores.get("signal", 0) or 0)
+            risk = int(screen.scores.get("risk", 0) or 0)
+            confidence = int(screen.scores.get("confidence", 0) or 0)
+            hard_blocked = bool(screen.scores.get("hard_blocked", 0))
+            # Synthesize a swing_term card for the detail panel (null-safe shape).
+            result.extras["canslim"] = {
+                "swing_term": {
+                    "horizon": "swing_term",
+                    "status": screen.structure_status,
+                    "direction_hint": "",
+                    "evidence_based_reasons": [e.summary for e in screen.evidence][:6],
+                    "triggered_rule_ids": [],
+                    "key_observation_conditions": [],
+                    "invalidation_signals": list(screen.exit_signals),
+                    "risk_level": _risk_band(risk),
+                    "confidence_level": _confidence_band(confidence),
+                    "scores": {"signal": signal, "risk": risk, "confidence": confidence,
+                               "grade": grade, "hard_blocked": hard_blocked},
+                    "data_warnings": list(screen.data_warnings),
+                },
+                "screening_regime": screen.market_regime,
+            }
+            # Structured evidence for the A/B grade-summary step (computed once per
+            # scan, after the loop). Durability is computed only for S/A/B to keep cost down.
+            if grade in {"S", "A", "B"}:
+                dur = {}
+                try:
+                    from backend.app.services.strategy.canslim.live_screening import durability_metrics_for_symbol
+                    dur = durability_metrics_for_symbol(stock_id, ctx.as_of, pit_store=ctx.pit_store)
+                except Exception:
+                    dur = {}
+                result.extras["canslim_struct"] = {
+                    "stock_id": stock_id,
+                    "grade": grade,
+                    "signal": signal,
+                    "risk": risk,
+                    "confidence": confidence,
+                    "pillars": dict(screen.pillars),
+                    "invalidation": list(screen.exit_signals),
+                    "structure_status": screen.structure_status,
+                    "durability_score": dur.get("score"),
+                    "durability_components": dur.get("components") or {},
+                }
+        else:
+            # Fallback: OHLCV-only lightweight grade on the live scan df (no PIT/RS/regime).
+            cards = observe_canslim(
+                stock_id,
+                as_of_date,
+                store=_DataFrameStoreAdapter(stock_id, df),
+                market=MarketFeatures(),
+                event_window_active=None,
+            )
+            swing = cards["swing_term"]
+            grade = str(swing.scores.get("grade"))
+            signal = int(swing.scores.get("signal", 0))
+            risk = int(swing.scores.get("risk", 0))
+            confidence = int(swing.scores.get("confidence", 0))
+            hard_blocked = bool(swing.scores.get("hard_blocked", False))
+            result.extras["canslim"] = {horizon: card.model_dump() for horizon, card in cards.items()}
+
+        result.metrics.canslim_grade = grade
+        result.metrics.canslim_signal = signal
+        result.metrics.canslim_risk = risk
+        result.metrics.canslim_confidence = confidence
+        result.metrics.canslim_hard_blocked = hard_blocked
+        result.scores.canslim_signal = signal
+        result.scores.canslim_risk = risk
+        result.scores.canslim_confidence = confidence
+        if result.candidate_type == "不符合" and signal and signal > 0:
             result.candidate_type = "CANSLIM觀察"
     except Exception as exc:
         result.extras["canslim_error"] = str(exc)
+
+
+def _risk_band(score: int) -> str:
+    if score >= 60:
+        return "high"
+    if score >= 35:
+        return "medium"
+    return "low"
+
+
+def _confidence_band(score: int) -> str:
+    if score >= 70:
+        return "high"
+    if score >= 40:
+        return "medium"
+    return "low"
 
 
 def _canonicalize_ohlcv(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
@@ -2382,7 +2546,11 @@ async def scan_surge_candidates(
     if not universe:
         raise UniverseLoadError("Taiwan stock universe is empty.")
 
-    universe_size_estimated = data_source not in {"live", "public"} or not (1500 <= universe_total <= 2200)
+    # Flag RS-percentile reliability: too-small (<50) means percentile is noisy;
+    # too-large (>2200) suggests a stale or cross-listed bloat. Sector-specific
+    # universes (100-500) are intentional and do NOT need this flag — RS within
+    # a curated peer set is valid for sector-relative ranking.
+    universe_size_estimated = data_source not in {"live", "public"} or not (50 <= universe_total <= 2200)
     if universe_size_estimated and "universe_size_estimated" not in warnings:
         warnings.append("universe_size_estimated")
     if df_market is None and "market_index_unavailable" not in warnings:
@@ -2405,6 +2573,21 @@ async def scan_surge_candidates(
     debug_rows: list[dict[str, Any]] = []
     debug_ohlcv_failures: list[dict[str, Any]] = []
     total = len(universe)
+
+    # Build the shared CANSLIM context ONCE (broad RS + regime + PIT) so every
+    # scanned stock is graded with the same full pipeline as single-stock screening.
+    canslim_ctx: Optional[_CanslimScanContext] = None
+    if parameters.include_canslim:
+        from fastapi.concurrency import run_in_threadpool
+        scan_ids = [
+            sid for sid in (
+                str(it.get("stock_code") or it.get("code") or "").strip() for it in universe
+            ) if sid
+        ]
+        canslim_ctx = await run_in_threadpool(_build_canslim_scan_context, scan_ids)
+        if canslim_ctx is None:
+            warnings.append("canslim_full_pipeline_unavailable_using_lightweight")
+
     _report_progress(progress_callback, {
         "stage": "scanning",
         "processed": 0,
@@ -2432,26 +2615,43 @@ async def scan_surge_candidates(
                 "current_stock_name": stock_name,
                 "message": f"正在掃描 {stock_id} {stock_name}",
             })
-            load_result = await get_tw_price_history_with_source(stock_id, 150)
-            official_patch = False
-            source_info = load_result.source_info
-            if stock_id in tpex_quote_map:
-                load_result.candles, source_info, official_patch = _apply_official_latest_quote(
-                    load_result.candles,
-                    tpex_quote_map.get(stock_id),
-                    load_result.source_info,
+            # OHLCV source: prefer the local store (complete + fresh via refresh_data.py,
+            # no FinMind rate limit), fall back to a live fetch only when the store lacks
+            # the symbol. This makes the scan robust when FinMind/yfinance are throttled
+            # (which otherwise skips every stock -> 0 results).
+            min_days = int(require_rule(rules, "history.minimum_days"))
+            df = _scan_df_from_store(stock_id, canslim_ctx, bars=260)
+            if df is not None and len(df) >= min_days:
+                source_info = SourceInfo(
+                    ohlcv_source="local_store",
+                    turnover_source="local_store",
+                    market_index_source=(market_index_report or {}).get("source", "unavailable"),
+                    is_mock_data=False,
+                    bars_count=len(df),
+                    data_warnings=[],
                 )
-            source_info.market_index_source = (market_index_report or {}).get("source", "unavailable")
-            _count_source_info(data_source_report, source_info.to_dict(), official_patch=official_patch)
-            if load_result.error or len(load_result.candles) < int(require_rule(rules, "history.minimum_days")):
-                if debug:
-                    debug_ohlcv_failures.append({
-                        "stock_id": stock_id,
-                        "stock_name": stock_name,
-                        "bars_available": len(load_result.candles),
-                    })
-                continue
-            df = candles_to_dataframe(load_result.candles)
+                _count_source_info(data_source_report, source_info.to_dict())
+            else:
+                load_result = await get_tw_price_history_with_source(stock_id, 150)
+                official_patch = False
+                source_info = load_result.source_info
+                if stock_id in tpex_quote_map:
+                    load_result.candles, source_info, official_patch = _apply_official_latest_quote(
+                        load_result.candles,
+                        tpex_quote_map.get(stock_id),
+                        load_result.source_info,
+                    )
+                source_info.market_index_source = (market_index_report or {}).get("source", "unavailable")
+                _count_source_info(data_source_report, source_info.to_dict(), official_patch=official_patch)
+                if load_result.error or len(load_result.candles) < min_days:
+                    if debug:
+                        debug_ohlcv_failures.append({
+                            "stock_id": stock_id,
+                            "stock_name": stock_name,
+                            "bars_available": len(load_result.candles),
+                        })
+                    continue
+                df = candles_to_dataframe(load_result.candles)
             debug_context: dict[str, Any] = {}
             result = evaluate_surge_candidate(
                 stock_id,
@@ -2475,7 +2675,7 @@ async def scan_surge_candidates(
                 continue
             if parameters.include_canslim:
                 as_of_date = str(df["date"].iloc[-1])[:10] if "date" in df and not df.empty else datetime.now(TW_TIMEZONE).strftime("%Y-%m-%d")
-                _attach_canslim_observation(result, stock_id, df, as_of_date)
+                _attach_canslim_observation(result, stock_id, df, as_of_date, ctx=canslim_ctx)
             if debug:
                 debug_rows.append(_debug_row(result, debug_context))
             summary[result.candidate_type] = summary.get(result.candidate_type, 0) + 1
@@ -2533,6 +2733,27 @@ async def scan_surge_candidates(
     rows = rows[: parameters.limit]
     for index, row in enumerate(rows, start=1):
         row.rank = index
+
+    # Readable A/B grade summaries (why-grade / key-risks / durability) for the
+    # displayed high-grade cards — Gemini when GEMINI_API_KEY is set, else a
+    # deterministic template. Verb-free; never fabricates beyond the evidence.
+    if parameters.include_canslim:
+        try:
+            from backend.app.services.strategy.canslim.grade_summary import summarize_batch
+            cards = [row.extras["canslim_struct"] for row in rows if row.extras.get("canslim_struct")]
+            if cards:
+                _report_progress(progress_callback, {
+                    "stage": "summarizing", "processed": 0, "total": len(cards),
+                    "message": f"統整 {len(cards)} 檔 A/B 級卡片說明…",
+                })
+                summaries = await summarize_batch(cards, concurrency=5)
+                for row in rows:
+                    sm = summaries.get(row.stock_id)
+                    if sm is not None:
+                        row.extras["grade_summary"] = sm.model_dump()
+        except Exception as exc:  # never let summaries break the scan
+            logger.warning("grade summary step failed: %s", exc)
+
     rate_limit_state = get_finmind_rate_limit_state()
     data_source_report["ohlcv"]["finmind_rate_limited"] = bool(rate_limit_state["finmind_rate_limited"])
     data_source_report["ohlcv"]["finmind_disabled_until"] = rate_limit_state["finmind_disabled_until"]

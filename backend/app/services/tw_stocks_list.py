@@ -5,11 +5,13 @@ import httpx
 
 from backend.app.services.data_sources import settings as data_source_settings
 from backend.app.services.data_sources.tpex_client import fetch_tpex_mainboard_quotes
+from backend.app.services.tw_stock_master_cache import StockMasterCache
 
 FINMIND_BASE = "https://api.finmindtrade.com/api/v4/data"
 TWSE_STOCKS_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 TPEX_STOCKS_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes"
 PUBLIC_STOCK_CODE_RE = re.compile(r"^\d{4}$")
+STOCK_MASTER_CACHE_TTL_SECONDS = int(os.getenv("TW_STOCK_MASTER_CACHE_TTL_SECONDS", "86400"))
 
 _TYPE_MAP = {
     "twse": "上市",
@@ -42,35 +44,41 @@ async def get_tw_stocks(
     limit: int = 100,
 ) -> dict:
     warnings: list[str] = []
-    public_stocks, public_report = await _fetch_from_public_openapi_with_report()
-    token = os.getenv("FINMIND_API_KEY")
-    finmind_stocks: list[dict] = []
-
-    if public_stocks:
-        stocks = public_stocks
-        data_source = "public"
-        source = "twse_tpex_official"
+    cache = StockMasterCache()
+    cached = cache.read_snapshot(max_age_seconds=STOCK_MASTER_CACHE_TTL_SECONDS)
+    if cached and not cached.is_stale:
+        stocks = cached.stocks
+        data_source = "cache"
+        source = f"stock_master_cache:{cached.source}"
         fallback_used = False
+        public_report = {"warnings": [], "twse_count": 0, "tpex_count": 0}
     else:
-        warnings.append("official_universe_unavailable")
-        finmind_stocks = await _fetch_from_finmind(token) if token else []
-        if finmind_stocks:
-            stocks = finmind_stocks
-            data_source = "live"
-            source = "finmind"
+        stocks, data_source, source, fallback_used, public_report, live_warnings = await _load_live_stock_master()
+        warnings.extend(live_warnings)
+        if stocks and data_source != "mock":
+            cache.write_stocks(stocks, source=source)
+        elif cached:
+            stocks = cached.stocks
+            data_source = "cache"
+            source = f"stock_master_cache:{cached.source}"
             fallback_used = True
-        elif data_source_settings.allow_mock_data():
-            stocks = [dict(item, source="mock") for item in _MOCK_STOCKS]
-            data_source = "mock"
-            source = "mock"
-            fallback_used = True
-            warnings.append("mock_universe")
-        else:
-            stocks = []
-            data_source = "unavailable"
-            source = "unavailable"
-            fallback_used = True
-            warnings.append("universe_unavailable")
+            public_report = {"warnings": [], "twse_count": 0, "tpex_count": 0}
+            warnings.append("stock_master_cache_stale")
+
+    if not stocks and data_source_settings.allow_mock_data():
+        stocks = [dict(item, source="mock") for item in _MOCK_STOCKS]
+        data_source = "mock"
+        source = "mock"
+        fallback_used = True
+        public_report = {"warnings": [], "twse_count": 0, "tpex_count": 0}
+        warnings.append("mock_universe")
+
+    if not stocks:
+        data_source = "unavailable"
+        source = "unavailable"
+        fallback_used = True
+        public_report = {"warnings": [], "twse_count": 0, "tpex_count": 0}
+        warnings.append("universe_unavailable")
 
     # Filter
     if q:
@@ -95,15 +103,51 @@ async def get_tw_stocks(
         "data_source": data_source,
         "source_report": {
             "source": source,
-            "twse_count": source_counts["twse_official"],
-            "tpex_count": source_counts["tpex_official"],
+            "twse_count": source_counts["twse_official"] or public_report.get("twse_count", 0),
+            "tpex_count": source_counts["tpex_official"] or public_report.get("tpex_count", 0),
             "finmind_count": source_counts["finmind"],
             "mock_count": source_counts["mock"],
             "stock_count": total,
             "fallback_used": fallback_used,
             "warnings": warnings + public_report.get("warnings", []),
+            "cache_updated_at": cached.updated_at if cached else None,
         },
     }
+
+
+async def refresh_stock_master_cache() -> dict:
+    stocks, data_source, source, fallback_used, public_report, warnings = await _load_live_stock_master()
+    if not stocks or data_source == "mock":
+        return {
+            "status": "no_data",
+            "written": 0,
+            "source": source,
+            "warnings": warnings + public_report.get("warnings", []),
+            "fallback_used": fallback_used,
+        }
+    written = StockMasterCache().write_stocks(stocks, source=source)
+    return {
+        "status": "ok",
+        "written": written,
+        "source": source,
+        "warnings": warnings + public_report.get("warnings", []),
+        "fallback_used": fallback_used,
+    }
+
+
+async def _load_live_stock_master() -> tuple[list[dict], str, str, bool, dict, list[str]]:
+    warnings: list[str] = []
+    public_stocks, public_report = await _fetch_from_public_openapi_with_report()
+    token = os.getenv("FINMIND_API_KEY")
+    finmind_stocks: list[dict] = []
+
+    if public_stocks:
+        return public_stocks, "public", "twse_tpex_official", False, public_report, warnings
+    warnings.append("official_universe_unavailable")
+    finmind_stocks = await _fetch_from_finmind(token) if token else []
+    if finmind_stocks:
+        return finmind_stocks, "live", "finmind", True, public_report, warnings
+    return [], "unavailable", "unavailable", True, public_report, warnings
 
 
 async def _fetch_from_finmind(token: str) -> list[dict]:

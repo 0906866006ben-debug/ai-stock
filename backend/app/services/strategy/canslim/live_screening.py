@@ -21,6 +21,7 @@ from backend.app.services.backtest.pit_fundamentals_store import PitFundamentals
 from backend.app.services.finmind_detail import get_tw_detail
 from backend.app.services.strategy.canslim.params import load_params
 from backend.app.services.strategy.canslim.pit_inputs import build_pit_inputs, universe_shares_as_of
+from backend.app.services.strategy.canslim.durability import compute_durability
 from backend.app.services.strategy.canslim.live_finmind_inputs import build_live_inputs
 from backend.app.services.strategy.canslim.regime import build_market_features
 from backend.app.services.strategy.canslim.screening import build_screening_result
@@ -34,6 +35,8 @@ from backend.app.services import file_cache
 PILLARS = ("C", "A", "N", "S", "L", "I", "M")
 PIT_TABLES = ("month_revenue", "institutional", "margin", "per", "financials")
 _UNIVERSE_RETURNS_CACHE: dict[tuple[str, tuple[str, ...], str], tuple[dict[str, float], dict[str, float]]] = {}
+_PIT_SYMBOLS_CACHE: dict[str, set[str]] = {}
+_SCREENABLE_UNIVERSE_CACHE: dict[tuple[str, str], list[str]] = {}
 
 
 async def screen_symbol(
@@ -58,7 +61,8 @@ async def screen_symbol(
     resolved_date = str(as_of_date or _latest_as_of_date(store, stock_id, warnings))
     stale = _append_staleness_warning(resolved_date, warnings)
     universe = screenable_universe(pit, store)
-    has_pit_coverage = stock_id in _pit_symbols(pit)
+    universe = _cap_live_universe(universe, include_symbol=stock_id, warnings=warnings)
+    has_pit_coverage = _has_pit_coverage(pit, stock_id)
     if not has_pit_coverage:
         warnings.append(f"{stock_id} has no PIT fundamentals coverage; C/A/I pillars cannot be evaluated")
 
@@ -128,8 +132,17 @@ async def screen_symbol(
         warnings.append(f"CANSLIM screening fallback mock: {exc}")
         return _fallback_result(stock_id, resolved_date, warnings)
 
+    durability = durability_metrics_for_symbol(stock_id, resolved_date, pit_store=pit)
     all_warnings = _dedupe([*warnings, *result.data_warnings])
-    return result.model_copy(update={"is_mock": bool(is_mock), "data_warnings": all_warnings})
+    if durability.get("missing"):
+        all_warnings = _dedupe([*all_warnings, f"durability missing: {', '.join(durability['missing'])}"])
+    return result.model_copy(update={
+        "is_mock": bool(is_mock),
+        "data_warnings": all_warnings,
+        "durability_score": durability.get("score"),
+        "durability_components": durability.get("components") or {},
+        "durability_metrics": durability if durability.get("score") is not None else None,
+    })
 
 
 async def screen_symbol_full(
@@ -151,12 +164,114 @@ async def screen_symbol_full(
 
 
 def screenable_universe(pit_store: PitFundamentalsStore, ohlcv_store: HistoricalDataStore) -> list[str]:
-    """Symbols with both OHLCV history and at least one PIT fundamentals row."""
+    """RS reference universe: all OHLCV-covered symbols.
+
+    RS percentile (T-1/L pillar) must be ranked against the broadest possible
+    peer set. Using only PIT-covered symbols produces a biased, undersized
+    universe during incremental fundamentals downloads and permanently excludes
+    non-coverage stocks from proper ranking.
+
+    Fundamental rules (C/A/I pillars) do their own PIT-coverage check internally
+    via build_pit_inputs → they return None when data is absent, which lowers
+    confidence but does NOT affect the RS universe size here.
+    """
+    cache_key = (_store_cache_key(ohlcv_store), "ohlcv_only")
+    cached = _SCREENABLE_UNIVERSE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     try:
-        ohlcv_symbols = set(str(symbol) for symbol in ohlcv_store.list_stocks())
+        ohlcv_symbols = sorted(str(symbol) for symbol in ohlcv_store.list_stocks())
     except Exception:
-        ohlcv_symbols = set()
-    return sorted(ohlcv_symbols & _pit_symbols(pit_store))
+        ohlcv_symbols = []
+    _SCREENABLE_UNIVERSE_CACHE[cache_key] = ohlcv_symbols
+    return ohlcv_symbols
+
+
+def _cap_live_universe(universe: list[str], *, include_symbol: str, warnings: list[str]) -> list[str]:
+    """Bound live single-symbol work so the UI stays responsive."""
+    try:
+        max_symbols = int(os.getenv("AISTOCK_LIVE_SCREEN_UNIVERSE_MAX", "300"))
+    except ValueError:
+        max_symbols = 300
+    symbols = _dedupe([str(include_symbol), *universe])
+    if max_symbols <= 0 or len(symbols) <= max_symbols:
+        return symbols
+    capped = _stratified_symbol_sample(symbols, max_symbols, include_symbol=str(include_symbol))
+    warnings.append(f"live screening RS universe sampled at {len(capped)} symbols for UI responsiveness")
+    return capped
+
+
+def _stratified_symbol_sample(symbols: list[str], max_symbols: int, *, include_symbol: str) -> list[str]:
+    """Deterministically sample across the sorted universe instead of taking a code prefix."""
+    ordered = sorted(_dedupe(symbols))
+    if max_symbols <= 0 or len(ordered) <= max_symbols:
+        return ordered
+
+    target = max(1, max_symbols - 1)
+    if target == 1:
+        sampled = [ordered[0]]
+    else:
+        last = len(ordered) - 1
+        sampled = [ordered[round(i * last / (target - 1))] for i in range(target)]
+    capped = _dedupe([include_symbol, *sampled])
+    if len(capped) > max_symbols:
+        capped = capped[:max_symbols]
+    return capped
+
+
+def durability_metrics_for_symbol(
+    symbol: str,
+    as_of_date: str,
+    *,
+    pit_store: PitFundamentalsStore | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a frontend-friendly durability payload, or null-score on sparse data."""
+    pit = pit_store or PitFundamentalsStore()
+    model_params = params or load_params()
+    try:
+        financials = pit.get_financials_as_of(symbol, as_of_date, limit=20)
+        balance_sheet = pit.get_balance_sheet_as_of(symbol, as_of_date, limit=8)
+        cash_flow = pit.get_cash_flow_as_of(symbol, as_of_date, limit=12) if hasattr(pit, "get_cash_flow_as_of") else None
+        detail, fin_metrics, _ = build_pit_inputs(symbol, as_of_date, pit)
+        result = compute_durability(
+            fin_metrics=fin_metrics,
+            detail=detail,
+            financials=financials,
+            balance_sheet=balance_sheet,
+            cash_flow=cash_flow,
+            params=model_params,
+        )
+    except Exception:
+        return {
+            "score": None,
+            "components": {},
+            "confidence": 0,
+            "change_yoy": None,
+            "trend": None,
+            "missing": ["durability_unavailable"],
+        }
+    if not result.components:
+        return {
+            "score": None,
+            "components": {},
+            "confidence": 0,
+            "change_yoy": None,
+            "trend": None,
+            "missing": result.missing,
+        }
+    component_count = len(result.components)
+    expected_count = component_count + len(result.missing)
+    confidence = int(round(100 * component_count / expected_count)) if expected_count else 0
+    return {
+        "score": float(result.score),
+        "components": {key: float(value) for key, value in result.components.items()},
+        "confidence": confidence,
+        "change_yoy": None,
+        "trend": None,
+        "missing": list(result.missing),
+        "f_score_partial": result.fscore,
+    }
 
 
 def universe_returns_for_as_of(
@@ -197,6 +312,8 @@ def universe_shares_for_as_of(
 def clear_universe_returns_cache() -> None:
     _UNIVERSE_RETURNS_CACHE.clear()
     _UNIVERSE_SHARES_CACHE.clear()
+    _PIT_SYMBOLS_CACHE.clear()
+    _SCREENABLE_UNIVERSE_CACHE.clear()
 
 
 def _adjusted_rs_enabled() -> bool:
@@ -261,6 +378,10 @@ def _return_from_bars(bars: Any, lookback_bars: int) -> float | None:
 
 
 def _pit_symbols(pit_store: PitFundamentalsStore) -> set[str]:
+    cache_key = str(getattr(pit_store, "db_path", id(pit_store)))
+    cached = _PIT_SYMBOLS_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     symbols: set[str] = set()
     for table in PIT_TABLES:
         try:
@@ -269,7 +390,20 @@ def _pit_symbols(pit_store: PitFundamentalsStore) -> set[str]:
         except (sqlite3.Error, AttributeError):
             continue
         symbols.update(str(row[0]) for row in rows if row[0])
+    _PIT_SYMBOLS_CACHE[cache_key] = symbols
     return symbols
+
+
+def _has_pit_coverage(pit_store: PitFundamentalsStore, stock_id: str) -> bool:
+    for table in PIT_TABLES:
+        try:
+            with pit_store._connect() as conn:
+                row = conn.execute(f"SELECT 1 FROM {table} WHERE stock_id = ? LIMIT 1", (str(stock_id),)).fetchone()
+        except (sqlite3.Error, AttributeError):
+            continue
+        if row is not None:
+            return True
+    return False
 
 
 def _store_cache_key(store: HistoricalDataStore) -> str:

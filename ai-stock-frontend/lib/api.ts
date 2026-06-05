@@ -14,9 +14,13 @@ import type {
   ETFHoldingsResponse,
   CandlePoint,
   CanslimFullResult,
+  CanslimSummary,
   EntryContext,
   AllocationResult,
   AllocationRequest,
+  QuarterlySnapshot,
+  QualityWatchHistoryItem,
+  DurabilityMetrics,
 } from './types';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim().replace(/\/+$/, '');
@@ -58,21 +62,86 @@ export async function analyzeStock(symbol: string): Promise<StockAnalysisRespons
   return data;
 }
 
-export async function analyzeTW(symbol: string): Promise<TaiwanStockAnalysisResponse> {
+export async function analyzeTW(
+  symbol: string,
+  options: { includeCanslim?: boolean; includeScreening?: boolean } = {}
+): Promise<TaiwanStockAnalysisResponse> {
+  const params: Record<string, string | boolean> = {
+    symbol: symbol.trim(),
+  };
+  if (options.includeCanslim) params.include_canslim = true;
+  if (options.includeScreening) params.include_screening = true;
   const { data } = await axios.get<TaiwanStockAnalysisResponse>(`${API_BASE}/analyze/tw`, {
+    params,
+  });
+  return data;
+}
+
+export async function getTwCanslimSummary(symbol: string): Promise<CanslimSummary> {
+  const { data } = await axios.get<CanslimSummary>(`${API_BASE}/tw/canslim-summary`, {
     params: { symbol: symbol.trim() },
   });
   return data;
+}
+
+const SCREEN_FULL_CACHE_TTL_MS = 10 * 60 * 1000;
+const screenFullCache = new Map<string, { data: CanslimFullResult; cachedAt: number }>();
+const screenFullInflight = new Map<string, Promise<CanslimFullResult>>();
+
+function screenFullCacheKey(symbol: string, asOfDate?: string): string {
+  const effectiveDate = asOfDate ?? new Date().toISOString().slice(0, 10);
+  return `${symbol.trim()}|${effectiveDate}`;
 }
 
 export async function getTwScreenFull(
   symbol: string,
   asOfDate?: string
 ): Promise<CanslimFullResult> {
+  const key = screenFullCacheKey(symbol, asOfDate);
+  const cached = screenFullCache.get(key);
+  if (cached && Date.now() - cached.cachedAt < SCREEN_FULL_CACHE_TTL_MS) return cached.data;
+  if (cached) screenFullCache.delete(key);
+  const inflight = screenFullInflight.get(key);
+  if (inflight) return inflight;
+
   const params: Record<string, string> = { symbol: symbol.trim() };
   if (asOfDate) params.as_of_date = asOfDate;
-  const { data } = await axios.get<CanslimFullResult>(`${API_BASE}/tw/screen/full`, { params });
-  return data;
+  const request = axios
+    .get<CanslimFullResult>(`${API_BASE}/tw/screen/full`, { params })
+    .then(({ data }) => {
+      screenFullCache.set(key, { data, cachedAt: Date.now() });
+      return data;
+    })
+    .finally(() => {
+      screenFullInflight.delete(key);
+    });
+  screenFullInflight.set(key, request);
+  return request;
+}
+
+export async function getTwScreenQualityBatch(
+  symbols: string[],
+  options: { concurrency?: number; asOfDate?: string } = {}
+): Promise<Array<readonly [string, DurabilityMetrics | null]>> {
+  const uniqueSymbols = Array.from(new Set(symbols.map((symbol) => symbol.trim()).filter(Boolean)));
+  const concurrency = Math.max(1, Math.floor(options.concurrency ?? 2));
+  const results: Array<readonly [string, DurabilityMetrics | null]> = [];
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < uniqueSymbols.length) {
+      const symbol = uniqueSymbols[nextIndex++];
+      try {
+        const full = await getTwScreenFull(symbol, options.asOfDate);
+        results.push([symbol, full.durability_metrics ?? null] as const);
+      } catch {
+        results.push([symbol, null] as const);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, uniqueSymbols.length) }, () => worker()));
+  return results;
 }
 
 export async function postTwAllocation(payload: AllocationRequest): Promise<AllocationResult> {
@@ -209,6 +278,19 @@ export async function syncTelegramWatchlist(
   return data;
 }
 
+export async function getQualitySnapshot(quarter?: string): Promise<QuarterlySnapshot> {
+  const url = quarter ? `${API_BASE}/tw/quality-watch` : `${API_BASE}/tw/quality-watch/latest`;
+  const { data } = await axios.get<QuarterlySnapshot>(url, {
+    params: quarter ? { quarter } : undefined,
+  });
+  return data;
+}
+
+export async function listQualityWatchQuarters(): Promise<QualityWatchHistoryItem[]> {
+  const { data } = await axios.get<QualityWatchHistoryItem[]>(`${API_BASE}/tw/quality-watch/history`);
+  return data;
+}
+
 export type {
   TaiwanStockAnalysisResponse,
   FundamentalsData,
@@ -222,4 +304,7 @@ export type {
   EarningsCalendarResponse,
   ETFHoldingsResponse,
   CanslimFullResult,
+  CanslimSummary,
+  QuarterlySnapshot,
+  QualityWatchHistoryItem,
 };

@@ -1,0 +1,2 @@
+"""Idempotent SQLite migration scripts."""
+

@@ -148,10 +148,16 @@ def build_screening_result(
     # Swing exit / invalidation layer (data-driven, verb-free conditions).
     exit_eval = evaluate_swing_exit(features, params)
 
+    # raw_grade_capped applies the fundamentals cap but NOT the regime demotion,
+    # so it shows the stock's true signal quality regardless of market environment.
+    raw_grade_capped = _cap_grade_for_failed_fundamentals(
+        raw_grade if raw_grade in ("S", "A", "B", "C", "D") else "C", pillars
+    )
     return ScreeningResult(
         stock_id=str(symbol),
         as_of_date=str(as_of_date),
         candidate_grade=candidate_grade,  # type: ignore[arg-type]
+        raw_grade=raw_grade_capped,  # type: ignore[arg-type]
         canslim_match=_canslim_match(pillars),
         pillars=pillars,
         pillar_metrics=pillar_metrics,
@@ -160,6 +166,7 @@ def build_screening_result(
             "signal": int(card.scores.get("signal", 0) or 0),
             "risk": int(card.scores.get("risk", 0) or 0),
             "confidence": int(card.scores.get("confidence", 0) or 0),
+            "hard_blocked": int(bool(card.scores.get("hard_blocked", False))),
         },
         market_regime=market_regime,  # type: ignore[arg-type]
         interpretation=_safe_text(interpretation),

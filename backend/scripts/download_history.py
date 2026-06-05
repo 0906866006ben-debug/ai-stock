@@ -17,7 +17,12 @@ import json
 import logging
 import sys
 import time
+from datetime import date, datetime
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend.scripts._env import load_backend_env
 from backend.app.services.backtest.historical_data_store import HistoricalDataStore, DEFAULT_DB_PATH
@@ -80,19 +85,83 @@ async def _fetch_one(stock_id: str, days: int) -> list[dict]:
     return rows
 
 
-async def download_all(stocks: list[str], days: int, store: HistoricalDataStore, rate_limit_sec: float = 0.5) -> int:
+async def download_all(
+    stocks: list[str],
+    days: int,
+    store: HistoricalDataStore,
+    rate_limit_sec: float = 0.5,
+    *,
+    days_by_symbol: dict[str, int] | None = None,
+) -> int:
     total = 0
     for i, stock_id in enumerate(stocks):
-        logger.info("(%d/%d) downloading %s...", i + 1, len(stocks), stock_id)
-        rows = await _fetch_one(stock_id, days)
+        symbol = str(stock_id)
+        lookback_days = int(days_by_symbol.get(symbol, days)) if days_by_symbol else int(days)
+        logger.info("(%d/%d) downloading %s (%d days)...", i + 1, len(stocks), symbol, lookback_days)
+        rows = await _fetch_one(symbol, lookback_days)
         if rows:
             n = store.upsert_rows(rows)
             total += n
             logger.info("  → wrote %d rows", n)
         else:
-            logger.warning("  → no data for %s", stock_id)
+            logger.warning("  → no data for %s", symbol)
         await asyncio.sleep(rate_limit_sec)   # rate limiting
     return total
+
+
+def incremental_days_by_symbol(
+    store: HistoricalDataStore,
+    stocks: list[str],
+    *,
+    end_date: str | None = None,
+    min_days: int = 10,
+    buffer_days: int = 7,
+    max_days: int = 1500,
+) -> dict[str, int]:
+    """Return per-symbol lookbacks that fill local OHLCV gaps."""
+    lookbacks: dict[str, int] = {}
+    if not stocks:
+        return lookbacks
+    today = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else date.today()
+    for stock_id in stocks:
+        symbol = str(stock_id)
+        latest = store.get_latest_date(symbol)
+        if not latest:
+            lookbacks[symbol] = int(max_days)
+            continue
+        try:
+            latest_date = datetime.strptime(str(latest)[:10], "%Y-%m-%d").date()
+        except ValueError:
+            lookbacks[symbol] = int(max_days)
+            continue
+        gap_days = max(0, (today - latest_date).days) + int(buffer_days)
+        lookbacks[symbol] = max(int(min_days), min(int(max_days), gap_days))
+    return lookbacks
+
+
+def incremental_days_for_gap(
+    store: HistoricalDataStore,
+    stocks: list[str],
+    *,
+    end_date: str | None = None,
+    min_days: int = 10,
+    buffer_days: int = 7,
+    max_days: int = 1500,
+) -> int:
+    """Return the largest per-symbol lookback needed by this universe.
+
+    Kept for callers that only need a summary value; download_all can consume
+    incremental_days_by_symbol to avoid forcing every symbol into this maximum.
+    """
+    lookbacks = incremental_days_by_symbol(
+        store,
+        stocks,
+        end_date=end_date,
+        min_days=min_days,
+        buffer_days=buffer_days,
+        max_days=max_days,
+    )
+    return max(lookbacks.values(), default=int(min_days))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -100,12 +169,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--start", required=False, help="Inclusive start date YYYY-MM-DD (informational; FinMind uses days lookback)")
     parser.add_argument("--end", required=False, help="Inclusive end date YYYY-MM-DD (informational)")
     parser.add_argument("--days", type=int, default=1500, help="Lookback days from today (default ~4 years)")
+    parser.add_argument("--incremental", action="store_true", help="Compute lookback from each stock's latest local bar instead of full --days")
+    parser.add_argument("--min-days", type=int, default=10, help="Minimum lookback days for --incremental")
+    parser.add_argument("--buffer-days", type=int, default=7, help="Extra lookback cushion for --incremental")
+    parser.add_argument("--max-days", type=int, default=1500, help="Max lookback days for missing/stale symbols in --incremental")
     parser.add_argument("--stocks", nargs="*", help="Override universe with explicit stock codes")
     parser.add_argument(
         "--universe-source",
-        choices=("file", "broad", "all", "all+etf"),
+        choices=("file", "broad", "all", "all+etf", "ohlcv"),
         default="file",
-        help="Universe source when --stocks is not given. file=--universe-file JSON; broad=tech industries; all=every listed common stock; all+etf also includes ETFs (for price-only).",
+        help="Universe source when --stocks is not given. file=--universe-file JSON; broad=tech industries; all=every listed common stock; all+etf also includes ETFs (for price-only); ohlcv=existing local DB symbols.",
     )
     parser.add_argument(
         "--universe-file",
@@ -133,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
         stocks = get_all_universe_symbols(include_etf=False)
     elif args.universe_source == "all+etf":
         stocks = get_all_universe_symbols(include_etf=True)
+    elif args.universe_source == "ohlcv":
+        stocks = HistoricalDataStore(args.db).list_stocks()
     else:
         universe_path = Path(args.universe_file)
         if not universe_path.exists():
@@ -144,11 +219,22 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Universe resolved to zero stocks (check FINMIND_API_KEY for --universe-source all/broad)")
         return 2
 
-    logger.info("Downloading %d stocks, ~%d days each, to %s", len(stocks), args.days, args.db)
-
     store = HistoricalDataStore(args.db)
+    days_by_symbol: dict[str, int] | None = None
+    if args.incremental:
+        days_by_symbol = incremental_days_by_symbol(
+            store,
+            stocks,
+            end_date=args.end,
+            min_days=args.min_days,
+            buffer_days=args.buffer_days,
+            max_days=args.max_days,
+        )
+        args.days = max(days_by_symbol.values(), default=args.min_days)
+
+    logger.info("Downloading %d stocks, up to ~%d days each, to %s", len(stocks), args.days, args.db)
     start_time = time.time()
-    total = asyncio.run(download_all(stocks, args.days, store, args.rate_limit))
+    total = asyncio.run(download_all(stocks, args.days, store, args.rate_limit, days_by_symbol=days_by_symbol))
     elapsed = time.time() - start_time
     logger.info("Done. Wrote %d total rows in %.1f seconds.", total, elapsed)
     logger.info("DB now contains %d rows.", store.row_count())

@@ -68,8 +68,17 @@ def rank_universe(
     if not universe:
         return pd.DataFrame(columns=RANK_COLUMNS)
     market = _market_features_for_entry(as_of_date, market=None, data_store=data_store, universe=universe, cache={})
-    r60 = _universe_returns_as_of(data_store, universe, as_of_date, 60)
-    r252 = _universe_returns_as_of(data_store, universe, as_of_date, 252)
+    # RS percentile must be ranked against the broadest peer set available —
+    # the full OHLCV store (all listed stocks), not just the candidate subset.
+    # Ranking 200 tech stocks against each other gives distorted percentiles;
+    # ranking against 1000+ market stocks gives a market-relative signal.
+    try:
+        broad_rs_universe = sorted(str(s) for s in data_store.list_stocks()
+                                   if str(s) not in {"TAIEX", "TPEX"})
+    except Exception:
+        broad_rs_universe = universe  # fallback to candidate universe
+    r60 = _universe_returns_as_of(data_store, broad_rs_universe, as_of_date, 60)
+    r252 = _universe_returns_as_of(data_store, broad_rs_universe, as_of_date, 252)
     ushares = universe_shares_as_of(pit_store, universe, as_of_date)
 
     rows: list[dict[str, Any]] = []

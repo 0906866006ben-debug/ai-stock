@@ -86,24 +86,21 @@ async def _fetch_gemini_grounded_search(symbol: str, company_name: str) -> dict:
                 attempted=True,
                 fallback_models=model_chain[1:],
             )
-            import google.generativeai as genai
+            from google import genai
+            from google.genai import types
 
-            genai.configure(api_key=gemini_key)
-
-            # Create model with google_search tool enabled
-            model = genai.GenerativeModel(
-                model_name,
-                tools=[{"google_search": {}}],  # Enable Google Search grounding
+            client = genai.Client(api_key=gemini_key)
+            config = types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
             )
 
             # Query for recent news and sentiment on this Taiwan stock
             query = f"{symbol} {company_name} 股票 新聞 分析師 評論 今年 最新"
 
-            response = model.generate_content(
-                query,
-                tool_config={
-                    "function_calling_config": "AUTO",
-                },
+            response = client.models.generate_content(
+                model=model_name,
+                contents=query,
+                config=config,
             )
 
             # Parse response text into structured data

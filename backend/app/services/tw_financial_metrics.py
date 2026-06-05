@@ -227,46 +227,55 @@ def format_metrics_for_narrative(metrics: dict) -> str:
 
     source_note = f"(來源: {source}{'模擬' if is_mock else '實時'})" if source else ""
 
+    def fmt_number(key: str, spec: str, default: float | None = None) -> str:
+        value = metrics.get(key, default)
+        if value is None:
+            return "N/A"
+        try:
+            return format(float(value), spec)
+        except (TypeError, ValueError):
+            return "N/A"
+
     return f"""
 ## 財務數據摘要 {source_note}
 
 ### 市場指標
-- 股價: TWD {metrics.get('current_price', 'N/A'):.2f}
-- 市值: TWD {metrics.get('market_cap', 0):,.0f}
-- 30天漲幅: {metrics.get('price_30d', 'N/A'):.1f}%
-- YTD漲幅: {metrics.get('ytd_performance', 'N/A'):.1f}%
+- 股價: TWD {fmt_number('current_price', '.2f')}
+- 市值: TWD {fmt_number('market_cap', ',.0f', 0)}
+- 30天漲幅: {fmt_number('price_30d', '.1f')}%
+- YTD漲幅: {fmt_number('ytd_performance', '.1f')}%
 
 ### 估值指標
-- 本益比 (Trailing P/E): {metrics.get('pe_ratio', 'N/A'):.1f}x
-- 本淨比 (P/B): {metrics.get('pb_ratio', 'N/A'):.2f}x
-- 本營比 (P/S): {metrics.get('ps_ratio', 'N/A'):.2f}x
-- Forward P/E: {metrics.get('forward_pe', 'N/A'):.1f}x
-- EV/Sales: {metrics.get('ev_sales', 'N/A'):.2f}x
-- PEG比率: {metrics.get('peg_ratio', 'N/A'):.2f}
+- 本益比 (Trailing P/E): {fmt_number('pe_ratio', '.1f')}x
+- 本淨比 (P/B): {fmt_number('pb_ratio', '.2f')}x
+- 本營比 (P/S): {fmt_number('ps_ratio', '.2f')}x
+- Forward P/E: {fmt_number('forward_pe', '.1f')}x
+- EV/Sales: {fmt_number('ev_sales', '.2f')}x
+- PEG比率: {fmt_number('peg_ratio', '.2f')}
 
 ### 成長指標
-- 營收YoY: {metrics.get('revenue_yoy', 'N/A'):.1f}%
-- 營收QoQ: {metrics.get('revenue_qoq', 'N/A'):.1f}%
-- EPS YoY: {metrics.get('eps_yoy', 'N/A'):.1f}%
-- 最新EPS: {metrics.get('eps_latest', 'N/A'):.2f}元
+- 營收YoY: {fmt_number('revenue_yoy', '.1f')}%
+- 營收QoQ: {fmt_number('revenue_qoq', '.1f')}%
+- EPS YoY: {fmt_number('eps_yoy', '.1f')}%
+- 最新EPS: {fmt_number('eps_latest', '.2f')}元
 
 ### 利潤率趨勢
-- 毛利率: {metrics.get('gross_margin', 'N/A'):.1f}%
-- 營益率: {metrics.get('operating_margin', 'N/A'):.1f}%
-- 淨利率: {metrics.get('net_margin', 'N/A'):.1f}%
-- 自由現金流率: {metrics.get('fcf_margin', 'N/A'):.1f}%
+- 毛利率: {fmt_number('gross_margin', '.1f')}%
+- 營益率: {fmt_number('operating_margin', '.1f')}%
+- 淨利率: {fmt_number('net_margin', '.1f')}%
+- 自由現金流率: {fmt_number('fcf_margin', '.1f')}%
 
 ### 財務健康度
-- 負債比: {metrics.get('debt_ratio', 'N/A'):.1f}%
-- 流動比: {metrics.get('current_ratio', 'N/A'):.2f}x
-- ROE: {metrics.get('roe', 'N/A'):.1f}%
-- ROA: {metrics.get('roa', 'N/A'):.1f}%
+- 負債比: {fmt_number('debt_ratio', '.1f')}%
+- 流動比: {fmt_number('current_ratio', '.2f')}x
+- ROE: {fmt_number('roe', '.1f')}%
+- ROA: {fmt_number('roa', '.1f')}%
 
 ### 股利政策
-- 配息殖利率: {metrics.get('dividend_yield', 'N/A'):.2f}%
-- 配息率: {metrics.get('payout_ratio', 'N/A'):.1f}%
+- 配息殖利率: {fmt_number('dividend_yield', '.2f')}%
+- 配息率: {fmt_number('payout_ratio', '.1f')}%
 
 ### 同業對標
-- 產業均數P/E: {metrics.get('sector_avg_pe', 'N/A'):.1f}x
-- 產業均數P/B: {metrics.get('sector_avg_pb', 'N/A'):.2f}x
+- 產業均數P/E: {fmt_number('sector_avg_pe', '.1f')}x
+- 產業均數P/B: {fmt_number('sector_avg_pb', '.2f')}x
 """

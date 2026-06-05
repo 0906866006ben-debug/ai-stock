@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  analyzeStock, analyzeTW, getCompetitors, getTwPriceHistory, syncTelegramWatchlist,
+  analyzeStock, analyzeTW, getCompetitors, getTwCanslimSummary, getTwPriceHistory, syncTelegramWatchlist,
   StockAnalysisResponse,
 } from '@/lib/api';
 import {
@@ -35,8 +35,9 @@ import CanslimGradeCard from './components/CanslimGradeCard';
 import EntryContextCard from './components/EntryContextCard';
 import BoldPlanView from './components/BoldPlanView';
 import MarketHeatmapView from './components/MarketHeatmapView';
+import QualityWatchTab from './components/QualityWatchTab';
 
-type Page = 'analysis' | 'stock-analysis' | 'screener' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap';
+type Page = 'analysis' | 'stock-analysis' | 'screener' | 'portfolio' | 'quality-watch' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_SIM_POSITIONS = 'stockAssistant.simPositions';
@@ -58,6 +59,7 @@ const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'stock-analysis', label: '看看走勢', icon: '📈' },
   { page: 'screener', label: '挑選潛力股', icon: '✨' },
   { page: 'portfolio', label: '我的小金庫', icon: '💖' },
+  { page: 'quality-watch', label: '季度品質清單', icon: '🏅' },
   { page: 'directory', label: '股票目錄', icon: '📋' },
   { page: 'news', label: '今日新聞', icon: '📰' },
   { page: 'calendar', label: '小日曆', icon: '📅' },
@@ -376,6 +378,13 @@ export default function DashboardPage() {
         const data = await analyzeTW(symbol);
         setTwResult(data);
         setUsResult(null);
+        getTwCanslimSummary(symbol)
+          .then((summary) => {
+            setTwResult((prev) => (
+              prev?.symbol === data.symbol ? { ...prev, canslim_summary: summary } : prev
+            ));
+          })
+          .catch(() => null);
         // Update current price in portfolio
         setPositions((prev) => {
           const updatedAt = new Date().toISOString();
@@ -439,6 +448,12 @@ export default function DashboardPage() {
       saveFavorites([...favorites, { code, name }]);
       syncTelegramWatchlist('add', code, name).catch(() => null);
     }
+  }
+
+  function addFavorite(code: string, name: string) {
+    if (favCodes.includes(code)) return;
+    saveFavorites([...favorites, { code, name }]);
+    syncTelegramWatchlist('add', code, name).catch(() => null);
   }
 
   // Portfolio management
@@ -860,6 +875,13 @@ export default function DashboardPage() {
                   />
                 </div>
               </div>
+            )}
+
+            {page === 'quality-watch' && (
+              <QualityWatchTab
+                onSelect={(code, name) => goAnalyze(code, name)}
+                onAddToWatchlist={addFavorite}
+              />
             )}
 
             {/* ── Stock directory ── */}

@@ -23,6 +23,12 @@ class ScreeningResult(BaseModel):
     as_of_date: str
     is_mock: bool = False
     candidate_grade: Literal["S", "A", "B", "C", "D"]
+    # Raw aggregator grade before regime adjustment — used for display so users
+    # can see signal quality regardless of market regime.  candidate_grade
+    # (regime-adjusted) is kept for pass_status gating only.
+    # None means not explicitly set (older code paths); canslim_output falls back
+    # to candidate_grade in that case for full backward compatibility.
+    raw_grade: Optional[Literal["S", "A", "B", "C", "D"]] = None
     canslim_match: str
     pillars: dict[str, PillarStatus]
     pillar_metrics: dict[str, str] = Field(default_factory=dict)
@@ -38,6 +44,9 @@ class ScreeningResult(BaseModel):
     # is a neutral observation of the swing setup's health, not a buy/sell instruction.
     exit_signals: list[str] = Field(default_factory=list)
     structure_status: Literal["intact", "profit_watch", "weakening", "invalidated"] = "intact"
+    durability_score: Optional[float] = None
+    durability_components: dict[str, float] = Field(default_factory=dict)
+    durability_metrics: Optional[dict[str, Any]] = None
 
 
 class CanslimFactorScore(BaseModel):
@@ -91,6 +100,9 @@ class CanslimFullResult(BaseModel):
     suggested_strategy: str = ""
     data_quality: Literal["HIGH", "MEDIUM", "LOW"] = "LOW"
     is_mock_or_fallback_data: bool = False
+    durability_score: Optional[float] = None
+    durability_components: dict[str, float] = Field(default_factory=dict)
+    durability_metrics: Optional[dict[str, Any]] = None
     reviewer_result: Optional[CanslimReviewResult] = None
     screening_result: ScreeningResult
 

@@ -360,6 +360,16 @@ risk:
         quarterly_eps_yoy_below: 0.15
       effects:
         risk_delta: 20
+    R-9:
+      rule_name: "durability_degradation"
+      horizons: ["swing_term", "long_term"]
+      thresholds:
+        durability_score_drop_yoy_above: 20
+        earnings_purity_below: 0.50
+        roe_quality_below: 0.40
+      effects:
+        risk_delta: 10
+        confidence_delta: -12
 
 base_geometry:
   cup_and_handle:
@@ -421,6 +431,9 @@ scoring:
       ohlcv_bars: 150
       institutional_data_current: true
       taiex_tpex_available: true
+    durability_missing_penalty_each: -12
+    mock_data_confidence_cap: 50
+    durability_drop_yoy_penalty: -10
 
 backtest:
   liquidity_floor_twd: 30000000
@@ -564,21 +577,15 @@ presentation:
     Fail: 25
     Neutral: 50               # AI_Review_Required / Insufficient_Data -> null (in code)
   factor_weights:            # overall_score = weighted mean of non-null factor scores.
-    # Evidence-informed (2026-05-30 SURVIVORSHIP-FREE 15yr cohort, cohort_surv, 1333 names
-    # incl. delisted): N (near/at 52w-high) and I (institutional accumulation) carry the
-    # only consistent, survivorship-robust forward-return edge -> weighted up. A held up as
-    # the robust TOP grade tier (A-band n=665 survived: +1.68%/1M, median +0.37%) -> bumped.
-    # L turned NEGATIVE at 12M (Pass +5.5 vs +9.6) and S-pillar Pass stayed anti-predictive
-    # (1M +0.58 vs +1.02) -> both demoted hard. M does not differentiate cross-sectionally
-    # (market-wide; it gates via regime in confidence/pass_status) -> low score weight.
-    # NOTE: the overall_score >=80 ("S") band was survivorship-INFLATED noise (n=68, +3.04%
-    # -> +0.86% after correction); this tilt rebuilds the high band from N/I/A, not extension
-    # alone. Directional only (not fine-tuned); tunable; re-run cohort_surv to revalidate.
-    N: 1.6
-    I: 1.5
-    A: 1.2
+    # Durability-led orientation (Phase C1): Phase B is the decision gate before relying
+    # on this profile. The display score now favors durable profitability (A-quality proxy)
+    # and institutional continuity; price extension/new-high remains confirmation, not the
+    # thesis driver. This preserves existing factor keys so older tests and clients load.
+    I: 1.8
+    A: 1.6
     C: 1.0
-    L: 0.6
+    L: 0.8
+    N: 0.7
     M: 0.6
     S: 0.3
   core_factors: ["C", "A", "L", "I", "M"]   # a null core factor blocks HIGH confidence
@@ -635,14 +642,18 @@ durability:
     description: "Durable-quality factor score (op-margin stability / ROE / multi-year / earnings purity / institutional continuity / partial F-Score)."
   weights:                       # weighted mean of AVAILABLE components (missing -> omitted)
     cfo_quality: 1.5             # CFO/NI = earnings backed by real cash (anti-accrual/bubble); top survival signal
-    op_margin_stability: 1.5     # pricing power = strongest durability signal
+    op_margin_stability: 1.7     # pricing power = strongest durability signal
     earnings_purity: 1.3         # 本業真錢, not 業外/one-off
     multiyear_consistency: 1.2
-    roe_quality: 1.2
+    roe_quality: 1.3
     partial_fscore: 1.0
-    inst_continuity: 0.8         # flow proxy (no holding-% data yet)
+    inst_continuity: 1.1         # flow proxy (no holding-% data yet)
   cfo_ratio_floor: 0.5           # full-year CFO/NI <= this -> 0 (profit not converting to cash)
   cfo_ratio_good: 1.0            # CFO/NI >= this -> 1.0 (high earnings quality)
+  durability_min_watch: 50
+  durability_high_quality: 70
+  durability_drop_yoy_risk_threshold: 20
+  earnings_purity_risk_floor: 0.50
 
 # ── Entry-context layer (Task 1A; entry_context.py) ───────────────────────────
 # Verb-free timing/价位 CONDITIONS (no buy/sell). Dual-track price: MAs/52w on ADJUSTED,

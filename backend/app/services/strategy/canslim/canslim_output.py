@@ -64,12 +64,12 @@ def build_full_result(result: ScreeningResult, *, params: Mapping[str, Any] | No
     observation = clean_string_list(cfg.get("observation_templates", []))
     suggested = _suggested_strategy(result, pass_status, by_factor, cfg)
 
-    # Grade is capped at "A" (2026-05-30 redesign): the overall-score >=80 ("S") band was
-    # confirmed survivorship-robust NOISE — cohort_surv/_v2 show ~+0.5%/1M (BELOW baseline),
-    # n~80/15yr, an over-extension mean-reversion that reweighting could NOT rescue. A (70-79)
-    # is the validated top tier (+1.96%/1M, median +0.37%, 52% win). So S folds into A for the
-    # user-facing grade; pass_status still treats the underlying candidate_grade normally.
-    display_grade = "A" if result.candidate_grade == "S" else result.candidate_grade
+    # Display grade uses raw_grade (signal quality, regime-independent) so users can identify
+    # strong setups even during risk_off markets to add to watchlists.  candidate_grade
+    # (regime-adjusted) is kept for pass_status gating only.
+    # S folds into A per 2026-05-30 redesign (S band is noise-level at 15yr scale).
+    raw = result.raw_grade or result.candidate_grade
+    display_grade = "A" if raw == "S" else raw
 
     return CanslimFullResult(
         stock_id=result.stock_id,
@@ -88,6 +88,9 @@ def build_full_result(result: ScreeningResult, *, params: Mapping[str, Any] | No
         suggested_strategy=suggested,
         data_quality=data_quality,
         is_mock_or_fallback_data=bool(result.is_mock),
+        durability_score=result.durability_score,
+        durability_components=dict(result.durability_components or {}),
+        durability_metrics=result.durability_metrics,
         reviewer_result=None,
         screening_result=result,
     )

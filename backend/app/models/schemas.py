@@ -172,11 +172,14 @@ class ETFSummary(BaseModel):
 
 
 class CanslimSummary(BaseModel):
-    grades: dict[str, str] = {}
-    scores: dict[str, dict] = {}
-    hard_blocked: dict[str, bool] = {}
-    data_warnings: list[str] = []
+    grades: dict[str, str] = Field(default_factory=dict)
+    scores: dict[str, dict] = Field(default_factory=dict)
+    hard_blocked: dict[str, bool] = Field(default_factory=dict)
+    data_warnings: list[str] = Field(default_factory=list)
     is_mock: bool = False
+    durability_score: Optional[float] = None
+    durability_components: dict[str, float] = Field(default_factory=dict)
+    durability_metrics: Optional[dict] = None
 
 
 # ── FinMind → Gemini → Claude agent analysis ────────────────────────────────
