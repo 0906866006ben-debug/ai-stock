@@ -1,0 +1,28 @@
+# Minimal Linux-safe runtime deps for cloud deploy (Render, etc.)
+#
+# WHY this exists and NOT requirements.txt:
+#   - requirements.txt is a Windows `pip freeze` (176 pkgs) that includes
+#     Windows-only wheels (pywin32, pywin32-ctypes) which FAIL on Linux,
+#     and is also missing some runtime imports. It is not deployable as-is.
+#   - This file lists ONLY the packages the FastAPI app imports at startup.
+#     All AI-provider SDKs (anthropic, google-genai, finnhub, optuna, ...)
+#     are LAZY imports guarded by an API-key check — absent = mock fallback,
+#     so they are intentionally omitted to keep the build small.
+#
+# The app runs mock-first with no API keys, so this is enough for a live demo.
+
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.4
+pydantic-ai-slim==1.93.0
+langgraph==1.1.10
+httpx==0.28.1
+requests==2.33.1
+python-dotenv==1.2.2
+PyYAML==6.0.3
+python-dateutil==2.9.0.post0
+numpy==2.4.4
+pandas==3.0.2
+yfinance==1.3.0
+beautifulsoup4==4.14.3
+python-multipart==0.0.28

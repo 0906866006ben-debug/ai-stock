@@ -1,0 +1,23 @@
+# Render Blueprint — backend (FastAPI) deploy.
+# In Render: New > Blueprint > pick this repo. It reads this file automatically.
+#
+# The app import path is `backend.app.main:app` and MUST run from the repo root
+# so the `backend.app...` package resolves (see CLAUDE.md).
+services:
+  - type: web
+    name: ai-stock-backend
+    runtime: python
+    plan: free
+    # Pin 3.13 (guaranteed wheels for numpy/pandas). Bump to 3.14 if you prefer.
+    pythonVersion: "3.13"
+    buildCommand: pip install -r backend/requirements-deploy.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Optional — the app runs mock-first with none of these set.
+      # Add real keys later in the Render dashboard to get live data / AI.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FINMIND_API_KEY
+        sync: false
+      - key: FMP_API_KEY
+        sync: false
