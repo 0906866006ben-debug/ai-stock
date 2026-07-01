@@ -163,6 +163,90 @@ async def screen_symbol_full(
     return full.model_copy(update={"reviewer_result": review_canslim(full)})
 
 
+def screen_symbol_local_snapshot(
+    symbol: str,
+    as_of_date: str | None = None,
+    *,
+    ohlcv_store: HistoricalDataStore | None = None,
+    pit_store: PitFundamentalsStore | None = None,
+    universe: list[str] | None = None,
+    market: MarketFeatures | None = None,
+    universe_returns_60d: dict[str, float] | None = None,
+    universe_returns_252d: dict[str, float] | None = None,
+    universe_shares: dict[str, float] | None = None,
+    include_staleness_warning: bool = True,
+) -> ScreeningResult:
+    """Batch-compatible CANSLIM screen from local stores only.
+
+    This is the deterministic source contract used by full-universe scanning:
+    OHLCV from HistoricalDataStore, PIT fundamentals/chip data from
+    PitFundamentalsStore, no live FinMind fallback, and no news/AI N-pillar fetch.
+    """
+    stock_id = str(symbol).strip()
+    warnings: list[str] = ["source_mode=batch_local_store"]
+    store = ohlcv_store or HistoricalDataStore()
+    pit = pit_store or PitFundamentalsStore()
+    resolved_date = str(as_of_date or _latest_as_of_date(store, stock_id, warnings))
+    if include_staleness_warning:
+        _append_staleness_warning(resolved_date, warnings)
+
+    symbols = _dedupe([str(stock_id), *(universe if universe is not None else screenable_universe(pit, store))])
+    has_pit_coverage = _has_pit_coverage(pit, stock_id)
+    if not has_pit_coverage:
+        warnings.append(f"{stock_id} has no PIT fundamentals coverage; C/A/I pillars cannot be evaluated")
+
+    detail, fin_metrics, eps_filing_date = _pit_inputs(stock_id, resolved_date, pit, warnings)
+    if _pit_inputs_are_sparse(detail, fin_metrics):
+        warnings.append("PIT fundamentals sparse; live fallback disabled in batch-compatible source mode")
+
+    ur60 = universe_returns_60d
+    ur252 = universe_returns_252d
+    if ur60 is None or ur252 is None:
+        ur60, ur252 = universe_returns_for_as_of(
+            resolved_date,
+            store=store,
+            universe=symbols,
+            include_symbol=stock_id,
+        )
+    if stock_id not in ur60:
+        warnings.append(f"{stock_id} lacks enough OHLCV history for 60-day relative strength")
+    if stock_id not in ur252:
+        warnings.append(f"{stock_id} lacks enough OHLCV history for 252-day relative strength")
+
+    market_features = market or _market_features(resolved_date, store, warnings, universe=symbols)
+    shares = universe_shares or universe_shares_for_as_of(
+        resolved_date,
+        pit_store=pit,
+        universe=symbols,
+        include_symbol=stock_id,
+    )
+
+    result = build_screening_result(
+        stock_id,
+        resolved_date,
+        store=store,
+        market=market_features,
+        fin_metrics=fin_metrics,
+        detail=detail,
+        universe_returns_60d=ur60,
+        universe_returns_252d=ur252,
+        event_window_active=False,
+        eps_filing_date=eps_filing_date,
+        universe_shares=shares,
+    )
+    durability = durability_metrics_for_symbol(stock_id, resolved_date, pit_store=pit)
+    all_warnings = _dedupe([*warnings, *result.data_warnings])
+    if durability.get("missing"):
+        all_warnings = _dedupe([*all_warnings, f"durability missing: {', '.join(durability['missing'])}"])
+    return result.model_copy(update={
+        "is_mock": False,
+        "data_warnings": all_warnings,
+        "durability_score": durability.get("score"),
+        "durability_components": durability.get("components") or {},
+        "durability_metrics": durability if durability.get("score") is not None else None,
+    })
+
+
 def screenable_universe(pit_store: PitFundamentalsStore, ohlcv_store: HistoricalDataStore) -> list[str]:
     """RS reference universe: all OHLCV-covered symbols.
 

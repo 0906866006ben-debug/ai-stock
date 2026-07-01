@@ -110,6 +110,79 @@ def test_legacy_2017_rows_do_not_skip_deeper_2010_backfill(tmp_path: Path, monke
     assert visible["revenue"].tolist() == [50.0]
 
 
+def test_latest_stored_date_and_since_latest_start(tmp_path: Path):
+    db_path = tmp_path / "pit.db"
+    store = PitFundamentalsStore(db_path)
+    store.upsert_month_revenue([
+        {"stock_id": "2330", "date": "2024-01-31", "revenue": 100},
+        {"stock_id": "2330", "date": "2024-03-31", "revenue": 120},
+    ])
+    assert download_fundamentals.latest_stored_date(store, "2330", "TaiwanStockMonthRevenue") == "2024-03-31"
+    assert download_fundamentals.latest_stored_date(store, "9999", "TaiwanStockMonthRevenue") is None
+    # start = latest - buffer
+    assert download_fundamentals.since_latest_start(
+        store, "2330", "TaiwanStockMonthRevenue", fallback="2010-01-01", buffer_days=7
+    ) == "2024-03-24"
+    # no rows -> fallback
+    assert download_fundamentals.since_latest_start(
+        store, "9999", "TaiwanStockMonthRevenue", fallback="2010-01-01", buffer_days=7
+    ) == "2010-01-01"
+
+
+def test_since_latest_fetches_from_latest_minus_buffer_not_global_start(tmp_path: Path, monkeypatch):
+    db_path = tmp_path / "pit.db"
+    store = PitFundamentalsStore(db_path)
+    store.upsert_month_revenue([{"stock_id": "2330", "date": "2024-03-31", "revenue": 100}])
+    calls: list[tuple[str, str]] = []
+
+    async def fake_fetch(dataset: str, data_id: str, start_date: str, token: str):
+        calls.append((data_id, start_date))
+        return [{"date": "2024-04-30", "revenue": 200}]
+
+    monkeypatch.setattr(download_fundamentals, "_fetch_with_status", fake_fetch)
+    monkeypatch.setenv("FINMIND_API_KEY", "SECRET_TOKEN_DO_NOT_LOG")
+
+    rc = download_fundamentals.main([
+        "--stocks", "2330",
+        "--datasets", "TaiwanStockMonthRevenue",
+        "--db", str(db_path),
+        "--rate-limit", "0",
+        "--start", "2010-01-01",
+        "--since-latest",
+        "--since-latest-buffer-days", "7",
+    ])
+
+    assert rc == 0
+    # NOT skipped by resume, and started from latest(2024-03-31) - 7d, not the global --start.
+    assert calls == [("2330", "2024-03-24")]
+    visible = PitFundamentalsStore(db_path).get_month_revenue_as_of("2330", "2024-05-01")
+    assert sorted(visible["revenue"].tolist()) == [100.0, 200.0]
+
+
+def test_since_latest_falls_back_to_start_when_no_rows(tmp_path: Path, monkeypatch):
+    db_path = tmp_path / "pit.db"
+    calls: list[tuple[str, str]] = []
+
+    async def fake_fetch(dataset: str, data_id: str, start_date: str, token: str):
+        calls.append((data_id, start_date))
+        return [{"date": "2024-04-30", "revenue": 200}]
+
+    monkeypatch.setattr(download_fundamentals, "_fetch_with_status", fake_fetch)
+    monkeypatch.setenv("FINMIND_API_KEY", "SECRET_TOKEN_DO_NOT_LOG")
+
+    rc = download_fundamentals.main([
+        "--stocks", "2330",
+        "--datasets", "TaiwanStockMonthRevenue",
+        "--db", str(db_path),
+        "--rate-limit", "0",
+        "--start", "2024-01-01",
+        "--since-latest",
+    ])
+
+    assert rc == 0
+    assert calls == [("2330", "2024-01-01")]
+
+
 def test_fetch_failure_warns_and_continues_without_mock_rows(tmp_path: Path, monkeypatch, caplog):
     db_path = tmp_path / "pit.db"
     calls: list[str] = []

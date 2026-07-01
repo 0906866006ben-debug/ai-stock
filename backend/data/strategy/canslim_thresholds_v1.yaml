@@ -680,3 +680,35 @@ entry_context:
   annual_growth_floor: 0.0       # annual-EPS YoY must clear this to count as a "good" year
   purity_floor: 0.5              # operating/net income <= this -> 0 (earnings not core-driven)
   fscore_min_checks: 4           # need >= this many computable F-Score signals or component omitted
+
+# ── Value / quality / shareholder-return layer (value_factors.py) ─────────────
+# Long-term value-quant factors replacing the deprecated CANSLIM momentum screener.
+# Magic Formula (EY/ROC), Piotroski F-Score (reuses durability.fscore_min_checks), and
+# Shareholder Yield. PIT-safe pure functions; missing data -> None (never imputed). All v1
+# hypotheses requiring out-of-sample + survivorship-corrected validation before deployment.
+value:
+  meta:
+    tunable_required: true
+    description: "Value-quant factors: Magic Formula (EY/ROC), Piotroski F-Score, Shareholder Yield. v1 hypotheses; validate on PIT + delisted-inclusive data before use."
+  yoy_periods_back: 4            # quarterly periods that make one year for balance-sheet YoY deltas
+  # Decile / ranking thresholds (validated in Phase 1 cohort, NOT yet calibrated):
+  ey_attractive_min: 0.10        # EBIT/EV >= this -> attractive earnings yield (placeholder, tunable)
+  roc_quality_min: 0.20          # EBIT/capital >= this -> high return on capital (placeholder, tunable)
+  fscore_high_quality_min: 8     # F-Score >= this -> high-quality cohort (Piotroski 8-9)
+  fscore_low_quality_max: 2      # F-Score <= this -> low-quality cohort (Piotroski 0-2)
+  shareholder_yield_strong_min: 0.05  # total SY >= this -> strong capital return (placeholder, tunable)
+  screener:                      # 優質長期持有篩選器 (三大面) — all weights/bands are v1 hypotheses, tunable
+    weight_fundamental: 0.5      # 基本面 face weight (F-Score + Magic Formula + Shareholder Yield)
+    weight_chips: 0.25           # 籌碼面 face weight (foreign+trust net-buy persistence)
+    weight_technical: 0.25       # 技術面 face weight (long-term trend structure)
+    comp_weight_fscore: 0.4      # fundamental sub-weights (renormalized over available components)
+    comp_weight_ey: 0.2
+    comp_weight_roc: 0.2
+    comp_weight_sy: 0.2
+    chips_lookback_days: 60      # institutional window (trading days)
+    chips_min_days: 20           # fewer institutional rows than this -> chips face has no data
+    tech_ma_days: 200            # long-term trend MA (bars)
+    tech_near_high_pct: -0.10    # >= this vs 52w high -> full proximity credit
+    tech_deep_below_pct: -0.40   # <= this vs 52w high -> zero proximity credit
+    grade_core_total_min: 75     # composite >= this AND F-Score >= fscore_high_quality_min -> 核心觀察
+    grade_watch_total_min: 60    # composite >= this -> 觀察

@@ -67,6 +67,7 @@ from backend.app.services.strategy.canslim.live_screening import (
     durability_metrics_for_symbol,
     screen_symbol,
     screen_symbol_full,
+    screen_symbol_local_snapshot,
 )
 from backend.app.services.strategy.canslim.types import MarketFeatures
 from backend.app.services.multi_agent_analysis import run_multi_agent_analysis
@@ -601,6 +602,11 @@ async def canslim_summary_tw(
 async def screen_tw(
     symbol: str = Query(..., description="Taiwan stock symbol (4–6 digits, e.g. 2330)"),
     as_of_date: str | None = Query(None, description="Optional YYYY-MM-DD as-of date"),
+    source_mode: str = Query(
+        "live",
+        pattern="^(live|batch)$",
+        description="live uses single-symbol live enrichment; batch uses the same local-store source contract as full-universe scanning.",
+    ),
 ) -> ScreeningResult:
     symbol = symbol.strip()
     if not TW_SYMBOL_RE.match(symbol):
@@ -608,6 +614,8 @@ async def screen_tw(
             status_code=422,
             detail="Invalid Taiwan symbol. Must be 4–6 digits (e.g. 2330, 00878).",
         )
+    if source_mode == "batch":
+        return await run_in_threadpool(screen_symbol_local_snapshot, symbol, as_of_date)
     return await screen_symbol(symbol, as_of_date=as_of_date)
 
 

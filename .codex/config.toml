@@ -1,0 +1,10 @@
+# Codex CLI config for the ai-stock project (mirrors the ICT project's setup).
+# Locks the model + makes direct `codex exec` non-interactive so quant-coder /
+# run_pipeline.ps1 can delegate implementation without approval prompts.
+# Change `model` to whatever your account actually has access to.
+model = "gpt-5.5"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false

@@ -1,0 +1,47 @@
+{
+  "_comment": "quant-pm 開工先讀。每道 Gate 產出後更新狀態。Gate 鐵則:前置未 pass 不得開下一關。G4(程式無 bug) != G5(統計有 edge),兩道獨立。",
+  "updated": "2026-06-28",
+  "current_focus": "G5 — F-Score 全量驗證(使用者按 run_value_cohort --factor fscore --include-delisted --max-staleness-days 10)",
+  "gates": {
+    "G0_data_ready": {
+      "status": "pass",
+      "owner": "(refresh_data.py)",
+      "note": "historical_data.db + pit_fundamentals.db 已建,含下市股清單;refresh_data.py 增量更新"
+    },
+    "G1_factor_verify": {
+      "status": "pass",
+      "owner": "factor-verifier",
+      "note": "Magic Formula / F-Score / Shareholder Yield 已選定;SY 在台股最不確定(配股+回購弱)"
+    },
+    "G2_spec": {
+      "status": "pass",
+      "owner": "factor-spec-designer",
+      "note": "Phase 0 value_factors 規格 + value.screener YAML 已定(v1 假設,待校準)"
+    },
+    "G3_implement": {
+      "status": "pass",
+      "owner": "quant-coder",
+      "note": "value_factors.py / value_cohort.py / value_screener.py + run scripts 已建,測試全綠"
+    },
+    "G4_code_audit": {
+      "status": "partial",
+      "owner": "validation-auditor",
+      "note": "單元測試綠 + 煙霧測試過;尚未做正式逐行 PIT/look-ahead 稽核"
+    },
+    "G5_statistical": {
+      "status": "pending",
+      "owner": "validation-auditor + run_value_cohort",
+      "note": "核心待辦:F-Score 全量驗證未跑。高分組(F>=8)是否穩定贏低分組(F<=2)與 TAIEX?整個系統的生死閘門"
+    },
+    "G6_portfolio_risk": {
+      "status": "not_started",
+      "owner": "portfolio-risk-reviewer",
+      "note": "等 G5 過 + 序列漏斗組合回測(roadmap Stage 2)"
+    },
+    "G7_paper": {
+      "status": "not_started",
+      "owner": "(使用者)",
+      "note": "roadmap Stage 5:paper 組合 + 再平衡 SOP"
+    }
+  }
+}

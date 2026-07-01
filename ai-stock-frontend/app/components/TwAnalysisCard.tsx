@@ -2,7 +2,6 @@
 
 import { TaiwanStockAnalysisResponse } from '@/lib/types';
 import SynthesisRecommendation from './SynthesisRecommendation';
-import DurabilityBreakdown from './DurabilityBreakdown';
 
 interface TwAnalysisCardProps {
   data: TaiwanStockAnalysisResponse;
@@ -18,11 +17,6 @@ export default function TwAnalysisCard({ data }: TwAnalysisCardProps) {
   const changePositive = data.price_change_percent >= 0;
   const trendStyle = TREND_STYLES[data.trend] ?? TREND_STYLES['中立'];
   const confidencePct = Math.round(data.confidence * 100);
-  const durabilityMetrics =
-    data.canslim_summary?.durability_metrics ??
-    data.canslim_full?.durability_metrics ??
-    data.screening_result?.durability_metrics ??
-    null;
 
   return (
     <div className="w-full rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
@@ -106,10 +100,6 @@ export default function TwAnalysisCard({ data }: TwAnalysisCardProps) {
           <SynthesisRecommendation data={data.comprehensive_analysis} />
         </div>
       )}
-
-      <div className="mt-5">
-        <DurabilityBreakdown metrics={durabilityMetrics} />
-      </div>
 
       {/* Risks + Catalysts */}
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">

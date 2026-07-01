@@ -4,10 +4,18 @@ import pytest
 import pandas as pd
 from fastapi.testclient import TestClient
 
-from backend.app.models.screener_schemas import CandidateMetrics, CandidateScores
+from backend.app.models.screener_schemas import CandidateMetrics, CandidateScores, ScreeningResult
 from backend.app.services.data_sources.source_models import MarketIndexLoadResult, OhlcvLoadResult, SourceInfo
 from backend.app.services.screener_rules import load_surge_candidate_rules
-from backend.app.services.screener_service import _classify_candidate, default_screener_parameters, evaluate_surge_candidate, scan_surge_candidates
+from backend.app.services.screener_service import (
+    ScreenerParameters,
+    _CanslimScanContext,
+    _classify_candidate,
+    _scan_df_from_store,
+    default_screener_parameters,
+    evaluate_surge_candidate,
+    scan_surge_candidates,
+)
 
 
 def make_candidate_df(
@@ -252,7 +260,7 @@ async def test_api_debug_returns_funnel_report(monkeypatch) -> None:
     from backend.app.main import app
 
     client = TestClient(app)
-    response = client.get("/screeners/surge-candidates?debug=true&force_refresh=true&min_return_60d=0.102")
+    response = client.get("/screeners/surge-candidates?debug=true&force_refresh=true&min_return_60d=0.102&ai_tech_only=false")
 
     assert response.status_code == 200
     payload = response.json()
@@ -1709,3 +1717,209 @@ async def test_ai_tech_filter_excludes_non_ai_stocks(monkeypatch) -> None:
     assert "2412" not in returned_codes
     assert "5876" not in returned_codes
     # AI stocks may or may not pass other gates, but non-AI must be excluded
+
+
+@pytest.mark.asyncio
+async def test_ai_tech_universe_is_filtered_before_scan_limit(monkeypatch) -> None:
+    """A small scan_limit should mean N AI-tech stocks, not N raw stock-master rows."""
+    requested_limits: list[int] = []
+    scanned_symbols: list[str] = []
+
+    async def fake_get_tw_stocks(limit: int = 100, **_: object) -> dict:
+        requested_limits.append(limit)
+        stocks = [
+            {"stock_code": "1101", "company_name": "台泥"},
+            {"stock_code": "1102", "company_name": "亞泥"},
+            {"stock_code": "2412", "company_name": "中華電"},
+            {"stock_code": "2330", "company_name": "台積電"},
+            {"stock_code": "2308", "company_name": "台達電"},
+            {"stock_code": "3231", "company_name": "緯創"},
+        ]
+        return {
+            "stocks": stocks[:limit],
+            "total": len(stocks),
+            "data_source": "public",
+            "source_report": {
+                "source": "twse_tpex_official",
+                "twse_count": len(stocks),
+                "tpex_count": 0,
+                "finmind_count": 0,
+                "mock_count": 0,
+                "stock_count": len(stocks),
+                "fallback_used": False,
+                "warnings": [],
+            },
+        }
+
+    async def fake_price_history(symbol: str, days: int):
+        scanned_symbols.append(symbol)
+        candles = make_candidate_df(return_60d=0.14, base_return=0.02, return_5d=0.03).to_dict("records")
+        return OhlcvLoadResult(
+            candles=candles,
+            source_info=SourceInfo(
+                ohlcv_source="finmind",
+                turnover_source="finmind_trading_money",
+                bars_count=len(candles),
+            ),
+        )
+
+    async def fake_tpex_quotes():
+        return {}
+
+    monkeypatch.setattr("backend.app.services.screener_service.get_tw_stocks", fake_get_tw_stocks)
+    monkeypatch.setattr("backend.app.services.screener_service.get_tw_price_history_with_source", fake_price_history)
+    monkeypatch.setattr("backend.app.services.screener_service.fetch_tpex_mainboard_quote_map", fake_tpex_quotes)
+
+    params = ScreenerParameters(**{
+        **default_screener_parameters().to_dict(),
+        "scan_limit": 2,
+        "limit": 10,
+        "include_unfit": True,
+        "ai_tech_only": True,
+        "include_canslim": False,
+    })
+
+    response = await scan_surge_candidates(
+        params,
+        df_market=make_market_df(return_60d=0.08, base_return=0.01),
+        market_index_report={"source": "finmind", "available": True, "fallback_used": False, "warnings": []},
+    )
+
+    assert requested_limits == [10_000]
+    assert scanned_symbols == ["2330", "2308"]
+    assert response.universe_size == 2
+    assert {row.stock_id for row in response.results}.issubset({"2330", "2308"})
+
+
+def test_canslim_store_scan_uses_symbol_latest_as_of() -> None:
+    class FakeStore:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, int]] = []
+
+        def get_ohlcv_as_of(self, stock_id: str, as_of_date: str, lookback_bars: int) -> pd.DataFrame:
+            self.calls.append((stock_id, as_of_date, lookback_bars))
+            return pd.DataFrame({
+                "date": ["2024-01-01", as_of_date],
+                "open": [10.0, 11.0],
+                "high": [10.5, 11.5],
+                "low": [9.5, 10.5],
+                "close": [10.0, 11.0],
+                "volume": [1000, 1200],
+                "turnover": [10_000, 13_200],
+            })
+
+    store = FakeStore()
+    ctx = _CanslimScanContext(
+        bt_store=store,
+        pit_store=object(),
+        as_of="2024-01-05",
+        market=object(),
+        ur60={},
+        ur252={},
+        all_syms=["2330", "2454"],
+        latest_by_stock={"2330": "2024-01-02"},
+        covered={"2330", "2454"},
+        ushares={},
+    )
+
+    df = _scan_df_from_store("2330", ctx)
+
+    assert store.calls == [("2330", "2024-01-02", 260)]
+    assert df is not None
+    assert df["date"].iloc[-1] == "2024-01-02"
+
+
+def test_screening_store_defaults_use_canonical_repo_databases() -> None:
+    from backend.app.services.backtest.historical_data_store import DEFAULT_DB_PATH
+    from backend.app.services.backtest.pit_fundamentals_store import DEFAULT_PIT_DB_PATH
+
+    assert DEFAULT_DB_PATH.name == "historical_data.db"
+    assert DEFAULT_PIT_DB_PATH.name == "pit_fundamentals.db"
+    assert "backtest" not in DEFAULT_DB_PATH.parts
+    assert "backtest" not in DEFAULT_PIT_DB_PATH.parts
+
+
+def test_tw_screen_batch_source_mode_uses_local_snapshot(monkeypatch) -> None:
+    called: dict[str, str | None] = {}
+
+    def fake_local_snapshot(symbol: str, as_of_date: str | None = None) -> ScreeningResult:
+        called["symbol"] = symbol
+        called["as_of_date"] = as_of_date
+        return ScreeningResult(
+            stock_id=symbol,
+            as_of_date=as_of_date or "2024-01-02",
+            candidate_grade="B",
+            raw_grade="B",
+            canslim_match="4/7",
+            pillars={
+                "C": "Pass",
+                "A": "Weak",
+                "N": "AI_Review_Required",
+                "S": "Pass",
+                "L": "Pass",
+                "I": "Weak",
+                "M": "Pass",
+            },
+            market_regime="risk_on",
+            interpretation="batch-compatible local-store screen",
+            action_type="Manual Review Required",
+            data_warnings=["source_mode=batch_local_store"],
+        )
+
+    monkeypatch.setattr("backend.app.main.screen_symbol_local_snapshot", fake_local_snapshot)
+
+    from backend.app.main import app
+
+    client = TestClient(app)
+    response = client.get("/tw/screen?symbol=2330&as_of_date=2024-01-02&source_mode=batch")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert called == {"symbol": "2330", "as_of_date": "2024-01-02"}
+    assert payload["raw_grade"] == "B"
+    assert payload["data_warnings"] == ["source_mode=batch_local_store"]
+
+
+def test_local_snapshot_does_not_call_live_fallback(monkeypatch) -> None:
+    from backend.app.services.strategy.canslim import live_screening
+    from backend.app.services.strategy.canslim.types import MarketFeatures
+
+    async def fail_live_fallback(*_: object, **__: object) -> None:
+        raise AssertionError("batch-compatible local snapshot must not call live fallback")
+
+    def fake_build_screening_result(*args: object, **kwargs: object) -> ScreeningResult:
+        return ScreeningResult(
+            stock_id=str(args[0]),
+            as_of_date=str(args[1]),
+            candidate_grade="A",
+            raw_grade="A",
+            canslim_match="5/7",
+            pillars={
+                "C": "Pass",
+                "A": "Pass",
+                "N": "AI_Review_Required",
+                "S": "Pass",
+                "L": "Pass",
+                "I": "Weak",
+                "M": "Pass",
+            },
+            market_regime="risk_on",
+            interpretation="local snapshot",
+            action_type="Manual Review Required",
+        )
+
+    monkeypatch.setattr(live_screening, "build_live_inputs", fail_live_fallback)
+    monkeypatch.setattr(live_screening, "_latest_as_of_date", lambda *_: "2024-01-02")
+    monkeypatch.setattr(live_screening, "screenable_universe", lambda *_: ["2330"])
+    monkeypatch.setattr(live_screening, "_has_pit_coverage", lambda *_: True)
+    monkeypatch.setattr(live_screening, "_pit_inputs", lambda *_: ({"month_revenue_yoy": [0.1]}, {"eps_cagr_3y": 0.2}, None))
+    monkeypatch.setattr(live_screening, "universe_returns_for_as_of", lambda *_args, **_kwargs: ({"2330": 0.1}, {"2330": 0.2}))
+    monkeypatch.setattr(live_screening, "_market_features", lambda *_args, **_kwargs: MarketFeatures())
+    monkeypatch.setattr(live_screening, "universe_shares_for_as_of", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(live_screening, "durability_metrics_for_symbol", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(live_screening, "build_screening_result", fake_build_screening_result)
+
+    result = live_screening.screen_symbol_local_snapshot("2330")
+
+    assert result.raw_grade == "A"
+    assert "source_mode=batch_local_store" in result.data_warnings

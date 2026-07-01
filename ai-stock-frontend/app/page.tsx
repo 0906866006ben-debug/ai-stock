@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  analyzeStock, analyzeTW, getCompetitors, getTwCanslimSummary, getTwPriceHistory, syncTelegramWatchlist,
+  analyzeStock, analyzeTW, getCompetitors, getTwPriceHistory, syncTelegramWatchlist,
   StockAnalysisResponse,
 } from '@/lib/api';
 import {
@@ -30,14 +30,11 @@ import DividendCalendar from './components/DividendCalendar';
 import EarningsCalendar from './components/EarningsCalendar';
 import ETFHoldingsCard from './components/ETFHoldingsCard';
 import { AIAnalysisPage } from './components/ai-analysis/AIAnalysisPage';
-import ScreenerView from './components/ScreenerView';
-import CanslimGradeCard from './components/CanslimGradeCard';
 import EntryContextCard from './components/EntryContextCard';
 import BoldPlanView from './components/BoldPlanView';
 import MarketHeatmapView from './components/MarketHeatmapView';
-import QualityWatchTab from './components/QualityWatchTab';
 
-type Page = 'analysis' | 'stock-analysis' | 'screener' | 'portfolio' | 'quality-watch' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap';
+type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_SIM_POSITIONS = 'stockAssistant.simPositions';
@@ -57,9 +54,7 @@ function initialPageFromUrl(): Page {
 const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'analysis', label: '小幫手分析', icon: '🔮' },
   { page: 'stock-analysis', label: '看看走勢', icon: '📈' },
-  { page: 'screener', label: '挑選潛力股', icon: '✨' },
   { page: 'portfolio', label: '我的小金庫', icon: '💖' },
-  { page: 'quality-watch', label: '季度品質清單', icon: '🏅' },
   { page: 'directory', label: '股票目錄', icon: '📋' },
   { page: 'news', label: '今日新聞', icon: '📰' },
   { page: 'calendar', label: '小日曆', icon: '📅' },
@@ -378,13 +373,6 @@ export default function DashboardPage() {
         const data = await analyzeTW(symbol);
         setTwResult(data);
         setUsResult(null);
-        getTwCanslimSummary(symbol)
-          .then((summary) => {
-            setTwResult((prev) => (
-              prev?.symbol === data.symbol ? { ...prev, canslim_summary: summary } : prev
-            ));
-          })
-          .catch(() => null);
         // Update current price in portfolio
         setPositions((prev) => {
           const updatedAt = new Date().toISOString();
@@ -661,20 +649,6 @@ export default function DashboardPage() {
                           <section className="space-y-4">
                             <div>
                               <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                                CANSLIM
-                              </p>
-                              <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                                CANSLIM 七大面向分級
-                              </h2>
-                            </div>
-                            <CanslimGradeCard symbol={twResult.symbol} />
-                          </section>
-                        )}
-
-                        {!twResult.is_etf && (
-                          <section className="space-y-4">
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                                 Entry Timing
                               </p>
                               <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -811,11 +785,6 @@ export default function DashboardPage() {
               </>
             )}
 
-            {/* ── Screener ── */}
-            {page === 'screener' && (
-              <ScreenerView />
-            )}
-
             {/* ── Bold plan: FinMind playground ── */}
             {page === 'bold-plan' && <BoldPlanView />}
 
@@ -875,13 +844,6 @@ export default function DashboardPage() {
                   />
                 </div>
               </div>
-            )}
-
-            {page === 'quality-watch' && (
-              <QualityWatchTab
-                onSelect={(code, name) => goAnalyze(code, name)}
-                onAddToWatchlist={addFavorite}
-              />
             )}
 
             {/* ── Stock directory ── */}

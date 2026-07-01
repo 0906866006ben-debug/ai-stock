@@ -16,10 +16,15 @@ Steps:
      and resumes when the FinMind free-tier rolling limit is hit).
 
 Run from the repo root:
-    .venv\\Scripts\\python.exe refresh_data.py
+    .venv\\Scripts\\python.exe refresh_data.py --since-latest   # routine freshness
+    .venv\\Scripts\\python.exe refresh_data.py                  # backfill resume (fill gaps)
 Optional flags:
-    --skip-fundamentals   only refresh OHLCV (fast; fundamentals are quarterly)
-    --fund-passes N       cap fundamentals auto-resume passes (default 4)
+    --since-latest        incrementally advance the DAILY chip datasets
+                          (institutional/margin/PER) + month-revenue to the latest
+                          stored date (the only data that lags day-to-day)
+    --full-fundamentals   with --since-latest, also refresh quarterly statements
+    --skip-fundamentals   only refresh OHLCV (fast price-only refresh)
+    --fund-passes N       cap fundamentals auto-resume passes (default 8)
 """
 from __future__ import annotations
 
@@ -69,9 +74,13 @@ def run(args: list[str]) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-fundamentals", action="store_true",
-                    help="Only refresh OHLCV (fundamentals are quarterly; skip for a fast price refresh).")
-    ap.add_argument("--fund-passes", type=int, default=4,
-                    help="Max fundamentals auto-resume passes (default 4).")
+                    help="Only refresh OHLCV (skip the PIT refresh entirely).")
+    ap.add_argument("--since-latest", action="store_true",
+                    help="Incrementally bring the DAILY chip datasets (institutional/margin/PER) + month-revenue up to the latest stored date, instead of a backfill resume. Use this for routine freshness.")
+    ap.add_argument("--full-fundamentals", action="store_true",
+                    help="Also refresh the quarterly statements (financials/balance/cashflow). Off by default — they change rarely and the backfill already covers them.")
+    ap.add_argument("--fund-passes", type=int, default=8,
+                    help="Max fundamentals auto-resume passes (default 8).")
     args = ap.parse_args()
 
     n0, d0 = _ohlcv_state()
@@ -104,8 +113,37 @@ def main() -> int:
         "--db", str(OHLCV_DB),
     ])
 
-    # 3) Fundamentals — resume/fill (quarterly; skips already-stored pairs).
-    if not args.skip_fundamentals:
+    # 3) Fundamentals.
+    #   --since-latest : incremental freshness for the DAILY chip datasets (the only
+    #                    ones that lag day-to-day) + month-revenue (monthly publish).
+    #                    Quarterly statements are skipped unless --full-fundamentals.
+    #   default        : backfill resume (fills any never-fetched stock/dataset).
+    DAILY_DATASETS = [
+        "TaiwanStockInstitutionalInvestorsBuySell",
+        "TaiwanStockMarginPurchaseShortSale",
+        "TaiwanStockPER",
+        "TaiwanStockMonthRevenue",
+    ]
+    QUARTERLY_DATASETS = [
+        "TaiwanStockFinancialStatements",
+        "TaiwanStockBalanceSheet",
+        "TaiwanStockCashFlowsStatement",
+    ]
+    if args.skip_fundamentals:
+        print("\n[skip] fundamentals refresh (--skip-fundamentals)")
+    elif args.since_latest:
+        datasets = DAILY_DATASETS + (QUARTERLY_DATASETS if args.full_fundamentals else [])
+        run([
+            "backend.scripts.download_fundamentals",
+            "--universe-source", "ohlcv",
+            "--ohlcv-db", str(OHLCV_DB),
+            "--db", str(PIT_DB),
+            "--since-latest",
+            "--datasets", *datasets,
+            "--auto-resume",
+            "--max-passes", str(args.fund_passes),
+        ])
+    else:
         run([
             "backend.scripts.download_fundamentals",
             "--universe-source", "ohlcv",
@@ -114,8 +152,6 @@ def main() -> int:
             "--auto-resume",
             "--max-passes", str(args.fund_passes),
         ])
-    else:
-        print("\n[skip] fundamentals refresh (--skip-fundamentals)")
 
     n1, d1 = _ohlcv_state()
     print("\n" + "=" * 66)

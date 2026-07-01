@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "notebooklm": {
+      "command": "C:/Users/09068/.local/bin/notebooklm-mcp.exe",
+      "_comment": "由 `uv tool install notebooklm-mcp-cli` 安裝。授權: 終端機跑 `nlm login` 完成 cookie 授權後，重啟 Claude Code，再用 /mcp 驗證。給 quant-researcher 用作研究/NotebookLM 接地問答。ICT 專案的 tradingview / ict-workbench 為該專案專屬，未複製到本專案。"
+    }
+  }
+}

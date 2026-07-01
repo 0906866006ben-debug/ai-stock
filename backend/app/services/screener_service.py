@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
@@ -129,9 +129,9 @@ class _DataFrameStoreAdapter:
 class _CanslimScanContext:
     """Shared CANSLIM inputs for a whole scan, computed ONCE.
 
-    Lets the scan grade each stock with the SAME full pipeline single-stock
-    `/tw/screen/full` uses (broad-market RS percentile + market regime + PIT
-    fundamentals), instead of the OHLCV-only lightweight path. Without this the
+    Lets the scan grade each stock with the shared batch-compatible local-store
+    pipeline (broad-market RS percentile + market regime + PIT fundamentals),
+    instead of the OHLCV-only lightweight path. Without this the
     scan can never fire the RS (T-1), market (M), or growth/institutional
     (C/A/I/G) pillars, so every stock collapses to grade C.
     """
@@ -141,8 +141,13 @@ class _CanslimScanContext:
     market: Any
     ur60: dict[str, float]
     ur252: dict[str, float]
+    all_syms: list[str]
+    latest_by_stock: dict[str, str]
     covered: set[str]
     ushares: dict[str, float]
+    returns_by_as_of: dict[str, tuple[dict[str, float], dict[str, float]]] = field(default_factory=dict)
+    market_by_as_of: dict[str, Any] = field(default_factory=dict)
+    shares_by_as_of: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 def _build_canslim_scan_context(stock_ids: list[str]) -> Optional["_CanslimScanContext"]:
@@ -166,15 +171,21 @@ def _build_canslim_scan_context(stock_ids: list[str]) -> Optional["_CanslimScanC
         all_syms = [str(s) for s in bt.list_stocks() if str(s) not in {"TAIEX", "TPEX"}]
         if not all_syms:
             return None
-        # as_of = GLOBAL freshest trading date (single MAX query, not 2517 lookups).
-        # Single-stock screening uses each stock's own latest bar, which for any
-        # actively-traded stock equals this global max — so scanning at the global
-        # max makes scan and single-stock grade at the SAME date.
+        # Keep the global freshest date as a fallback, but also record each stock's
+        # own latest bar. Single-stock screening resolves as_of per symbol; batch
+        # must do the same or stale symbols can be graded against a newer global day.
         as_of = ""
+        latest_by_stock: dict[str, str] = {}
         try:
             with bt._connect() as conn:
                 row = conn.execute("SELECT MAX(date) FROM ohlcv").fetchone()
                 as_of = str(row[0]) if row and row[0] else ""
+                latest_rows = conn.execute("SELECT stock_id, MAX(date) FROM ohlcv GROUP BY stock_id").fetchall()
+                latest_by_stock = {
+                    str(item[0]): str(item[1])
+                    for item in latest_rows
+                    if item and item[0] and item[1]
+                }
         except Exception:
             as_of = ""
         if not as_of:
@@ -184,10 +195,67 @@ def _build_canslim_scan_context(stock_ids: list[str]) -> Optional["_CanslimScanC
         ur60, ur252 = universe_returns_for_as_of(as_of, store=bt, universe=all_syms, include_symbol=all_syms[0])
         market = build_market_features(as_of, store=bt, universe=all_syms)
         ushares = universe_shares_as_of(pit, all_syms, as_of)
-        return _CanslimScanContext(bt, pit, as_of, market, ur60, ur252, set(all_syms), ushares)
+        return _CanslimScanContext(
+            bt_store=bt,
+            pit_store=pit,
+            as_of=as_of,
+            market=market,
+            ur60=ur60,
+            ur252=ur252,
+            all_syms=all_syms,
+            latest_by_stock=latest_by_stock,
+            covered=set(all_syms),
+            ushares=ushares,
+        )
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("CANSLIM scan context build failed (%s); falling back to lightweight grade", exc)
         return None
+
+
+def _canslim_ctx_as_of(ctx: "_CanslimScanContext", stock_id: str) -> str:
+    return str(ctx.latest_by_stock.get(str(stock_id)) or ctx.as_of)
+
+
+def _canslim_ctx_returns(
+    ctx: "_CanslimScanContext",
+    as_of: str,
+) -> tuple[dict[str, float], dict[str, float]]:
+    if as_of == ctx.as_of:
+        return ctx.ur60, ctx.ur252
+    cached = ctx.returns_by_as_of.get(as_of)
+    if cached is not None:
+        return cached
+    from backend.app.services.strategy.canslim.live_screening import universe_returns_for_as_of
+
+    returns = universe_returns_for_as_of(as_of, store=ctx.bt_store, universe=ctx.all_syms, include_symbol=ctx.all_syms[0])
+    ctx.returns_by_as_of[as_of] = returns
+    return returns
+
+
+def _canslim_ctx_market(ctx: "_CanslimScanContext", as_of: str) -> Any:
+    if as_of == ctx.as_of:
+        return ctx.market
+    cached = ctx.market_by_as_of.get(as_of)
+    if cached is not None:
+        return cached
+    from backend.app.services.strategy.canslim.regime import build_market_features
+
+    market = build_market_features(as_of, store=ctx.bt_store, universe=ctx.all_syms)
+    ctx.market_by_as_of[as_of] = market
+    return market
+
+
+def _canslim_ctx_shares(ctx: "_CanslimScanContext", as_of: str) -> dict[str, float]:
+    if as_of == ctx.as_of:
+        return ctx.ushares
+    cached = ctx.shares_by_as_of.get(as_of)
+    if cached is not None:
+        return cached
+    from backend.app.services.strategy.canslim.pit_inputs import universe_shares_as_of
+
+    shares = universe_shares_as_of(ctx.pit_store, ctx.all_syms, as_of)
+    ctx.shares_by_as_of[as_of] = shares
+    return shares
 
 
 def _scan_df_from_store(stock_id: str, ctx: Optional["_CanslimScanContext"], *, bars: int = 260):
@@ -196,7 +264,7 @@ def _scan_df_from_store(stock_id: str, ctx: Optional["_CanslimScanContext"], *, 
     if ctx is None or stock_id not in ctx.covered:
         return None
     try:
-        df = ctx.bt_store.get_ohlcv_as_of(stock_id, ctx.as_of, bars)
+        df = ctx.bt_store.get_ohlcv_as_of(stock_id, _canslim_ctx_as_of(ctx, stock_id), bars)
     except Exception:
         return None
     if df is None or df.empty or "date" not in df.columns:
@@ -213,29 +281,34 @@ def _attach_canslim_observation(
 ) -> None:
     try:
         if ctx is not None and stock_id in ctx.covered:
-            # FULL pipeline — identical to single-stock /tw/screen/full so the scan
-            # grade matches the single-stock grade (incl. the C&A-both-fail cap and
-            # regime). raw_grade = regime-independent display grade.
-            from backend.app.services.strategy.canslim.pit_inputs import build_pit_inputs
-            from backend.app.services.strategy.canslim.screening import build_screening_result
-            detail, fin_metrics, filing = build_pit_inputs(stock_id, ctx.as_of, ctx.pit_store)
-            screen = build_screening_result(
+            # Shared local-store pipeline, also exposed by /tw/screen?source_mode=batch.
+            # raw_grade = regime-independent display grade.
+            from backend.app.services.strategy.canslim.live_screening import screen_symbol_local_snapshot
+            symbol_as_of = _canslim_ctx_as_of(ctx, stock_id)
+            ur60, ur252 = _canslim_ctx_returns(ctx, symbol_as_of)
+            screen = screen_symbol_local_snapshot(
                 stock_id,
-                ctx.as_of,
-                store=ctx.bt_store,
-                market=ctx.market,
-                fin_metrics=fin_metrics,
-                detail=detail,
-                universe_returns_60d=ctx.ur60,
-                universe_returns_252d=ctx.ur252,
-                eps_filing_date=filing,
-                universe_shares=ctx.ushares,
+                as_of_date=symbol_as_of,
+                ohlcv_store=ctx.bt_store,
+                pit_store=ctx.pit_store,
+                universe=ctx.all_syms,
+                market=_canslim_ctx_market(ctx, symbol_as_of),
+                universe_returns_60d=ur60,
+                universe_returns_252d=ur252,
+                universe_shares=_canslim_ctx_shares(ctx, symbol_as_of),
+                include_staleness_warning=False,
             )
             grade = str(screen.raw_grade or screen.candidate_grade)
             signal = int(screen.scores.get("signal", 0) or 0)
             risk = int(screen.scores.get("risk", 0) or 0)
             confidence = int(screen.scores.get("confidence", 0) or 0)
             hard_blocked = bool(screen.scores.get("hard_blocked", 0))
+            screening_payload = screen.model_dump(mode="json")
+            screening_payload["candidate_grade"] = grade
+            screening_payload["raw_grade"] = grade
+            result.extras["canslim_screening"] = screening_payload
+            result.extras["canslim_source_mode"] = "batch_local_store"
+            result.extras["canslim_as_of_date"] = screen.as_of_date
             # Synthesize a swing_term card for the detail panel (null-safe shape).
             result.extras["canslim"] = {
                 "swing_term": {
@@ -257,12 +330,7 @@ def _attach_canslim_observation(
             # Structured evidence for the A/B grade-summary step (computed once per
             # scan, after the loop). Durability is computed only for S/A/B to keep cost down.
             if grade in {"S", "A", "B"}:
-                dur = {}
-                try:
-                    from backend.app.services.strategy.canslim.live_screening import durability_metrics_for_symbol
-                    dur = durability_metrics_for_symbol(stock_id, ctx.as_of, pit_store=ctx.pit_store)
-                except Exception:
-                    dur = {}
+                dur = screen.durability_metrics or {}
                 result.extras["canslim_struct"] = {
                     "stock_id": stock_id,
                     "grade": grade,
@@ -2511,6 +2579,56 @@ def _count_source_info(report: dict[str, Any], source_info: dict[str, Any], *, o
         report["turnover"]["missing_turnover_count"] += 1
 
 
+def _apply_ai_tech_universe_filter(
+    universe: list[dict[str, Any]],
+    *,
+    universe_total: int,
+    universe_report: dict[str, Any],
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
+    ai_codes = list_ai_tech_codes()
+    filtered = [item for item in universe if _stock_code_from_universe_item(item) in ai_codes]
+    report = dict(universe_report)
+    warnings = list(report.get("warnings") or [])
+    report.update({
+        "stock_count": len(filtered),
+        "universe_filter": "ai_tech",
+        "ai_tech_filtered_count": len(filtered),
+        "unfiltered_stock_count": universe_total,
+        "warnings": warnings,
+    })
+    return filtered, len(filtered), report
+
+
+async def _load_screener_universe(
+    parameters: ScreenerParameters,
+    universe: Optional[list[dict[str, Any]]],
+) -> tuple[list[dict[str, Any]], str, int, dict[str, Any]]:
+    if universe is None:
+        stock_limit = 10_000 if parameters.ai_tech_only else parameters.scan_limit
+        stock_payload = await get_tw_stocks(limit=stock_limit)
+        loaded_universe = stock_payload.get("stocks", [])
+        data_source = stock_payload.get("data_source", "unknown")
+        universe_total = int(stock_payload.get("total") or len(loaded_universe))
+        universe_report = stock_payload.get("source_report") or _default_universe_report(data_source)
+    else:
+        data_source = "test"
+        loaded_universe = list(universe)
+        universe_total = len(loaded_universe)
+        universe_report = {
+            **_default_universe_report("test"),
+            "stock_count": len(loaded_universe),
+        }
+
+    if parameters.ai_tech_only:
+        loaded_universe, universe_total, universe_report = _apply_ai_tech_universe_filter(
+            loaded_universe,
+            universe_total=universe_total,
+            universe_report=universe_report,
+        )
+
+    return loaded_universe[: parameters.scan_limit], data_source, universe_total, universe_report
+
+
 async def scan_surge_candidates(
     parameters: ScreenerParameters,
     *,
@@ -2526,20 +2644,7 @@ async def scan_surge_candidates(
     if parameters.market != "TW":
         raise ValueError("Only market=TW is supported in Phase 1.")
 
-    if universe is None:
-        stock_payload = await get_tw_stocks(limit=parameters.scan_limit)
-        universe = stock_payload.get("stocks", [])
-        data_source = stock_payload.get("data_source", "unknown")
-        universe_total = int(stock_payload.get("total") or len(universe))
-        universe_report = stock_payload.get("source_report") or _default_universe_report(data_source)
-    else:
-        data_source = "test"
-        universe = universe[: parameters.scan_limit]
-        universe_total = len(universe)
-        universe_report = {
-            **_default_universe_report("test"),
-            "stock_count": len(universe),
-        }
+    universe, data_source, universe_total, universe_report = await _load_screener_universe(parameters, universe)
 
     universe, duplicate_universe_count = _dedupe_universe_items(universe)
 
@@ -2580,9 +2685,7 @@ async def scan_surge_candidates(
     if parameters.include_canslim:
         from fastapi.concurrency import run_in_threadpool
         scan_ids = [
-            sid for sid in (
-                str(it.get("stock_code") or it.get("code") or "").strip() for it in universe
-            ) if sid
+            sid for sid in (_stock_code_from_universe_item(it) for it in universe) if sid
         ]
         canslim_ctx = await run_in_threadpool(_build_canslim_scan_context, scan_ids)
         if canslim_ctx is None:
@@ -2596,7 +2699,7 @@ async def scan_surge_candidates(
     })
 
     for index, item in enumerate(universe, start=1):
-        stock_id = str(item.get("stock_code") or item.get("code") or "").strip()
+        stock_id = _stock_code_from_universe_item(item)
         if not stock_id:
             _report_progress(progress_callback, {
                 "stage": "scanning",

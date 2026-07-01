@@ -1,10 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { getTwScreenQualityBatch } from '@/lib/api';
-import type { DurabilityMetrics, Position } from '@/lib/types';
-import PortfolioQualitySummary from './PortfolioQualitySummary';
-import QualityDegradationAlert from './QualityDegradationAlert';
+import { useState } from 'react';
+import type { Position } from '@/lib/types';
 
 const SHARES_PER_LOT = 1000;
 
@@ -63,29 +60,6 @@ export default function PortfolioDashboard({
   priceRefreshError = null,
 }: Props) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [qualityByCode, setQualityByCode] = useState<Record<string, DurabilityMetrics | null>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    const codes = Array.from(new Set(positions.map((pos) => pos.stock_code.trim()).filter(Boolean)));
-    const missing = codes.filter((code) => !(code in qualityByCode));
-    if (missing.length === 0) return;
-
-    getTwScreenQualityBatch(missing).then((results) => {
-      if (cancelled) return;
-      setQualityByCode((prev) => {
-        const next = { ...prev };
-        results.forEach(([code, metrics]) => {
-          next[code] = metrics;
-        });
-        return next;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [positions, qualityByCode]);
 
   const totalValue = positions.reduce((s, p) => s + calcValue(p), 0);
   const totalCost = positions.reduce((s, p) => s + calcCost(p), 0);
@@ -152,11 +126,6 @@ export default function PortfolioDashboard({
             <p className={`mt-1 text-lg font-bold ${color}`}>{value}</p>
           </div>
         ))}
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.45fr)]">
-        <QualityDegradationAlert positions={positions} qualityByCode={qualityByCode} />
-        <PortfolioQualitySummary positions={positions} qualityByCode={qualityByCode} />
       </div>
 
       {/* Holdings table */}

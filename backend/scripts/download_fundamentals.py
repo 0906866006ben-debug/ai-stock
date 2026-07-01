@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -161,6 +162,8 @@ async def download_all(
     store: PitFundamentalsStore,
     rate_limit: float,
     resume: bool = True,
+    since_latest: bool = False,
+    since_latest_buffer_days: int = 7,
     show_progress: bool = True,
     max_consecutive_failures: int = 25,
 ) -> tuple[dict[str, int], bool]:
@@ -175,13 +178,23 @@ async def download_all(
         for stock_id in stocks:
             for dataset in datasets:
                 job += 1
-                if resume and has_dataset_since_start(store, stock_id, dataset, start_date):
-                    logger.debug("(%d/%d) skipping %s %s; rows already cover requested start", job, total_jobs, stock_id, dataset)
-                    progress.update(job, stock_id, dataset, sum(counts.values()), skipped=True)
-                    continue
-                logger.debug("(%d/%d) downloading %s %s", job, total_jobs, stock_id, dataset)
+                if since_latest:
+                    # Incremental: fetch only from each pair's latest stored date forward.
+                    # The progress table (backfill checkpoint) is neither read nor written
+                    # here — the stored data itself is the checkpoint.
+                    pair_start = since_latest_start(
+                        store, stock_id, dataset,
+                        fallback=start_date, buffer_days=since_latest_buffer_days,
+                    )
+                else:
+                    pair_start = start_date
+                    if resume and has_dataset_since_start(store, stock_id, dataset, pair_start):
+                        logger.debug("(%d/%d) skipping %s %s; rows already cover requested start", job, total_jobs, stock_id, dataset)
+                        progress.update(job, stock_id, dataset, sum(counts.values()), skipped=True)
+                        continue
+                logger.debug("(%d/%d) downloading %s %s (from %s)", job, total_jobs, stock_id, dataset, pair_start)
                 try:
-                    fetched = await _fetch_with_status(dataset, stock_id, start_date, token)
+                    fetched = await _fetch_with_status(dataset, stock_id, pair_start, token)
                     # Tolerate test fakes that return a bare list (treated as a successful fetch).
                     raw_rows, ok = fetched if isinstance(fetched, tuple) else (fetched, True)
                     fail_reason = "rate limit / non-200 response"
@@ -210,8 +223,10 @@ async def download_all(
                 rows = normalize_dataset(dataset, stock_id, raw_rows)
                 wrote = _upsert_dataset(store, dataset, rows)
                 # ok=True even when genuinely empty (FinMind has nothing) -> mark done so
-                # we don't retry truly-absent symbols every run.
-                mark_dataset_progress(store, stock_id, dataset, start_date, wrote)
+                # we don't retry truly-absent symbols every run. In since-latest mode the
+                # data itself is the checkpoint, so leave the backfill progress table alone.
+                if not since_latest:
+                    mark_dataset_progress(store, stock_id, dataset, pair_start, wrote)
                 counts[dataset] += wrote
                 logger.debug("  wrote %d rows", wrote)
                 progress.update(job, stock_id, dataset, sum(counts.values()))
@@ -296,6 +311,38 @@ def has_dataset_since_start(store: PitFundamentalsStore, stock_id: str, dataset:
         ).fetchone()
     min_date = row[0] if row else None
     return bool(min_date and str(min_date)[:10] <= start_date)
+
+
+def latest_stored_date(store: PitFundamentalsStore, stock_id: str, dataset: str) -> str | None:
+    """Most recent stored date (YYYY-MM-DD) for a stock/dataset, or None when empty."""
+    table, date_col = DATASET_TABLES[dataset]
+    with store._connect() as conn:
+        row = conn.execute(
+            f"SELECT MAX({date_col}) FROM {table} WHERE stock_id = ?",
+            (str(stock_id),),
+        ).fetchone()
+    return str(row[0])[:10] if row and row[0] else None
+
+
+def since_latest_start(
+    store: PitFundamentalsStore,
+    stock_id: str,
+    dataset: str,
+    *,
+    fallback: str,
+    buffer_days: int = 7,
+) -> str:
+    """Start date for an incremental refresh: latest stored date minus a small buffer
+    (catches restatements; INSERT OR REPLACE dedupes). Falls back to `fallback` when
+    the stock/dataset has no rows yet (first-time fetch)."""
+    latest = latest_stored_date(store, stock_id, dataset)
+    if not latest:
+        return fallback
+    try:
+        d = datetime.strptime(latest, "%Y-%m-%d").date() - timedelta(days=max(0, buffer_days))
+        return d.isoformat()
+    except ValueError:
+        return fallback
 
 
 def table_row_counts(store: PitFundamentalsStore) -> dict[str, int]:
@@ -590,6 +637,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rate-limit", type=float, default=1.0, help="Sleep seconds between FinMind requests")
     parser.add_argument("--datasets", nargs="*", choices=DATASETS, default=list(DATASETS))
     parser.add_argument("--no-resume", action="store_true", help="Fetch every stock/dataset even if rows already exist")
+    parser.add_argument("--since-latest", action="store_true", help="Incremental freshness: fetch each stock/dataset only from its latest stored date forward (bypasses the backfill resume gate). Use this to bring daily chips up to date.")
+    parser.add_argument("--since-latest-buffer-days", type=int, default=7, help="When --since-latest, re-fetch this many days before the latest stored bar (catches restatements; upsert dedupes)")
     parser.add_argument("--retry-empty", action="store_true", help="Clear progress rows that completed with 0 rows so rate-limited/falsely-skipped stocks are retried")
     parser.add_argument("--max-consecutive-failures", type=int, default=25, help="Stop after this many consecutive failed fetches (free-tier rate limit reached); re-run later to resume")
     parser.add_argument("--auto-resume", action="store_true", help="When the rate limit is hit, sleep ~60 min (rolling-window reset) and resume automatically; repeat until a full pass completes")
@@ -631,7 +680,8 @@ def main(argv: list[str] | None = None) -> int:
         cleared = clear_empty_progress(store)
         logger.info("Cleared %d empty (0-row) progress entries for retry", cleared)
     before_counts = table_row_counts(store)
-    logger.info("Backfilling %d stocks × %d datasets to %s", len(stocks), len(args.datasets), args.db)
+    mode = "since-latest incremental" if args.since_latest else "backfill"
+    logger.info("%s: %d stocks × %d datasets to %s", mode, len(stocks), len(args.datasets), args.db)
     logger.info("Starting table row counts: %s", before_counts)
     start_time = time.time()
 
@@ -645,6 +695,8 @@ def main(argv: list[str] | None = None) -> int:
                 store=store,
                 rate_limit=float(args.rate_limit),
                 resume=not bool(args.no_resume),
+                since_latest=bool(args.since_latest),
+                since_latest_buffer_days=int(args.since_latest_buffer_days),
                 show_progress=not bool(args.no_progress),
                 max_consecutive_failures=int(args.max_consecutive_failures),
             )
