@@ -8,11 +8,12 @@ services:
     name: ai-stock-backend
     runtime: python
     plan: free
-    # Pin 3.13 (guaranteed wheels for numpy/pandas). Bump to 3.14 if you prefer.
-    pythonVersion: "3.13"
     buildCommand: pip install -r backend/requirements-deploy.txt
     startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # Pin 3.13 (guaranteed wheels for numpy/pandas). Bump to 3.14 if you prefer.
+      - key: PYTHON_VERSION
+        value: "3.13.4"
       # Optional — the app runs mock-first with none of these set.
       # Add real keys later in the Render dashboard to get live data / AI.
       - key: GEMINI_API_KEY
