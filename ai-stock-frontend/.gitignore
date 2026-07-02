@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# opt-in: production API base is a public value, committed so Vercel builds
+# pick it up without dashboard env-var setup.
+!.env.production
 
 # vercel
 .vercel
