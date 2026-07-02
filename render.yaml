@@ -20,7 +20,7 @@ services:
       - key: GEMINI_ENABLED
         value: "true"
       - key: GEMINI_API_KEY
-        value: "AIzaSyD2wdT3L-2KjnuJgGKOSUZqODgtJQ_892A"
+        value: "AIzaSyCFul7PaGJyFzT0ldP9azV_LoPYlxOHktA"
       - key: FINMIND_API_KEY
         value: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiQmVtQ2hhbmciLCJlbWFpbCI6IjA5MDY4NjYwMDZiZW5AZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.Oz354poBWHKPxDfIAjahF7fWvqQUj4jE6cWSJebpeFQ"
       - key: FINMIND_TOKEN
