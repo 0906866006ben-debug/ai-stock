@@ -14,13 +14,8 @@ services:
       # Pin 3.13 (guaranteed wheels for numpy/pandas). Bump to 3.14 if you prefer.
       - key: PYTHON_VERSION
         value: "3.13.4"
-      # Live-data keys — committed at the repo owner's explicit request so the
-      # public demo shows real data. NOTE: repo is PUBLIC; these keys are
-      # world-readable and should be rotated if abuse is a concern.
-      - key: GEMINI_ENABLED
-        value: "true"
-      - key: GEMINI_API_KEY
-        value: "AIzaSyCFul7PaGJyFzT0ldP9azV_LoPYlxOHktA"
+      # Live-data keys — committed at the repo owner's explicit request
+      # (repo is PRIVATE). Gemini removed; all AI runs on Claude below.
       - key: FINMIND_API_KEY
         value: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiQmVtQ2hhbmciLCJlbWFpbCI6IjA5MDY4NjYwMDZiZW5AZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.Oz354poBWHKPxDfIAjahF7fWvqQUj4jE6cWSJebpeFQ"
       - key: FINMIND_TOKEN

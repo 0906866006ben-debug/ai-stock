@@ -69,6 +69,19 @@ def get_gemini_model_chain() -> list[str]:
     return unique_models
 
 
+def ai_key_available() -> bool:
+    """Whether the ACTIVE provider's API key is present.
+
+    Replaces the old hard-coded ``GEMINI_API_KEY`` gates: with
+    ``TW_AI_MODEL=anthropic:...`` the relevant key is ``ANTHROPIC_API_KEY``,
+    and a missing Gemini key must NOT force the mock path.
+    """
+    model_id = resolve_ai_model_id()
+    if model_id.startswith("anthropic"):
+        return bool(os.getenv("ANTHROPIC_API_KEY"))
+    return bool(os.getenv("GEMINI_API_KEY"))
+
+
 def resolve_ai_model_id(default: str = "gemini-2.5-flash") -> str:
     """Provider-qualified model id for every analysis agent.
 

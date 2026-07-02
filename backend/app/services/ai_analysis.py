@@ -1,6 +1,7 @@
 import os
 
 from ..models.schemas import StockAIAnalysis
+from .gemini_diagnostics import ai_key_available, resolve_ai_model_id
 
 MOCK_RESULT = {
     "summary": (
@@ -56,14 +57,13 @@ def _build_fmp_section(fmp: dict) -> str:
 
 
 async def get_ai_analysis(symbol: str, context: dict) -> dict:
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
+    if not ai_key_available():
         return MOCK_RESULT
 
     try:
         from pydantic_ai import Agent
 
-        agent = Agent("google-gla:gemini-2.5-flash", output_type=StockAIAnalysis)
+        agent = Agent(resolve_ai_model_id(), output_type=StockAIAnalysis)
 
         market = context.get("market_data") or {}
         news = context.get("news_data") or []

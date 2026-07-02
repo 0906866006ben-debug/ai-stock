@@ -3,6 +3,7 @@ import os
 from ..models.schemas import TaiwanStockAIAnalysis
 from .tw_technical_analysis import compute_all_indicators
 from .gemini_diagnostics import (
+    ai_key_available,
     get_gemini_model_chain,
     is_gemini_enabled,
     log_gemini_diagnostics,
@@ -142,7 +143,7 @@ async def get_tw_ai_analysis(
     chart_data: list[dict], news: list[dict],
 ) -> tuple[dict, str]:
     """Return (result_dict, analysis_source) where analysis_source is 'ai' or 'mock'."""
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = ai_key_available()  # provider-aware (Claude or Gemini)
     model_chain = get_gemini_model_chain()
     if not is_gemini_enabled():
         print("Gemini disabled by GEMINI_ENABLED=false; using fallback.")

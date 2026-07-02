@@ -12,7 +12,7 @@ Generates Traditional Chinese narrative explaining:
 import os
 from pydantic_ai import Agent
 from backend.app.agents.retry import run_with_backoff
-from backend.app.services.gemini_diagnostics import resolve_ai_model_id
+from backend.app.services.gemini_diagnostics import ai_key_available, resolve_ai_model_id
 from backend.app.models.schemas import FundamentalAnalysis, FundamentalMetrics
 from backend.app.services.fintech_fundamentals import get_tw_fundamentals
 
@@ -79,8 +79,7 @@ async def analyze_fundamental(
 """
 
     try:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+        if not ai_key_available():
             return _mock_fundamental_analysis(symbol, company_name, metrics, is_mock)
 
         agent = Agent(

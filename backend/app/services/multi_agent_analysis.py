@@ -18,6 +18,7 @@ from backend.app.models.schemas import (
 from backend.app.services.finmind_detail import get_tw_detail
 from backend.app.services.finmind_market import get_tw_price_history_with_source
 from backend.app.services.gemini_diagnostics import (
+    ai_key_available,
     get_gemini_model_chain,
     is_gemini_enabled,
     to_pydantic_ai_model_id,
@@ -355,9 +356,8 @@ async def run_gemini_structurer(
     evidence_packs: list[AgentEvidencePack],
     question: str | None = None,
 ) -> tuple[GeminiStructuredInsight, str]:
-    api_key = os.getenv("GEMINI_API_KEY")
     model_chain = get_gemini_model_chain()
-    if not api_key or not is_gemini_enabled():
+    if not ai_key_available() or not is_gemini_enabled():
         return build_gemini_fallback(evidence_packs), "fallback"
 
     payload = {

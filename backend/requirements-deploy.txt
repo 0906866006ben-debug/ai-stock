@@ -14,10 +14,9 @@
 fastapi==0.136.1
 uvicorn[standard]==0.46.0
 pydantic==2.13.4
-# [google] extra pulls the Gemini provider (google-genai) so the
-# "google-gla:gemini-2.5-flash" agent can actually run; without it the AI
-# narrative silently falls back to mock even when GEMINI_API_KEY is set.
-pydantic-ai-slim[google,anthropic]==1.93.0
+# [anthropic] extra pulls the Claude provider; all analysis runs on
+# TW_AI_MODEL=anthropic:... (Gemini removed — no key, no [google] extra).
+pydantic-ai-slim[anthropic]==1.93.0
 langgraph==1.1.10
 httpx==0.28.1
 requests==2.33.1
