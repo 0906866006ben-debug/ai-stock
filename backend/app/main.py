@@ -303,6 +303,10 @@ async def search_symbols(
 ) -> SearchResponse:
     query = query.strip()
     raw = await fmp_get("search-symbol", {"query": query, "limit": 8})
+    # Symbol search only matches ticker prefixes; fall back to company-name
+    # search so queries like "tesla" also resolve.
+    if not raw:
+        raw = await fmp_get("search-name", {"query": query, "limit": 8})
     results = []
     if isinstance(raw, list):
         for item in raw:
