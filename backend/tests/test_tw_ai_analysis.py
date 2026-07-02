@@ -11,6 +11,9 @@ _SAMPLE_CHART = [
 @pytest.mark.asyncio
 async def test_mock_returned_when_no_api_key(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL_UNIFIED", raising=False)
     from backend.app.services.tw_ai_analysis import get_tw_ai_analysis
     result, source = await get_tw_ai_analysis(
         symbol="2330", company_name="台積電", market_type="TWSE",

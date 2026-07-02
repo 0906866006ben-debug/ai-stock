@@ -115,90 +115,203 @@ def _mock_fundamentals(symbol: str) -> dict:
     }
 
 
+async def _fetch(client: httpx.AsyncClient, dataset: str, symbol: str, start: str, token: str) -> list[dict]:
+    try:
+        resp = await client.get(
+            FINMIND_BASE,
+            params={"dataset": dataset, "data_id": symbol, "start_date": start, "token": token},
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        if payload.get("status") == 200:
+            return payload.get("data", [])
+    except Exception:
+        pass
+    return []
+
+
+def _by_period(rows: list[dict]) -> dict[str, dict[str, float]]:
+    """Group long-format (date/type/value) rows into {date: {type: value}}."""
+    out: dict[str, dict[str, float]] = {}
+    for row in rows:
+        period = str(row.get("date") or "")[:10]
+        type_code = str(row.get("type") or "")
+        try:
+            out.setdefault(period, {})[type_code] = float(row.get("value"))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _pick(period: dict[str, float], *codes: str):
+    for code in codes:
+        if code in period and period[code] is not None:
+            return period[code]
+    return None
+
+
+def _human_twd(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    for unit, div in (("T", 1e12), ("B", 1e9), ("M", 1e6)):
+        if abs(value) >= div:
+            return f"{value / div:.1f}{unit}"
+    return f"{value:,.0f}"
+
+
+def _pct(numer: float | None, denom: float | None) -> float | None:
+    if numer is None or not denom:
+        return None
+    return round(numer / denom * 100, 2)
+
+
 async def get_tw_fundamentals(symbol: str) -> tuple[dict, bool]:
-    """
-    Fetch Taiwan stock fundamental metrics.
+    """Fetch Taiwan stock fundamental metrics from FinMind (real datasets).
 
-    Returns: (fundamentals_dict, is_mock)
-
-    fundamentals_dict keys:
-      company_name, latest_revenue, revenue_yoy, revenue_mom,
-      eps_latest, eps_yoy, pe_ratio, pb_ratio, roe, roa,
-      gross_margin, operating_margin, net_margin,
-      dividend_yield, payout_ratio, debt_ratio, current_ratio, quick_ratio,
-      operating_cf, free_cf, cf_trend
+    Returns: (fundamentals_dict, is_mock). Datasets (all free-tier, long
+    format date/type/value except month-revenue and PER):
+      TaiwanStockMonthRevenue          -> revenue level / YoY / MoM
+      TaiwanStockPER                   -> PER / PBR / dividend yield
+      TaiwanStockFinancialStatements   -> EPS, margins (quarterly)
+      TaiwanStockBalanceSheet          -> ROE/ROA denominators, debt/current ratios
+      TaiwanStockCashFlowsStatement    -> operating / free cash flow + trend
+    Missing individual fields degrade to None — never fabricated.
     """
-    token = os.getenv("FINMIND_API_KEY")
+    token = os.getenv("FINMIND_API_KEY") or os.getenv("FINMIND_TOKEN")
     if not token:
         return _mock_fundamentals(symbol), True
 
+    today = date.today()
+    start_14m = (today - timedelta(days=430)).isoformat()
+    start_30d = (today - timedelta(days=30)).isoformat()
+    start_30mo = (today - timedelta(days=920)).isoformat()  # ~5+ quarters for EPS YoY
+    start_15mo = (today - timedelta(days=460)).isoformat()
+
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Fetch company info first to get company name
-            resp_info = await client.get(
-                FINMIND_BASE,
-                params={
-                    "dataset": "TaiwanStockInfo",
-                    "data_id": symbol,
-                    "token": token,
-                },
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            import asyncio
+
+            info_rows, rev_rows, per_rows, fin_rows, bs_rows, cf_rows = await asyncio.gather(
+                _fetch(client, "TaiwanStockInfo", symbol, "", token),
+                _fetch(client, "TaiwanStockMonthRevenue", symbol, start_14m, token),
+                _fetch(client, "TaiwanStockPER", symbol, start_30d, token),
+                _fetch(client, "TaiwanStockFinancialStatements", symbol, start_30mo, token),
+                _fetch(client, "TaiwanStockBalanceSheet", symbol, start_15mo, token),
+                _fetch(client, "TaiwanStockCashFlowsStatement", symbol, start_15mo, token),
             )
-            resp_info.raise_for_status()
-            info_data = resp_info.json()
-
-            if info_data.get("status") != 200 or not info_data.get("data"):
-                return _mock_fundamentals(symbol), True
-
-            company_name = info_data["data"][0].get("stock_name", symbol)
-
-            # Fetch financial metrics
-            resp_fin = await client.get(
-                FINMIND_BASE,
-                params={
-                    "dataset": "TaiwanStockFinancials",
-                    "data_id": symbol,
-                    "token": token,
-                },
-            )
-            resp_fin.raise_for_status()
-            fin_data = resp_fin.json()
-
-            if fin_data.get("status") != 200 or not fin_data.get("data"):
-                return _mock_fundamentals(symbol), True
-
-            # Parse financial data (latest)
-            financials = fin_data.get("data", [])
-            if not financials:
-                return _mock_fundamentals(symbol), True
-
-            latest = financials[-1] if isinstance(financials, list) else financials
-
-            # Extract metrics (exact field names depend on FinMind response)
-            fundamentals = {
-                "company_name": company_name,
-                "latest_revenue": latest.get("revenue", "N/A"),
-                "revenue_yoy": float(latest.get("revenue_yoy", 0)) if latest.get("revenue_yoy") else 0,
-                "revenue_mom": float(latest.get("revenue_mom", 0)) if latest.get("revenue_mom") else 0,
-                "eps_latest": float(latest.get("eps", 0)) if latest.get("eps") else 0,
-                "eps_yoy": float(latest.get("eps_yoy", 0)) if latest.get("eps_yoy") else 0,
-                "pe_ratio": float(latest.get("pe_ratio", 0)) if latest.get("pe_ratio") else 0,
-                "pb_ratio": float(latest.get("pb_ratio", 0)) if latest.get("pb_ratio") else 0,
-                "roe": float(latest.get("roe", 0)) if latest.get("roe") else 0,
-                "roa": float(latest.get("roa", 0)) if latest.get("roa") else 0,
-                "gross_margin": float(latest.get("gross_margin", 0)) if latest.get("gross_margin") else 0,
-                "operating_margin": float(latest.get("operating_margin", 0)) if latest.get("operating_margin") else 0,
-                "net_margin": float(latest.get("net_margin", 0)) if latest.get("net_margin") else 0,
-                "dividend_yield": float(latest.get("dividend_yield", 0)) if latest.get("dividend_yield") else 0,
-                "payout_ratio": float(latest.get("payout_ratio", 0)) if latest.get("payout_ratio") else 0,
-                "debt_ratio": float(latest.get("debt_ratio", 0)) if latest.get("debt_ratio") else 0,
-                "current_ratio": float(latest.get("current_ratio", 0)) if latest.get("current_ratio") else 0,
-                "quick_ratio": float(latest.get("quick_ratio", 0)) if latest.get("quick_ratio") else 0,
-                "operating_cf": latest.get("operating_cf", "N/A"),
-                "free_cf": latest.get("free_cf", "N/A"),
-                "cf_trend": latest.get("cf_trend", "stable"),
-            }
-
-            return fundamentals, False
-
     except Exception:
         return _mock_fundamentals(symbol), True
+
+    company_name = info_rows[0].get("stock_name", symbol) if info_rows else symbol
+
+    # No usable statement/revenue data at all -> honest mock
+    if not rev_rows and not fin_rows:
+        return _mock_fundamentals(symbol), True
+
+    # ── Revenue (monthly) ──
+    latest_revenue = revenue_yoy = revenue_mom = None
+    if rev_rows:
+        rows = sorted(rev_rows, key=lambda r: r.get("date", ""))
+        latest_rev = float(rows[-1].get("revenue", 0) or 0)
+        latest_revenue = _human_twd(latest_rev)
+        if len(rows) >= 2 and float(rows[-2].get("revenue", 0) or 0):
+            revenue_mom = round((latest_rev / float(rows[-2]["revenue"]) - 1) * 100, 2)
+        if len(rows) >= 13 and float(rows[-13].get("revenue", 0) or 0):
+            revenue_yoy = round((latest_rev / float(rows[-13]["revenue"]) - 1) * 100, 2)
+
+    # ── Valuation (daily PER table) ──
+    pe_ratio = pb_ratio = dividend_yield = None
+    if per_rows:
+        latest = sorted(per_rows, key=lambda r: r.get("date", ""))[-1]
+        pe_ratio = float(latest.get("PER") or 0) or None
+        pb_ratio = float(latest.get("PBR") or 0) or None
+        dividend_yield = float(latest.get("dividend_yield") or 0) or None
+
+    # ── Income statement (quarterly, long format) ──
+    eps_latest = eps_yoy = gross_margin = operating_margin = net_margin = None
+    ttm_net_income = None
+    fin_periods = _by_period(fin_rows)
+    if fin_periods:
+        dates = sorted(fin_periods)
+        latest_q = fin_periods[dates[-1]]
+        revenue_q = _pick(latest_q, "Revenue")
+        eps_latest = _pick(latest_q, "EPS")
+        gross_margin = _pct(_pick(latest_q, "GrossProfit"), revenue_q)
+        operating_margin = _pct(_pick(latest_q, "OperatingIncome"), revenue_q)
+        net_margin = _pct(
+            _pick(latest_q, "IncomeAfterTaxes", "TotalConsolidatedProfitForThePeriod"), revenue_q
+        )
+        if len(dates) >= 5:
+            prior_eps = _pick(fin_periods[dates[-5]], "EPS")
+            if eps_latest is not None and prior_eps:
+                eps_yoy = round((eps_latest / prior_eps - 1) * 100, 2)
+        net_vals = [
+            _pick(fin_periods[d], "IncomeAfterTaxes", "TotalConsolidatedProfitForThePeriod")
+            for d in dates[-4:]
+        ]
+        if all(v is not None for v in net_vals) and len(net_vals) == 4:
+            ttm_net_income = sum(net_vals)
+
+    # ── Balance sheet (quarterly, long format) ──
+    roe = roa = debt_ratio = current_ratio = quick_ratio = None
+    bs_periods = _by_period(bs_rows)
+    if bs_periods:
+        latest_bs = bs_periods[sorted(bs_periods)[-1]]
+        equity = _pick(latest_bs, "Equity", "TotalEquity", "EquityAttributableToOwnersOfParent")
+        total_assets = _pick(latest_bs, "TotalAssets")
+        liabilities = _pick(latest_bs, "Liabilities", "TotalLiabilities")
+        current_assets = _pick(latest_bs, "CurrentAssets")
+        current_liabilities = _pick(latest_bs, "CurrentLiabilities")
+        inventories = _pick(latest_bs, "Inventories")
+        roe = _pct(ttm_net_income, equity)
+        roa = _pct(ttm_net_income, total_assets)
+        debt_ratio = _pct(liabilities, total_assets)
+        if current_assets is not None and current_liabilities:
+            current_ratio = round(current_assets / current_liabilities, 2)
+            if inventories is not None:
+                quick_ratio = round((current_assets - inventories) / current_liabilities, 2)
+
+    # ── Cash flow (quarterly, long format) ──
+    operating_cf = free_cf = "N/A"
+    cf_trend = "stable"
+    cf_periods = _by_period(cf_rows)
+    if cf_periods:
+        cf_dates = sorted(cf_periods)
+        latest_cf = cf_periods[cf_dates[-1]]
+        op = _pick(latest_cf, "CashFlowsFromOperatingActivities", "NetCashInflowFromOperatingActivities")
+        capex = _pick(latest_cf, "PropertyAndPlantAndEquipment")
+        operating_cf = _human_twd(op)
+        if op is not None and capex is not None:
+            free_cf = _human_twd(op - abs(capex))
+        if len(cf_dates) >= 2:
+            prior_op = _pick(
+                cf_periods[cf_dates[-2]],
+                "CashFlowsFromOperatingActivities", "NetCashInflowFromOperatingActivities",
+            )
+            if op is not None and prior_op is not None:
+                cf_trend = "strong" if op > prior_op else ("declining" if op < prior_op else "stable")
+
+    fundamentals = {
+        "company_name": company_name,
+        "latest_revenue": latest_revenue or "N/A",
+        "revenue_yoy": revenue_yoy,
+        "revenue_mom": revenue_mom,
+        "eps_latest": eps_latest,
+        "eps_yoy": eps_yoy,
+        "pe_ratio": pe_ratio,
+        "pb_ratio": pb_ratio,
+        "roe": roe,
+        "roa": roa,
+        "gross_margin": gross_margin,
+        "operating_margin": operating_margin,
+        "net_margin": net_margin,
+        "dividend_yield": dividend_yield,
+        "payout_ratio": None,
+        "debt_ratio": debt_ratio,
+        "current_ratio": current_ratio,
+        "quick_ratio": quick_ratio,
+        "operating_cf": operating_cf,
+        "free_cf": free_cf,
+        "cf_trend": cf_trend,
+    }
+    return fundamentals, False

@@ -43,18 +43,28 @@ async def get_market_heatmap() -> dict:
             for sid, d, close, turnover in cur.fetchall():
                 by_stock.setdefault(str(sid), []).append((d, close, turnover))
     except Exception:
-        return {"status": "no_data", "date": today, "sectors": []}
+        by_stock = {}
 
-    sectors: dict[str, dict] = {}
-    movers: list[dict] = []
+    # (stock_id, name, change_pct, turnover) from local store when present,
+    # otherwise from the free TWSE open API (cloud deploys have no local DB).
+    records: list[tuple[str, str, float, float]] = []
     for sid, recs in by_stock.items():
         if len(recs) < 2 or recs[0][1] is None or not recs[1][1]:
             continue
         latest_close, prev_close, turnover = recs[0][1], recs[1][1], (recs[0][2] or 0.0)
         chg = (latest_close - prev_close) / prev_close * 100.0
+        records.append((sid, "", chg, turnover))
+    if not records:
+        records = await _twse_day_all()
+    if not records:
+        return {"status": "no_data", "date": today, "sectors": [], "top_gainers": [], "top_losers": []}
+
+    sectors: dict[str, dict] = {}
+    movers: list[dict] = []
+    for sid, fallback_name, chg, turnover in records:
         info = info_map.get(sid) or {}
         sec = info.get("i") or "其他"
-        name = info.get("n") or ""
+        name = info.get("n") or fallback_name
         s = sectors.setdefault(sec, {"sector": sec, "count": 0, "up": 0, "down": 0, "sum_chg": 0.0, "turnover": 0.0})
         s["count"] += 1
         s["sum_chg"] += chg
@@ -90,6 +100,38 @@ async def get_market_heatmap() -> dict:
     if out:
         file_cache.save(_CACHE_NS, today, result)
     return result
+
+
+async def _twse_day_all() -> list[tuple[str, str, float, float]]:
+    """All-market daily quotes from the free TWSE open API (no key, TWSE-listed
+    only). Returns (stock_id, name, change_pct, turnover) rows."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
+                headers={"accept": "application/json"},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+    except Exception:
+        return []
+
+    records: list[tuple[str, str, float, float]] = []
+    for row in rows:
+        try:
+            sid = str(row.get("Code") or "").strip()
+            close = float(row.get("ClosingPrice") or 0)
+            change = float(row.get("Change") or 0)
+            turnover = float(row.get("TradeValue") or 0)
+        except (TypeError, ValueError):
+            continue
+        prev = close - change
+        if not sid or close <= 0 or prev <= 0:
+            continue
+        records.append((sid, str(row.get("Name") or "").strip(), change / prev * 100.0, turnover))
+    return records
 
 
 def _stock_info_map() -> dict[str, dict]:

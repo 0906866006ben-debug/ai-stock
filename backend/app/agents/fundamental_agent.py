@@ -216,7 +216,11 @@ def _mock_fundamental_analysis(
         },
         valuation={
             "level": valuation_level,
-            "support": f"本益比{metrics.pe_ratio:.1f}x，股價淨值比{metrics.pb_ratio:.1f}x",
+            "support": (
+                f"本益比{metrics.pe_ratio:.1f}x，股價淨值比{metrics.pb_ratio:.1f}x"
+                if metrics.pe_ratio is not None and metrics.pb_ratio is not None
+                else "估值數據不足"
+            ),
             "interpretation": "估值處於合理水準",
         },
         financial_health={

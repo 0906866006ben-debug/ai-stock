@@ -5,6 +5,9 @@ import pytest
 async def test_tw_stock_graph_full_flow_mock(monkeypatch):
     """Test end-to-end Taiwan stock analysis with mock data (no API keys)."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL_UNIFIED", raising=False)
     monkeypatch.delenv("FINMIND_API_KEY", raising=False)
 
     from backend.app.graphs.tw_stock_graph import run_tw_analysis
@@ -60,6 +63,9 @@ async def test_tw_stock_graph_with_api_key_set(monkeypatch):
     """
     monkeypatch.setenv("FINMIND_API_KEY", "test-token")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL_UNIFIED", raising=False)
 
     from backend.app.graphs.tw_stock_graph import run_tw_analysis
 
@@ -100,6 +106,9 @@ async def test_tw_stock_graph_with_api_key_set(monkeypatch):
 async def test_tw_stock_graph_unknown_symbol_with_no_api_key(monkeypatch):
     """Test handling of unknown symbol with mock fallback."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL_UNIFIED", raising=False)
     monkeypatch.delenv("FINMIND_API_KEY", raising=False)
 
     from backend.app.graphs.tw_stock_graph import run_tw_analysis

@@ -10,6 +10,9 @@ from backend.app.models.schemas import FundamentalAnalysis
 async def test_fundamental_analysis_mock_no_api_key(monkeypatch):
     """Test fundamental analysis returns mock when GEMINI_API_KEY missing."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL_UNIFIED", raising=False)
 
     result = await analyze_fundamental("2330", "台積電", 2290.0)
 

@@ -7,6 +7,9 @@ def client(monkeypatch):
     from backend.app.main import app  # triggers load_dotenv first
     monkeypatch.delenv("FINMIND_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL", raising=False)
+    monkeypatch.delenv("TW_AI_MODEL_UNIFIED", raising=False)
     return TestClient(app)
 
 

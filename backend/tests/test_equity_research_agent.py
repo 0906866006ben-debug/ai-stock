@@ -384,7 +384,8 @@ def test_gemini_config_reads_fallback_models(monkeypatch):
     assert is_gemini_enabled() is False
 
 
-def test_pydantic_ai_model_id_adds_google_provider_prefix():
+def test_pydantic_ai_model_id_adds_google_provider_prefix(monkeypatch):
+    monkeypatch.delenv("TW_AI_MODEL", raising=False)
     assert to_pydantic_ai_model_id("gemini-2.5-flash") == "google-gla:gemini-2.5-flash"
     assert to_pydantic_ai_model_id("google-gla:gemini-2.5-flash") == "google-gla:gemini-2.5-flash"
 

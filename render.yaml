@@ -29,6 +29,10 @@ services:
         value: "anthropic:claude-haiku-4-5-20251001"
       - key: ANTHROPIC_API_KEY
         value: "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"
-      # US data — left unset (mock); not needed for the TW demo.
+      # US market data (search / market overview / peers / news / history)
       - key: FMP_API_KEY
-        sync: false
+        value: "Uoz0qOu2f5ybL92PdwFivjy6s5qwA7tR"
+      - key: FINNHUB_API_KEY
+        value: "d7u5dl1r01qvtsq0hcogd7u5dl1r01qvtsq0hcp0"
+      - key: POLYGON_API_KEY
+        value: "oPSYH2ngqhkYIWWB0Qqigs493sOCnMFu"
