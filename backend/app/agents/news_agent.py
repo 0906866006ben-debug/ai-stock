@@ -11,6 +11,7 @@ Generates Traditional Chinese narrative explaining:
 import os
 from pydantic_ai import Agent
 from backend.app.agents.retry import run_with_backoff
+from backend.app.services.gemini_diagnostics import resolve_ai_model_id
 from backend.app.models.schemas import NewsAnalysis
 from backend.app.services.tw_news_sentiment import get_tw_news, calculate_sentiment_aggregate
 
@@ -78,7 +79,7 @@ async def analyze_news(symbol: str, company_name: str) -> NewsAnalysis:
             return _mock_news_analysis(symbol, company_name, news_list, sentiment, is_mock)
 
         agent = Agent(
-            "google-gla:gemini-2.5-flash",
+            resolve_ai_model_id(),
             output_type=NewsAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )

@@ -69,12 +69,29 @@ def get_gemini_model_chain() -> list[str]:
     return unique_models
 
 
+def resolve_ai_model_id(default: str = "gemini-2.5-flash") -> str:
+    """Provider-qualified model id for every analysis agent.
+
+    Set ``TW_AI_MODEL`` to switch providers app-wide without touching code,
+    e.g. ``anthropic:claude-haiku-4-5-20251001`` to run all agents on a paid
+    Claude key (avoids the Gemini free-tier rate limit). Falls back to Gemini.
+    """
+    override = os.getenv("TW_AI_MODEL")
+    if override and override.strip():
+        return override.strip()
+    return to_pydantic_ai_model_id(default)
+
+
 def to_pydantic_ai_model_id(model: str) -> str:
     """Return a provider-qualified model id for PydanticAI.
 
     Keep public config values unchanged (`gemini-...`) while avoiding
     PydanticAI's deprecated provider-less model syntax at the call site.
+    An explicit ``TW_AI_MODEL`` override (any provider) always wins.
     """
+    override = os.getenv("TW_AI_MODEL")
+    if override and override.strip():
+        return override.strip()
     cleaned = str(model).strip()
     if ":" in cleaned:
         return cleaned

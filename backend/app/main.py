@@ -40,7 +40,7 @@ from .models.schemas import (
 from .models.screener_schemas import CanslimFullResult, ScreeningResult
 from .graphs.stock_analysis_graph import run_analysis
 from .graphs.tw_stock_graph import run_tw_analysis
-from .graphs.comprehensive_analysis_graph import run_comprehensive_analysis
+from .services.tw_unified_analysis import run_unified_analysis
 from .services.fmp_market import get_market_overview
 from .services.fmp_peers import get_competitors
 from .services.fmp_client import fmp_get
@@ -431,7 +431,9 @@ async def analyze_tw(
     detail_task = _asyncio.create_task(get_tw_detail(symbol))
     macro_task = _asyncio.create_task(get_macro_summary())
     dividend_task = _asyncio.create_task(get_next_dividend_live(symbol))
-    comprehensive_task = _asyncio.create_task(run_comprehensive_analysis(symbol))
+    # Single-call unified analysis (all pillars + synthesis in one model call);
+    # replaces the multi-agent comprehensive graph that took minutes per symbol.
+    comprehensive_task = _asyncio.create_task(run_unified_analysis(symbol))
     news_task = _asyncio.create_task(get_tw_stock_news(symbol))
 
     state, detail, macro_raw, next_div_raw, comprehensive_state, tw_news_raw = await _asyncio.gather(

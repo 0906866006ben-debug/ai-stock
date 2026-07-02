@@ -25,6 +25,15 @@ services:
         value: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiQmVtQ2hhbmciLCJlbWFpbCI6IjA5MDY4NjYwMDZiZW5AZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.Oz354poBWHKPxDfIAjahF7fWvqQUj4jE6cWSJebpeFQ"
       - key: FINMIND_TOKEN
         value: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiQmVtQ2hhbmciLCJlbWFpbCI6IjA5MDY4NjYwMDZiZW5AZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.Oz354poBWHKPxDfIAjahF7fWvqQUj4jE6cWSJebpeFQ"
+      # Route all TW analysis agents through the user's paid Claude key
+      # (no Gemini free-tier 429; full multi-pillar analysis). Repo is private.
+      - key: TW_AI_MODEL
+        value: "anthropic:claude-sonnet-4-6"
+      # Fast model for the unified pillars call; main summary stays on Sonnet.
+      - key: TW_AI_MODEL_UNIFIED
+        value: "anthropic:claude-haiku-4-5-20251001"
+      - key: ANTHROPIC_API_KEY
+        value: "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"
       # US data — left unset (mock); not needed for the TW demo.
       - key: FMP_API_KEY
         sync: false

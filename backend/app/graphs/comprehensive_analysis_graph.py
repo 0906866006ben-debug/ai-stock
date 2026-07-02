@@ -152,6 +152,13 @@ async def run_synthesis(state: ComprehensiveAnalysisState) -> dict:
 
 async def run_equity_research(state: ComprehensiveAnalysisState) -> dict:
     """Run elite equity research agent synthesizing all pillars into research report."""
+    # Off by default: this node runs a Gemini grounded-search + a very heavy
+    # output schema, which dominates latency (minutes) and often retries to a
+    # mock. The main summary + 4 pillars + synthesis already give a complete
+    # analysis. Set TW_EQUITY_RESEARCH=true to re-enable.
+    import os as _os
+    if _os.getenv("TW_EQUITY_RESEARCH", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+        return {"equity_research": None}
     try:
         fundamental = state.get("fundamental_analysis")
         technical = state.get("technical_analysis")

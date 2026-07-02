@@ -12,6 +12,7 @@ Generates Traditional Chinese narrative explaining:
 import os
 from pydantic_ai import Agent
 from backend.app.agents.retry import run_with_backoff
+from backend.app.services.gemini_diagnostics import resolve_ai_model_id
 from backend.app.models.schemas import ChipAnalysis
 from backend.app.services.tw_chip_analysis import get_tw_chip_analysis
 
@@ -69,7 +70,7 @@ async def analyze_chip(symbol: str, company_name: str) -> ChipAnalysis:
             return _mock_chip_analysis(symbol, company_name, chip_dict, is_mock)
 
         agent = Agent(
-            "google-gla:gemini-2.5-flash",
+            resolve_ai_model_id(),
             output_type=ChipAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )

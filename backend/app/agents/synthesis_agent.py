@@ -7,6 +7,7 @@ Detects conflicts, calculates confirmation scoring, generates final recommendati
 import os
 from pydantic_ai import Agent
 from backend.app.agents.retry import run_with_backoff
+from backend.app.services.gemini_diagnostics import resolve_ai_model_id
 from backend.app.models.schemas import (
     FundamentalAnalysis,
     TechnicalAnalysis,
@@ -153,7 +154,7 @@ async def synthesize_analysis(
             )
 
         agent = Agent(
-            "google-gla:gemini-2.5-flash",
+            resolve_ai_model_id(),
             output_type=ComprehensiveAnalysis,
             system_prompt=_SYSTEM_PROMPT,
         )
