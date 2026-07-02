@@ -746,6 +746,13 @@ async def tw_market_heatmap() -> dict:
     return await get_market_heatmap()
 
 
+@app.get("/tw/daily-opportunities")
+async def tw_daily_opportunities() -> dict:
+    """研究報告 v2 三桶規則的每日候選觀察名單（verb-free，附支持數據與未稽核聲明）。"""
+    from backend.app.services.tw_daily_opportunities import get_daily_opportunities
+    return await get_daily_opportunities()
+
+
 @app.get("/tw/finmind/datasets")
 async def tw_finmind_datasets() -> dict:
     """Curated, grouped FinMind dataset list for the in-app playground."""

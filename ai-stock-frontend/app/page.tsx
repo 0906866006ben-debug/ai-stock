@@ -33,8 +33,9 @@ import { AIAnalysisPage } from './components/ai-analysis/AIAnalysisPage';
 import EntryContextCard from './components/EntryContextCard';
 import BoldPlanView from './components/BoldPlanView';
 import MarketHeatmapView from './components/MarketHeatmapView';
+import DailyOpportunitiesView from './components/DailyOpportunitiesView';
 
-type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap';
+type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap' | 'opportunities';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_SIM_POSITIONS = 'stockAssistant.simPositions';
@@ -53,6 +54,7 @@ function initialPageFromUrl(): Page {
 
 const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'analysis', label: '小幫手分析', icon: '🔮' },
+  { page: 'opportunities', label: '每日交易機會', icon: '🎯' },
   { page: 'stock-analysis', label: '看看走勢', icon: '📈' },
   { page: 'portfolio', label: '我的小金庫', icon: '💖' },
   { page: 'directory', label: '股票目錄', icon: '📋' },
@@ -790,6 +792,11 @@ export default function DashboardPage() {
 
             {/* ── Market sector heatmap ── */}
             {page === 'market-heatmap' && <MarketHeatmapView />}
+
+            {/* ── Daily opportunities (research-v2 three-bucket screen) ── */}
+            {page === 'opportunities' && (
+              <DailyOpportunitiesView onSelect={(code) => goAnalyze(code, code)} />
+            )}
 
             {/* ── Portfolio ── */}
             {page === 'portfolio' && (
