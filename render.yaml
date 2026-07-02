@@ -14,11 +14,17 @@ services:
       # Pin 3.13 (guaranteed wheels for numpy/pandas). Bump to 3.14 if you prefer.
       - key: PYTHON_VERSION
         value: "3.13.4"
-      # Optional — the app runs mock-first with none of these set.
-      # Add real keys later in the Render dashboard to get live data / AI.
+      # Live-data keys — committed at the repo owner's explicit request so the
+      # public demo shows real data. NOTE: repo is PUBLIC; these keys are
+      # world-readable and should be rotated if abuse is a concern.
+      - key: GEMINI_ENABLED
+        value: "true"
       - key: GEMINI_API_KEY
-        sync: false
+        value: "AIzaSyD2wdT3L-2KjnuJgGKOSUZqODgtJQ_892A"
       - key: FINMIND_API_KEY
-        sync: false
+        value: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiQmVtQ2hhbmciLCJlbWFpbCI6IjA5MDY4NjYwMDZiZW5AZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.Oz354poBWHKPxDfIAjahF7fWvqQUj4jE6cWSJebpeFQ"
+      - key: FINMIND_TOKEN
+        value: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiQmVtQ2hhbmciLCJlbWFpbCI6IjA5MDY4NjYwMDZiZW5AZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.Oz354poBWHKPxDfIAjahF7fWvqQUj4jE6cWSJebpeFQ"
+      # US data — left unset (mock); not needed for the TW demo.
       - key: FMP_API_KEY
         sync: false
