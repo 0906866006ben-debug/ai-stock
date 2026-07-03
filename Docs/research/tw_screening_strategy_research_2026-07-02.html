@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>台股每日選股系統：深度文獻與實證研究報告</title>
+<style>
+body{font-family:'Microsoft JhengHei','Noto Sans TC',sans-serif;max-width:860px;margin:0 auto;padding:2rem 1.2rem;line-height:1.75;color:#1a202c;background:#fafafa}
+h1{font-size:1.7rem;border-bottom:3px solid #2b6cb0;padding-bottom:.5rem}
+h2{font-size:1.35rem;color:#2b6cb0;margin-top:2.2rem;border-left:5px solid #2b6cb0;padding-left:.6rem}
+h3{font-size:1.12rem;color:#2c5282;margin-top:1.6rem}
+table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.92rem;background:#fff}
+th,td{border:1px solid #cbd5e0;padding:.45rem .6rem;text-align:left}
+th{background:#ebf4ff}
+tr:nth-child(even){background:#f7fafc}
+code{background:#edf2f7;padding:.1rem .3rem;border-radius:3px;font-size:.88em}
+blockquote{border-left:4px solid #ed8936;background:#fffaf0;margin:1rem 0;padding:.6rem 1rem;color:#7b341e}
+strong{color:#2a4365}
+li{margin:.25rem 0}
+</style></head><body>
+<h1 id="_1">台股每日選股系統：深度文獻與實證研究報告</h1>
+<p><strong>版本：</strong> v1.0（2026-07-02）<br />
+<strong>研究角色：</strong> quant-researcher（台股量化研究員）<br />
+<strong>研究目的：</strong> 為台股每日選股系統提供分級證據基礎，不設計策略規格，不跑回測，不下最終判決。所有數字未另說明皆標明來源與證據等級。</p>
+<hr />
+<h2 id="1">1. 執行摘要（一頁）</h2>
+<h3 id="11">1.1 核心結論</h3>
+<p><strong>台灣市場與美股的根本差異</strong> 使大量美股驗證過的因子無法直接移植：
+- 散戶交易量佔整體約 60-70%（2023-2024 TWSE 數據），機構持股比重遠低於美日歐
+- Chui、Titman、Wei（2010，Journal of Finance）以文化個人主義指標解釋台股動能效應結構性缺失
+- 漲跌幅 10% 限制改變 MAX 效應的度量方式，需修正
+- 月營收強制月頻披露是<strong>台股獨有</strong>的信息優勢，在美股無對應訊號</p>
+<h3 id="12">1.2 推薦架構（尚待我方資料驗證，以下為證據強度評估，非最終判決）</h3>
+<p><strong>中短線桶（1-3 個月）——以下因子組合在台灣有較高學術/實證支撐：</strong>
+- A 級核心：月營收 YoY 動能 + 外資法人連續買超（兩者均有台灣學術論文支持）
+- B 級輔助：低 IVOL 篩選（作為風險濾網，去除高雜訊股票）
+- C 級排除：高 MAX 股票（修正版 MAX 在台灣有顯著負向預測，可作反向排除）</p>
+<p><strong>長線桶（6-12 個月+）——以下因子有跨國驗證但台灣特定驗證需補：</strong>
+- Piotroski F-Score（亞洲含台灣市場，學術論文年約 10% 高低差，但 PIT 偏誤需注意）
+- Magic Formula（台灣無專屬複製論文，中國/亞洲廣泛市場正向，但台灣特定待驗）
+- Shareholder Yield（台灣回購文化弱，現金股利成分較可信，複合指標在台灣存疑）</p>
+<h3 id="13">1.3 關鍵風險</h3>
+<ol>
+<li>台股傳統動能（JT 12-1）<strong>結構性缺失</strong>——不應建構動能策略為核心</li>
+<li>價值因子（P/B 高→低）在台灣 2010-2021 期間呈<strong>負影響</strong>，異於標準 Fama-French 預測</li>
+<li>任何日內或短期反轉策略在台灣<strong>扣成本後均無獲利</strong></li>
+<li>FinLab 及部落格宣稱數字含倖存者偏誤、前視偏誤，未扣成本，均需我方 PIT 安全資料重現</li>
+</ol>
+<hr />
+<h2 id="2">2. 逐策略證據卡</h2>
+<hr />
+<h3 id="2a">2A. 月營收動能（台股獨有月頻披露）</h3>
+<p><strong>來源：</strong>
+- Hung, W., Lu, C.C., Yang, J.J. (2025). <em>Market reaction to monthly revenue momentum</em>. Review of Quantitative Finance and Accounting. DOI: 10.1007/s11156-025-01434-0
+- 另有相關延伸：<em>Trading on Record-Breaking Monthly Revenue Announcements</em>（ResearchGate, 2025，期刊尚待確認）
+- <em>Mandatory Monthly Sales Disclosure and the Information Content of Earnings</em> (2024, The International Journal of Accounting)
+- <em>Price, Earnings, and Revenue Momentum Strategies</em>, Hong-Yi Chen et al. (working paper, 未見正式期刊)</p>
+<p><strong>樣本期間：</strong> 台灣上市股票（具體期間各論文不同，Hung et al. 2025 為近期）</p>
+<p><strong>核心機制：</strong>
+台灣股市強制要求上市公司每月 10 日前公告前月營收，此為<strong>全球主要市場罕見制度</strong>。月營收 YoY 成長率（月對月成長的年比）在股價中的反映是漸進的，與季報公告相互獨立，預示未來盈餘驚喜。研究確認：
+- 月營收驚喜顯著預測未來盈餘驚喜
+- 月營收驚喜在季報公告前帶動正向價格漂移
+- 月營收成長的持續性（persistency）大幅提升動能策略利潤，尤其對套利成本高的股票（小型股）</p>
+<p><strong>效果量：</strong> 具體月報酬差距 Hung et al. 2025 全文未取得，但確認存在正向且顯著漂移</p>
+<p><strong>台灣證據強度：A（有台灣數據的同儕審查論文，2025年最新）</strong></p>
+<p><strong>成本後存活：</strong> Hung et al. 提到對高套利成本股票效果更強，暗示在大型股（低成本）效果可能受侵蝕——具體數字待取得全文</p>
+<p><strong>失效條件：</strong>
+- 營收驚喜後市場快速定價（事件效應縮短）
+- 季報同步公告（月報信息量被吸收）</p>
+<p><strong>與我方資料資產的可算性：</strong>
+- FinMind <code>TaiwanStockMonthRevenue</code> 資料集：直接可算 YoY、MoM
+- <strong>PIT 陷阱：</strong> 公告日約每月 10 日（前月），用公告日而非當月底，防前視偏誤
+- <strong>可算性：高</strong></p>
+<hr />
+<h3 id="2b">2B. 三大法人籌碼跟隨（外資/投信連續買超）</h3>
+<p><strong>來源：</strong>
+- Hung et al. (2011). <em>The price impact of foreign institutional herding on large-size stocks in the Taiwan stock market</em>. Review of Quantitative Finance and Accounting. Springer. DOI: 10.1007/s11156-011-0244-1
+- <em>Market states and institutional herds: evidence from the Taiwan stock market</em> (2025, Cogent Economics &amp; Finance, Taylor &amp; Francis)
+- <em>Individual and institutional herding and the impact on stock returns: Evidence from Taiwan stock market</em> (ResearchGate, 2015-era)
+- Barber et al. (2009). <em>Just How Much Do Individual Investors Lose by Trading?</em> (Taiwan data — 散戶逆向指標的基礎)
+- TEJ. <em>Institutional Investors Buy and Sell of Taiwan Stock Market</em> (分析教學文)</p>
+<p><strong>樣本期間：</strong> 各論文不一，Hung et al. 2011 涵蓋 TWSE 大型股；2025 論文更近期</p>
+<p><strong>核心機制：</strong>
+- 外資法人在台灣為資訊領先者，其籌碼變化對後續報酬有預測力（「外資 &gt; 投信 &gt; 散戶」的資訊階層）
+- Hung et al. (2011) 以 panel threshold 模型：外資大規模集中買超（herding）的大型股，<strong>後續超額報酬顯著上升</strong>
+- 2025 年新論文：機構籌碼群聚效應在<strong>市場下行期</strong>正向貢獻更明顯；上行期反而負向（群聚追高）
+- 散戶跟進（2016-2023 TEJ 研究）：散戶的籌碼變化與未來 1-22 日報酬<strong>負相關</strong>，IC 值 -0.005 至 -0.012（p &lt; 0.001）——可作反向篩選依據</p>
+<p><strong>效果量：</strong> 外資大型股買超後，後續超額報酬顯著上升；散戶買超後 5-22 日報酬差 -4.254 至 -6.050 bps（TEJ 分析）</p>
+<p><strong>台灣證據強度：A-（有台灣數據的同儕審查論文，且 2025 年仍有更新）</strong></p>
+<p><strong>成本後存活：</strong> 信號持有期以週到月為主，台股手續費（券商折扣後約 0.08-0.1%）可負擔，<strong>有機會存活</strong>（但無精確全文數字）</p>
+<p><strong>持有期窗口：</strong> 文獻暗示 1-4 週（法人持續買超期間），訊號衰減快，需監控籌碼方向是否持續</p>
+<p><strong>失效條件：</strong>
+- 法人集中在牛市追熱點（群聚追高）→ 2025 論文指出上行期效果轉負
+- 法人持有占比低的小型股，外資籌碼影響力有限</p>
+<p><strong>與我方資料資產的可算性：</strong>
+- FinMind <code>TaiwanStockInstitutionalInvestorsBuySell</code> 資料集：外資、投信、自營商每日買賣超
+- 可計算：連續買超天數、累積買超量、占成交量比重
+- <strong>PIT 陷阱：</strong> 籌碼公告 T+1 日，無前視偏誤問題
+- <strong>可算性：高</strong></p>
+<hr />
+<h3 id="2c-52-george-hwang-2004">2C. 52 週高點動能（George &amp; Hwang 2004）</h3>
+<p><strong>來源：</strong>
+- George, T.J. &amp; Hwang, C.Y. (2004). <em>The 52-Week High and Momentum Investing</em>. Journal of Finance, 59(5), 2145-2176. DOI: 10.1111/j.1540-6261.2004.00695.x
+- Kuo, M.S. et al. (2015/2016). <em>The 52-week high and momentum in the Taiwan stock market: Anchoring or recency biases?</em> International Review of Economics &amp; Finance (ScienceDirect). DOI: 10.1016/j.iref.2015.10.014
+- Marshall, B.R. &amp; Cahan, R.M. (2005). <em>The 52-Week High and Momentum Investing Strategy in International Stock Markets</em>. Journal of International Money and Finance, 30(1), 180-204.</p>
+<p><strong>樣本期間：</strong> 台灣 1982-2012（Kuo et al.）</p>
+<p><strong>核心發現（台灣）：</strong>
+- 台灣 52WH 策略月均報酬 <strong>0.409%，t-statistic = 1.24</strong>（<strong>統計上不顯著</strong>）
+- 傳統價格反向（RR）策略在台灣月均 <strong>0.577%，t = 2.55</strong>（顯著，但反轉不是動能）
+- 國際複製研究（Marshall &amp; Cahan, 2005）在包含台灣的 7 個非英語市場中，<strong>三種動能策略均不顯著</strong>
+- 在台灣的動能獲利僅在 2000 年前、擴張期、多頭市場狀態下顯著</p>
+<p><strong>效果量：</strong> 月均 0.409%，但不顯著（無統計上的信心）</p>
+<p><strong>台灣證據強度：C（有台灣學術論文，但結果為不顯著，效果可能無法在我方資料上複製）</strong></p>
+<p><strong>成本後存活：</strong> 本身不顯著，扣成本後幾乎確定負效益</p>
+<p><strong>失效條件：</strong> 台灣市場整體——結構性失效，非特定情境失效</p>
+<p><strong>與我方資料資產的可算性：</strong>
+- OHLCV 資料庫：直接計算最近 52 週高點比率
+- <strong>可算性：高</strong>，但<strong>不推薦作為主因子</strong>；或許作為排除型條件（遠低於 52 週高點可能標示趨勢弱）</p>
+<hr />
+<h3 id="2d-jegadeesh-titman-12-1">2D. 傳統價格動能（Jegadeesh-Titman 12-1）</h3>
+<p><strong>來源：</strong>
+- Jegadeesh, N. &amp; Titman, S. (1993). <em>Returns to Buying Winners and Selling Losers</em>. Journal of Finance, 48(1), 65-91.
+- Chui, A.C.W., Titman, S., &amp; Wei, K.C.J. (2010). <em>Individualism and Momentum around the World</em>. Journal of Finance, 65(1), 361-392. DOI: 10.1111/j.1540-6261.2009.01532.x
+- Chuang, W.I. &amp; Susmel, R. (2011). <em>Who is the more overconfident trader? Individual vs. institutional investors</em>. Journal of Banking &amp; Finance.
+- <em>Why is there no momentum in the Taiwan stock market?</em> (Ideas.Repec, 2009, Journal of Business and Economics)
+- Bui, D.G., Kong, D.R., Lin, C.Y., Lin, T.C. (2023). <em>Momentum in machine learning: Evidence from the Taiwan stock market</em>. Pacific-Basin Finance Journal. DOI: 10.1016/j.pacfin.2023.102494
+- <em>Revisiting the momentum effect in Taiwan: The role of persistency</em> (2023, Pacific-Basin Finance Journal). DOI: 10.1016/j.pacfin.2023.102059</p>
+<p><strong>樣本期間：</strong> 多篇涵蓋 1980s-2020s</p>
+<p><strong>核心發現（台灣）：</strong></p>
+<p><strong>強命題（已高度確認）：</strong>
+- 台股傳統 JT 12-1 動能<strong>結構性缺失</strong>，在多數樣本期間不顯著甚至為負
+- Chui et al. (2010)：個人主義指數低的亞洲文化（台灣、日本、韓國）→ 自我歸因偏誤弱 → 過度自信驅動的動能效應弱 → 動能不存在
+- 「為何台灣沒有動能」（2009）：散戶主導、從眾行為、短視交易是主因</p>
+<p><strong>條件性例外（重要）：</strong>
+- 2023 ML 研究（Bui et al.）：機器學習模型前 20 個預測因子中 5 個是動能相關，暗示<strong>非線性動能信號存在</strong>，但傳統線性測試不顯著
+- 排除小市值和低價股後，台灣出現有限動能（機構持股高的股票）
+- 2000 年前、擴張期、多頭市場狀態下有動能獲利
+- <em>Revisiting momentum</em> (2023)：「持續性贏家/輸家」（persistent winners/losers）存在動能，但約 50% 的贏輸家在 3-6 個月後反轉，消解整體動能</p>
+<p><strong>效果量：</strong> 整體不顯著；條件性（機構持股高、多頭市場、過去有持續性）下或許存在，但無精確數字</p>
+<p><strong>台灣證據強度：D（台股動能結構性缺失，大量學術共識；條件例外待進一步驗證）</strong></p>
+<p><strong>成本後存活：</strong> 傳統形式：無。條件形式（ML 非線性）：不確定</p>
+<p><strong>失效條件：</strong> 台灣市場整體——文化、散戶主導、信念從眾的結構性因素</p>
+<p><strong>對我方系統的意涵：</strong>
+- <strong>不建議以傳統 JT 12-1 動能為核心因子</strong>
+- 月營收動能（2A）是更適合台灣市場的替代性動能信號
+- 可研究「法人籌碼 + 月營收」雙確認後的有條件動能</p>
+<p><strong>與我方資料資產的可算性：</strong>
+- 可算（OHLCV），但不推薦</p>
+<hr />
+<h3 id="2e-piotroski-f-score">2E. Piotroski F-Score 在台灣</h3>
+<p><strong>來源：</strong>
+- Piotroski, J.D. (2000). <em>Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers</em>. Journal of Accounting Research, 38, 1-41.（原始論文）
+- Hyde, C.E. (2020). <em>Piotroski's FSCORE: International Evidence</em>. Journal of Asset Management, 21, 106-118. DOI: 10.1057/s41260-020-00157-2（<strong>含台灣的亞洲五國複製</strong>）
+- TEJ. <em>F-Score Strategy: Identifying Undervalued Quality Stocks</em> (tejwin.com, 2023，分析教學文，台灣 2020-2023 回測)
+- Hyde, C.E. (2013). <em>An Emerging Markets Analysis of the Piotroski F Score</em>. SSRN Working Paper 2274516.（新興市場含台灣）</p>
+<p><strong>樣本期間：</strong>
+- Hyde (2020)：2000-2018 年，含香港、日本、韓國、新加坡、台灣
+- TEJ 台灣回測：2020-2023 年（<strong>警告：樣本短、有前向偏誤風險</strong>）</p>
+<p><strong>核心發現：</strong></p>
+<p><strong>學術：A 等級（Hyde 2020，Journal of Asset Management）</strong>
+- 含台灣的亞洲五國市場：高 F-Score（8-9）vs 低 F-Score（0-3）年均超額報酬約 <strong>~10%</strong>
+- 結果在所有規模區段均顯著（控制了規模、B/M 比率、動能、獲利性、投資因子後仍顯著）
+- 解讀：基本面信息在亞洲市場緩慢反映進股價，F-Score 捕捉改善趨勢的定價滯後</p>
+<p><strong>TEJ 台灣回測（2020-2023）：社群/行銷等級，需存疑</strong>
+- 年化報酬 27.83%，夏普比率 1.38，Beta 0.79
+- <strong>偏誤警告：</strong> 僅 4 年樣本，含 2020-2021 大牛市；未說明是否含下市股；PIT 控制不明；不排除倖存者偏誤
+- <strong>不應直接使用此數字，需我方 PIT 安全資料重現</strong></p>
+<p><strong>效果量（可信部分）：</strong> 學術論文年約 10% 高低差（含台灣的亞洲市場），非台灣單獨數字</p>
+<p><strong>台灣證據強度：B+（含台灣的亞洲學術複製正向，但台灣單獨數字未知）</strong></p>
+<p><strong>成本後存活：</strong>
+- 年再平衡頻率下，成本占比低，有機會存活
+- 但 10% 高低差扣 1.5-2% 年成本後仍有大幅 alpha（若亞洲數字適用）</p>
+<p><strong>失效條件：</strong>
+- 循環頂部：獲利類指標（ROA、CFO）虛高 → F-Score 過度樂觀
+- 需分產業使用（循環股需額外謹慎）
+- 台灣特有：財報公告時效（季報 45-60 天後才公告），PIT 窗口必須嚴格遵守</p>
+<p><strong>與我方資料資產的可算性：</strong>
+- FinMind 季財報：ROA、CFO、長期負債、流動比率、毛利率、資產周轉率均可算
+- 「未增發新股」：需對照股本變化
+- <strong>PIT 陷阱（高風險）：</strong> 台灣季報公告日為結算後 45-60 日，用 filing_date 而非 period_end_date
+- <strong>可算性：中高</strong>（9 項中 7-8 項可直接算，需核查每一欄位的 PIT 安全性）</p>
+<hr />
+<h3 id="2f-pb">2F. 價值綜合因子（P/B、益本比、股利殖利率）</h3>
+<p><strong>來源：</strong>
+- Fama, E.F. &amp; French, K.R. (1993). <em>Common Risk Factors in the Returns on Stocks and Bonds</em>. Journal of Financial Economics, 33(1), 3-56.
+- <em>Do There Exist Nonlinear Phenomena of the Fama-French Six Factors on Stock Returns? An Empirical Investigation on the Taiwan Stock Market</em> (2023, SCIRP Open Access, 台灣 2010-2021)
+- <em>Value Investing and Technical Analysis in Taiwan Stock Market</em> (2013, Pacific-Basin Finance Journal). DOI: 10.1016/j.pacfin.2013.07.002
+- <em>A comprehensive test of the Fama-French five-factor model in emerging markets</em> (2017, Emerging Markets Review)
+- <em>Stock Prices and Dividends in Taiwan's Stock Market: Evidence Based on Time-Varying Present Value Model</em> (2007, Economics Bulletin)</p>
+<p><strong>樣本期間：</strong> 台灣 2010-2021（SCIRP 論文）；其他各論文不一</p>
+<p><strong>核心發現（台灣）：</strong></p>
+<p><strong>重要警告：價值因子在台灣 2010-2021 呈負影響</strong>
+- SCIRP 2023 論文（台灣 2010-2021）：在 Fama-French 六因子框架中，<strong>市場因子、規模因子、投資因子、動能因子正向影響</strong>台灣股票報酬；<strong>價值因子（HML）和獲利性因子（RMW）呈負影響</strong>
+- 此結果異於美股和多數已開發市場
+- 可能解釋：台灣 2010-2021 以科技股（低 B/M）為龍頭，傳統「高 B/M = 便宜 = 好」的因果在台灣被顛覆</p>
+<p><strong>對 Magic Formula 的衝擊：</strong>
+- Magic Formula 核心指標之一是盈餘殖利率（EBIT/EV，類似益本比）
+- 若純粹的 P/B 或益本比在台灣 2010-2021 表現落後，Magic Formula 能否超越值得懷疑
+- 但 Magic Formula 同時要求高 ROC（品質篩選），可能與純 P/B 效果不同——需在台股獨立驗證</p>
+<p><strong>股利殖利率：</strong>
+- 台灣高股息策略廣受散戶歡迎，但學術上配股（股票股利）的稀釋效應造成 EPS 虛減
+- 現金股利年殖利率在台灣市場確實被機構投資者視為信號，但因配股文化，純「高股利」策略含有較多「成長耗盡公司」的成分
+- 回購信號（buyback）在台灣：Chen, Yeh et al. (2013, 台灣 International Review of Economics &amp; Finance）：回購且退回庫藏股（非再發行）的公司，長期績效顯著優於再發行者；但整體台灣回購文化弱</p>
+<p><strong>台灣證據強度：C（傳統 P/B 價值因子在台灣 2010-2021 負效應；現金股利信號有限實證；回購信號稀少）</strong></p>
+<p><strong>失效條件：</strong> 科技股主導市場（台股現況）；配股稀釋；B/M 比值在台灣的定義問題</p>
+<p><strong>與我方資料資產的可算性：</strong>
+- FinMind <code>每日 PER/PBR</code>：直接取得
+- 現金股利：<code>TaiwanStockDividend</code> 需區分現金股利與股票股利
+- <strong>可算性：高</strong>（但建議降低在組合中的權重，待驗證）</p>
+<hr />
+<h3 id="2g-beta">2G. 低波動/低 Beta 異象</h3>
+<p><strong>來源：</strong>
+- Black, F. (1972). <em>Capital Market Equilibrium with Restricted Borrowing</em>. Journal of Business, 45(3), 444-455.（原始低 beta 效應）
+- <em>Funding Liquidity Risk and the Low-Volatility Anomaly: Evidence from the Taiwan Stock Market</em> (ScienceDirect, 2018). DOI: 10.1016/j.irfa.2018.12.001
+- TEJ. <em>Factor Research – Idiosyncratic Volatility | Part 1 &amp; 2</em> (tejwin.com, 2005-2025 台灣 IVOL 分析)
+- <em>Idiosyncratic skewness and cross-section of stock returns: Evidence from Taiwan</em> (2021, International Review of Financial Analysis). DOI: 10.1016/j.irfa.2021.101823</p>
+<p><strong>樣本期間：</strong>
+- TEJ 台灣 IVOL 研究：2005 年 1 月 – 2025 年 3 月（<strong>20 年完整市場資料</strong>，此為較可靠來源）
+- 低波動異象 ScienceDirect 2018：台灣市場（具體年份待查）</p>
+<p><strong>核心發現：</strong></p>
+<p><strong>台灣 IVOL 負向預測（TEJ，2005-2025 年，20 年資料）：</strong>
+- <strong>高 IVOL 股票持續落後低 IVOL 股票</strong>，在多個持有期均顯著</p>
+<table>
+<thead>
+<tr>
+<th>持有期</th>
+<th>高低 IVOL 報酬差（bps）</th>
+<th>t-statistic</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 日</td>
+<td>-118.6</td>
+<td>-19.32</td>
+</tr>
+<tr>
+<td>5 日</td>
+<td>-243.5</td>
+<td>-50.13</td>
+</tr>
+<tr>
+<td>10 日</td>
+<td>-224.2</td>
+<td>顯著</td>
+</tr>
+<tr>
+<td>21 日</td>
+<td>-201.2</td>
+<td>顯著</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>IC 均值：-0.0361（1D）至 -0.0872（21D），超過 70% 觀測值 IC &lt; 0</li>
+<li><strong>注意：TEJ 報告未扣除交易成本</strong>；高 IVOL 組換手率較高，成本衝擊更大</li>
+</ul>
+<p><strong>低波動異象機制（台灣特有解釋，2018 學術論文）：</strong>
+- 融資流動性風險（funding liquidity risk）是低波動異象的解釋之一
+- 機構投資人在壓力期拋售高 IVOL 股票 → 加大 IVOL 負向預測</p>
+<p><strong>效果量（可信）：</strong> 21 日持有，高低 IVOL 差 -201.2 bps（未扣成本），t 值高度顯著</p>
+<p><strong>台灣證據強度：A-（TEJ 20 年台灣資料，方法透明；學術論文有台灣樣本）</strong></p>
+<p><strong>成本後存活：</strong>
+- 低 IVOL 股票換手率低（0.076 倍/期），成本衝擊小
+- 高頻（5 日）換手過高（超過 0.59 倍），成本吃掉空頭端利潤
+- <strong>實用策略：</strong> 以低 IVOL 作為「篩除高風險雜訊股」的靜態濾網，而非頻繁交易因子</p>
+<p><strong>失效條件：</strong>
+- 低波動股在牛市末期常落後（低 beta）
+- 台灣低波動 ETF（00701、00713）的存在代表擁擠交易風險上升</p>
+<p><strong>與我方資料資產的可算性：</strong>
+- OHLCV 日資料：計算過去 20/60 日波動率、Beta
+- <strong>可算性：高</strong>
+- <strong>建議用途：</strong> 作為排除條件（排除高 IVOL 股票），而非選股信號</p>
+<hr />
+<h3 id="2h-max-effect">2H. 樂透型股票效應（MAX Effect）——反向排除依據</h3>
+<p><strong>來源：</strong>
+- Bali, T.G., Cakici, N., &amp; Whitelaw, R.F. (2011). <em>Maxing Out: Stocks as Lotteries and the Cross-Section of Expected Returns</em>. Journal of Financial Economics, 99(2), 427-446.（原始美股 MAX 論文）
+- <em>Limited attention, salient anchor, and the modified MAX effect: Evidence from Taiwan's stock market</em> (2023, International Review of Financial Analysis). DOI: 10.1016/j.irfa.2023.102706（台灣特定）
+- <em>The MAX effect: Lottery stocks with price limits and limits to arbitrage</em> (Pacific-Basin Finance Journal, 2018). DOI: 10.1016/j.pacfin.2018.06.005（台灣漲跌停制度調整）
+- <em>Is maximum daily return a lottery? Evidence from monthly revenue announcements</em> (2022, Review of Quantitative Finance and Accounting). DOI: 10.1007/s11156-022-01051-1（台灣月營收公告 MAX 效應）</p>
+<p><strong>台灣特有調整：</strong>
+台灣漲跌幅限制 10%，使「最大單日報酬」(MAX) 上限固定，原始美股 MAX 定義需修正。研究者使用「修正版 MAX」（modified MAX）考慮漲停限制後的量化度量。</p>
+<p><strong>核心發現（台灣）：</strong>
+- <strong>傳統 Bali et al. (2011) 的 MAX 效應在台灣以原始形式不存在</strong>（漲跌停干擾）
+- <strong>修正版 MAX 效應確認存在：</strong> 修正 MAX 最高分位（最強樂透特性）的股票後期報酬顯著較低
+- 台灣月營收公告前，高 MAX 股票短期內<strong>反而表現優異</strong>（投機行為），但公告後反轉
+- 意涵：高修正 MAX 股票存在系統性<strong>高估</strong>，是良好的排除候選</p>
+<p><strong>效果量：</strong> 最高 vs 最低 MAX 分位超過 <strong>1% 月均報酬差</strong>（美股原始研究）；台灣修正版顯著負向但具體數字待取得</p>
+<p><strong>台灣證據強度：A-（有台灣特定的學術論文，針對漲跌停調整後仍確認效應）</strong></p>
+<p><strong>成本後存活：</strong> 此因子主要作為靜態<strong>排除</strong>工具，換手率低，成本影響小</p>
+<p><strong>對我方系統的意涵：</strong>
+- 將修正 MAX 最高分位（如月最大報酬 &gt; 8-9%）列為「排除名單」
+- 避免買入被散戶炒作的投機股，提升整體組合品質</p>
+<p><strong>與我方資料資產的可算性：</strong>
+- OHLCV 日資料：直接計算近 1 個月最大單日報酬
+- 台灣需用調整版：考慮連漲停可能，用「近 21 日最大單日報酬 / 10%」的相對程度更具信息
+- <strong>可算性：高</strong></p>
+<hr />
+<h3 id="2i">2I. 處置效應/短期反轉——對進場時點的意涵</h3>
+<p><strong>來源：</strong>
+- Odean, T. (1998). <em>Are Investors Reluctant to Realize Their Losses?</em> Journal of Finance, 53(5), 1775-1798.
+- Barber, B.M., Lee, Y.T., Liu, Y.J., &amp; Odean, T. (2007). <em>Is the Aggregate Investor Reluctant to Realise Losses? Evidence from Taiwan</em>. European Financial Management, 13(3), 423-447.（台灣特定）
+- <em>Overconfidence Behavior and Disposition Effect of Investors in Taiwan Stock Market</em> (2021, ResearchGate)
+- <em>Residual Reversal Strategy: Empirical Evidence in the Taiwan Stock Market</em> (ResearchGate, 近期)
+- <em>Short-horizon contrarian and momentum strategies in Asian markets</em> (2006, ScienceDirect). DOI: 10.1016/j.intfin.2006.01.003（含台灣的亞洲研究）
+- <em>The Intraday Performance of Contrarian Strategies: Evidence from the Taiwan Stock Exchange</em> (2009, Review of Pacific Basin Financial Markets and Policies)</p>
+<p><strong>核心發現（台灣）：</strong></p>
+<p><strong>處置效應：</strong>
+- 台灣投資者的處置效應<strong>強於美國投資者</strong>（持有虧損、急於獲利了結）
+- 散戶處置效應在小型、低流動性、高波動、低機構持股的股票中更強</p>
+<p><strong>短期反轉（Contrarian）：</strong>
+- 台灣短期反轉（1 週-1 個月）信號<strong>弱且不穩定</strong>——異於日、美市場的強反轉
+- 日內 contrarian 策略平均每日超額報酬 0.18-0.30%，<strong>但扣除合理交易成本後無獲利</strong>
+- 台灣 vs 韓國：「除台韓外，其他亞洲市場贏家/輸家均有後續反轉」→ 暗示台灣和韓國是特例
+- <em>Revisiting Momentum</em> (2023)：無明顯 36 個月反轉，動能缺失不是「過去的反轉造成的」</p>
+<p><strong>處置效應對選股時點的意涵：</strong>
+- 當股票近期大漲、帳面獲利豐厚 → 散戶傾向賣出（供給壓力上升）→ 短期壓力
+- 當股票近期大跌、帳面虧損 → 散戶持有觀望 → 流動性緊縮但非支撐
+- <strong>策略含義：</strong> 避免在股票剛大幅急漲後立即進場（散戶獲利了結壓力）；但也不要靠短期反轉作為核心信號</p>
+<p><strong>台灣證據強度：B（處置效應有台灣學術論文；短期反轉弱/不顯著有多篇學術支持）</strong></p>
+<p><strong>對我方系統的意涵（1-3 個月桶）：</strong>
+- <strong>短期反轉不應是核心策略</strong>，成本吃光獲利
+- 進場時點宜等候「法人持續買超且月營收動能強，但股價尚未急漲」的組合狀態</p>
+<hr />
+<h2 id="3">3. 推薦組合架構</h2>
+<blockquote>
+<p><strong>聲明：</strong> 以下為證據導向的架構建議，非最終策略規格。各因子在我方 PIT 安全、含下市股資料上驗證前，均為 hypothesis。</p>
+</blockquote>
+<h3 id="31-1-3">3.1 中短線桶（1-3 個月）</h3>
+<p><strong>核心邏輯：</strong> 台股月營收動能（台灣特有）+ 外資籌碼（資訊領先者跟隨）</p>
+<pre><code>宇宙篩選（硬排除）
+├── 排除金融股、KY 股、警示/處置股（近 2 季）
+├── 排除市值過小（流動性不足）
+├── 排除修正 MAX 最高分位（高投機性，證據等級 A-）
+└── 排除高 IVOL 股票（高雜訊，建議設門檻如過去 21 日波動率 &gt; 市場中位數 * 1.5）
+
+一級信號（按強度加分，非硬閘門）
+├── 月營收 YoY 連續 2-3 個月正向成長 +1 ~ +3 分（台灣學術證據 A）
+├── 外資連續買超（建議 5-10 日以上）+1 ~ +2 分（台灣學術證據 A-）
+├── 投信同向買超（加強確認）+1 分（配合外資時）
+└── 修正版 MAX 低分位（低投機屬性，非樂透）+1 分
+
+二級信號（可選加分）
+├── 低 IVOL（過去 60 日波動率低於市場中位數） +1 分（台灣 TEJ 20 年資料，A-）
+└── 外資佔成交量比重高（大型股條件）+0.5 分
+
+評分桶：
+S 級（5+ 分）：月營收連升 + 外資連買 + 投信同買 + 低 IVOL
+A 級（3-4 分）：月營收連升 + 外資連買
+B 級（2 分）：單一強信號
+C 級（1 分）：邊緣觀察
+
+持有期：月營收公告後 1-3 個月，訊號衰減時退出（外資轉賣或月營收轉弱）
+再平衡：月頻（配合月營收公告）
+</code></pre>
+<p><strong>注意（關鍵偏誤風險）：</strong>
+- 外資籌碼效應在<strong>上行市場期間</strong>可能轉負（2025 年論文），需市場狀態調整
+- 月營收效應對「高套利成本股票」更強——在大型股（低成本）需確認是否仍顯著</p>
+<hr />
+<h3 id="32-6-12">3.2 長線桶（6-12 個月+）</h3>
+<p><strong>核心邏輯：</strong> 品質 + 盈利能力基本面篩選（F-Score 為核心，Magic Formula 待驗證）</p>
+<pre><code>宇宙篩選（硬排除）
+├── 排除金融股、公用事業、KY 股、TDR 股
+├── 排除市值過小
+└── 排除近 2 季警示/處置股
+
+一級因子（序列篩選，非加權平均）
+├── [閘 1] Piotroski F-Score ≥ 6（品質閘，台灣/亞洲學術驗證 B+）
+│   → 僅保留財務改善中的公司，排除價值陷阱
+├── [閘 2] 盈餘殖利率（EBIT/EV）排名前 1/3（Magic Formula 第一維度，台灣待驗證）
+│   → 台灣特定驗證缺口：需我方資料重現
+└── [閘 3] ROC（EBIT / 淨固定資產 + 淨營運資本）排名前 1/3（Magic Formula 第二維度）
+    → 台灣特定驗證缺口同上
+
+二級因子（選擇性加權）
+├── 現金股利殖利率（僅計現金，排除股票股利，中等置信度）
+└── 庫藏股淨減少（退回且不再發行，台灣研究正向但樣本少）
+
+評分桶：
+S 級：F ≥ 7 + 盈餘殖利率前 20% + ROC 前 20%
+A 級：F ≥ 6 + 盈餘殖利率前 30% + ROC 前 30%
+B 級：F ≥ 6 + 其一因子達標
+C 級：F ≥ 5 + 觀察
+
+持有期：年再平衡（配合財報公告窗口，用 filing_date 閘控）
+等權持有：20-30 檔
+</code></pre>
+<p><strong>重要警告：</strong>
+- 台灣 2010-2021 期間 HML 價值因子呈<strong>負影響</strong>——Magic Formula 的盈餘殖利率成分（類 P/E 的倒數）可能在此環境下不如預期。必須用我方資料重現，不得假設美股結果適用台股。
+- F-Score 的「改善趨勢」在景氣循環頂部會虛高——需分產業觀察</p>
+<hr />
+<h2 id="4">4. 資料需求對照表</h2>
+<table>
+<thead>
+<tr>
+<th>因子</th>
+<th>所需資料</th>
+<th>FinMind Dataset</th>
+<th>TWSE OpenAPI</th>
+<th>PIT 陷阱風險</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>月營收 YoY/MoM</td>
+<td>前月營收（公告日 T+10）</td>
+<td><code>TaiwanStockMonthRevenue</code></td>
+<td>-</td>
+<td><strong>中</strong>：需用公告日，非月底</td>
+</tr>
+<tr>
+<td>外資日買賣超</td>
+<td>每日三大法人買賣超</td>
+<td><code>TaiwanStockInstitutionalInvestorsBuySell</code></td>
+<td>-</td>
+<td><strong>低</strong>：T+1 公告</td>
+</tr>
+<tr>
+<td>投信日買賣超</td>
+<td>同上</td>
+<td>同上</td>
+<td>-</td>
+<td><strong>低</strong></td>
+</tr>
+<tr>
+<td>修正 MAX</td>
+<td>近 21 日最大單日漲幅</td>
+<td>OHLCV（本地 historical_data.db）</td>
+<td>日行情</td>
+<td><strong>低</strong></td>
+</tr>
+<tr>
+<td>IVOL（過去 60 日）</td>
+<td>日收益率標準差（扣除市場因子）</td>
+<td>OHLCV</td>
+<td>日行情</td>
+<td><strong>低</strong></td>
+</tr>
+<tr>
+<td>F-Score ROA</td>
+<td>稅後淨利 / 平均總資產</td>
+<td><code>TaiwanStockFinancialStatements</code></td>
+<td>-</td>
+<td><strong>高</strong>：需 filing_date，非 period_end</td>
+</tr>
+<tr>
+<td>F-Score CFO</td>
+<td>來自營運的現金流</td>
+<td><code>TaiwanStockCashFlowsStatement</code></td>
+<td>-</td>
+<td><strong>高</strong>：同上</td>
+</tr>
+<tr>
+<td>F-Score 負債比率</td>
+<td>長期負債 / 平均總資產</td>
+<td><code>TaiwanStockBalanceSheet</code></td>
+<td>-</td>
+<td><strong>高</strong>：同上</td>
+</tr>
+<tr>
+<td>F-Score 流動比率</td>
+<td>流動資產 / 流動負債</td>
+<td><code>TaiwanStockBalanceSheet</code></td>
+<td>-</td>
+<td><strong>高</strong>：同上</td>
+</tr>
+<tr>
+<td>F-Score 稀釋</td>
+<td>流通股本變化（有無增發）</td>
+<td><code>TaiwanStockCapitalReductionReferencePrice</code> 或 股本表</td>
+<td>-</td>
+<td><strong>高</strong></td>
+</tr>
+<tr>
+<td>F-Score 毛利率</td>
+<td>毛利 / 營收</td>
+<td><code>TaiwanStockFinancialStatements</code></td>
+<td>-</td>
+<td><strong>高</strong></td>
+</tr>
+<tr>
+<td>F-Score 資產周轉</td>
+<td>營收 / 平均總資產</td>
+<td>同上</td>
+<td>-</td>
+<td><strong>高</strong></td>
+</tr>
+<tr>
+<td>EBIT/EV（盈餘殖利率）</td>
+<td>EBIT（TTM）+ 市值 + 長期負債 - 現金</td>
+<td>財報 + 每日市值</td>
+<td>-</td>
+<td><strong>極高</strong>：需 TTM 精確對齊</td>
+</tr>
+<tr>
+<td>ROC</td>
+<td>EBIT / （淨固定資產 + 淨營運資本）</td>
+<td>財報 + 資產負債表</td>
+<td>-</td>
+<td><strong>極高</strong>：同上</td>
+</tr>
+<tr>
+<td>現金股利殖利率</td>
+<td>現金股利（排除股票股利）</td>
+<td><code>TaiwanStockDividend</code></td>
+<td>-</td>
+<td><strong>中</strong>：除息日與公告日分離</td>
+</tr>
+<tr>
+<td>股票股利（配股稀釋）</td>
+<td>股票股利記錄</td>
+<td><code>TaiwanStockDividend</code></td>
+<td>-</td>
+<td><strong>中</strong></td>
+</tr>
+<tr>
+<td>庫藏股淨減少</td>
+<td>庫藏股買回 - 再發行</td>
+<td><code>TaiwanStockShareRepurchase</code>（需確認）</td>
+<td>-</td>
+<td><strong>高</strong></td>
+</tr>
+<tr>
+<td>P/B 比率</td>
+<td>每日 PBR</td>
+<td><code>TaiwanStockPER</code></td>
+<td>-</td>
+<td><strong>低</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>關鍵 PIT 控制（務必遵守）：</strong>
+- 財報相關因子：一律使用 <code>filing_date</code>（申報日），非 <code>period_end_date</code>（結算日）
+- 台灣季報申報期限：第 1-3 季為季末後 45 日，第 4 季（年報）為 4 月 30 日前
+- 月營收：每月 10 日公告，使用公告日後的第一個交易日作為可用日</p>
+<hr />
+<h2 id="5">5. 實作優先序建議</h2>
+<h3 id="1_1">優先序 1（最高優先，最快可驗證）：月營收動能 + 外資籌碼中短線桶</h3>
+<p><strong>原因：</strong>
+- 兩個因子均有台灣特定學術論文，且資料在現有 FinMind 架構中立即可算
+- PIT 陷阱風險相對低（籌碼 T+1，月營收 T+10）
+- 適合系統的「精準少量信號」定位
+- 可在不依賴財報的情況下快速建立基線系統</p>
+<p><strong>驗證路徑：</strong>
+1. 建立月營收 YoY 強度 × 外資連買天數的二維矩陣
+2. 計算各象限在接下來 1、2、3 個月的報酬（2010-2023 含下市股）
+3. 以 S/A/B/C 分桶取代硬性篩選，避免零信號問題</p>
+<h3 id="2f-score">優先序 2（第二優先，關鍵驗證）：F-Score 十分位台灣重現</h3>
+<p><strong>原因：</strong>
+- Hyde (2020) 提供含台灣的學術基準（約 10% 高低差）
+- 這是整個長線桶的基石——若在我方資料上無法重現，Magic Formula 的序列過濾也失去依托
+- FinLab 的 27.83% 數字需我方 PIT 安全資料驗證，防前視偏誤</p>
+<p><strong>驗證路徑：</strong>
+1. 用 <code>pit_fundamentals.db</code> 算出 F-Score 9 項，嚴格用 filing_date
+2. 跑 2008-2023 含下市股的 F-Score 十分位年頻 cohort
+3. 結果對比：高分組（8-9）vs 低分組（0-3）是否有 ~8-12% 年差距</p>
+<h3 id="3magic-formula">優先序 3（第三優先）：Magic Formula 台股現行能算出哪些欄位</h3>
+<p><strong>原因：</strong>
+- 台灣無學術複製論文，不確定性最高
+- 但概念最清晰（EBIT/EV + ROC），且國際廣泛市場有正向記錄
+- 盤點 <code>pit_fundamentals.db</code> 能否算出 EBIT/EV/ROC 分母，是後續回測的前置工作</p>
+<h3 id="4shareholder-yield">優先序 4（最後）：Shareholder Yield 台股調整</h3>
+<p><strong>原因：</strong>
+- 台股回購文化最弱、配股稀釋問題最複雜
+- 相關學術論文稀少
+- 建議：此因子降為「補充」而非「核心」，先確認現金股利信號，再研究庫藏股淨減少</p>
+<hr />
+<h2 id="6">6. 失效模式分析</h2>
+<h3 id="61">6.1 空頭年（系統性下跌）</h3>
+<ul>
+<li><strong>月營收動能：</strong> 系統性衰退期，月營收全面下滑，正向信號消失；無自動防禦機制</li>
+<li><strong>外資籌碼：</strong> 外資在空頭期大量賣出（2022 年台股外資單年淨賣超超過 1 兆），法人跟隨因子轉為做空信號——可作防禦考慮</li>
+<li><strong>F-Score：</strong> 企業財務惡化滯後於股價，F-Score 可能在下行期晚於市場反應。但因持有多元化 20-30 檔，個別崩潰衝擊稀釋</li>
+<li><strong>低波動因子：</strong> 空頭期低 beta 股票相對強勢，低 IVOL 篩選在熊市有防禦效果</li>
+</ul>
+<h3 id="62">6.2 擁擠交易</h3>
+<ul>
+<li><strong>外資籌碼：</strong> 外資集體追同一題材（AI/半導體 2023-2025），群聚效應導致 2025 年新論文的牛市反轉現象</li>
+<li><strong>低波動股：</strong> 台灣低波動 ETF 規模成長，00701/00713 的資金流入造成低波動股估值擠壓（潛在 crowding 風險）</li>
+<li><strong>F-Score 高分股：</strong> 若市場廣泛知曉且使用，信號可能已被定價（機構比例上升中）</li>
+</ul>
+<h3 id="63">6.3 流動性枯竭</h3>
+<ul>
+<li><strong>漲跌幅限制（10%）</strong> 在極端日（如 2020 年 3 月）導致無法正常出場</li>
+<li>修正 MAX 效應在漲跌停時反應失真</li>
+<li>外資在停板日的籌碼數據可能失去代表性</li>
+</ul>
+<h3 id="64">6.4 台灣特有市場微結構風險</h3>
+<table>
+<thead>
+<tr>
+<th>風險</th>
+<th>說明</th>
+<th>對策</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>除權息假跌破</td>
+<td>除息日股價下調，不代表真實跌勢</td>
+<td>還權息後計算報酬（adj_close）</td>
+</tr>
+<tr>
+<td>配股稀釋 EPS</td>
+<td>股票股利增股本，EPS 被稀釋，F-Score 的「ROA 改善」可能虛高</td>
+<td>用還原後 EPS 計算</td>
+</tr>
+<tr>
+<td>台積電集中度</td>
+<td>單一公司佔 TAIEX 超過 30%，系統性報酬被扭曲</td>
+<td>等權而非市值加權</td>
+</tr>
+<tr>
+<td>循環股波動</td>
+<td>記憶體/面板/化工在循環頂 EBIT/ROC 虛高</td>
+<td>產業中性化或產業排除</td>
+</tr>
+<tr>
+<td>季報滯後 45 天</td>
+<td>台灣季報申報期比美國長，財報型因子前視偏誤風險高</td>
+<td>嚴格 filing_date 閘控</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7. 完整參考文獻清單</h2>
+<h3 id="_2">學術期刊論文</h3>
+<ol>
+<li>
+<p>Jegadeesh, N. &amp; Titman, S. (1993). Returns to Buying Winners and Selling Losers: Implications for Stock Market Efficiency. <em>Journal of Finance</em>, 48(1), 65-91.</p>
+</li>
+<li>
+<p>George, T.J. &amp; Hwang, C.Y. (2004). The 52-Week High and Momentum Investing. <em>Journal of Finance</em>, 59(5), 2145-2176. DOI: 10.1111/j.1540-6261.2004.00695.x</p>
+</li>
+<li>
+<p>Chui, A.C.W., Titman, S., &amp; Wei, K.C.J. (2010). Individualism and Momentum around the World. <em>Journal of Finance</em>, 65(1), 361-392. DOI: 10.1111/j.1540-6261.2009.01532.x</p>
+</li>
+<li>
+<p>Piotroski, J.D. (2000). Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers. <em>Journal of Accounting Research</em>, 38, 1-41.</p>
+</li>
+<li>
+<p>Hyde, C.E. (2020). Piotroski's FSCORE: International Evidence. <em>Journal of Asset Management</em>, 21, 106-118. DOI: 10.1057/s41260-020-00157-2</p>
+</li>
+<li>
+<p>Bali, T.G., Cakici, N., &amp; Whitelaw, R.F. (2011). Maxing Out: Stocks as Lotteries and the Cross-Section of Expected Returns. <em>Journal of Financial Economics</em>, 99(2), 427-446.</p>
+</li>
+<li>
+<p>Kuo, M.S. et al. (2015/2016). The 52-week high and momentum in the Taiwan stock market: Anchoring or recency biases? <em>International Review of Economics &amp; Finance</em>. DOI: 10.1016/j.iref.2015.10.014</p>
+</li>
+<li>
+<p>Marshall, B.R. &amp; Cahan, R.M. (2005). The 52-Week High and Momentum Investing Strategy in International Stock Markets. <em>Journal of International Money and Finance</em>, 30(1), 180-204.</p>
+</li>
+<li>
+<p>Hung, W., Lu, C.C., &amp; Yang, J.J. (2025). Market reaction to monthly revenue momentum. <em>Review of Quantitative Finance and Accounting</em>. DOI: 10.1007/s11156-025-01434-0</p>
+</li>
+<li>
+<p>Hung, [First Author]. (2011). The price impact of foreign institutional herding on large-size stocks in the Taiwan stock market. <em>Review of Quantitative Finance and Accounting</em>. DOI: 10.1007/s11156-011-0244-1</p>
+</li>
+<li>
+<p>Bui, D.G., Kong, D.R., Lin, C.Y., &amp; Lin, T.C. (2023). Momentum in machine learning: Evidence from the Taiwan stock market. <em>Pacific-Basin Finance Journal</em>. DOI: 10.1016/j.pacfin.2023.102494</p>
+</li>
+<li>
+<p><em>Revisiting the momentum effect in Taiwan: The role of persistency</em> (2023). <em>Pacific-Basin Finance Journal</em>. DOI: 10.1016/j.pacfin.2023.102059</p>
+</li>
+<li>
+<p><em>Limited attention, salient anchor, and the modified MAX effect: Evidence from Taiwan's stock market</em> (2023). <em>International Review of Financial Analysis</em>. DOI: 10.1016/j.irfa.2023.102706</p>
+</li>
+<li>
+<p><em>The MAX effect: Lottery stocks with price limits and limits to arbitrage</em> (2018). <em>Pacific-Basin Finance Journal</em>. DOI: 10.1016/j.pacfin.2018.06.005</p>
+</li>
+<li>
+<p><em>Funding Liquidity Risk and the Low-Volatility Anomaly: Evidence from the Taiwan Stock Market</em> (2018). <em>International Review of Financial Analysis</em>. DOI: 10.1016/j.irfa.2018.12.001</p>
+</li>
+<li>
+<p><em>Idiosyncratic skewness and cross-section of stock returns: Evidence from Taiwan</em> (2021). <em>International Review of Financial Analysis</em>. DOI: 10.1016/j.irfa.2021.101823</p>
+</li>
+<li>
+<p><em>Do There Exist Nonlinear Phenomena of the Fama-French Six Factors on Stock Returns? An Empirical Investigation on the Taiwan Stock Market</em> (2023). SCIRP Open Access. [Paper ID: 132956]</p>
+</li>
+<li>
+<p>Barber, B.M., Lee, Y.T., Liu, Y.J., &amp; Odean, T. (2007). Is the Aggregate Investor Reluctant to Realise Losses? Evidence from Taiwan. <em>European Financial Management</em>, 13(3), 423-447.</p>
+</li>
+<li>
+<p><em>An analysis of stock repurchase in Taiwan</em> (2013). <em>International Review of Economics &amp; Finance</em>, 27, 497-513. DOI: 10.1016/j.iref.2013.01.002</p>
+</li>
+<li>
+<p><em>Market states and institutional herds: evidence from the Taiwan stock market</em> (2025). <em>Cogent Economics &amp; Finance</em>, 13(1). DOI: 10.1080/23322039.2025.2571399</p>
+</li>
+<li>
+<p><em>Is maximum daily return a lottery? Evidence from monthly revenue announcements</em> (2022). <em>Review of Quantitative Finance and Accounting</em>. DOI: 10.1007/s11156-022-01051-1</p>
+</li>
+<li>
+<p>Hyde, C.E. (2013). An Emerging Markets Analysis of the Piotroski F Score. SSRN Working Paper 2274516.</p>
+</li>
+<li>
+<p><em>Mandatory Monthly Sales Disclosure and the Information Content of Earnings</em> (2024). <em>The International Journal of Accounting</em>, 59(1). DOI: 10.1142/S1094406024500021</p>
+</li>
+<li>
+<p><em>Overconfidence Behavior and Disposition Effect of Investors in Taiwan Stock Market</em> (2021). ResearchGate.</p>
+</li>
+<li>
+<p><em>The Intraday Performance of Contrarian Strategies: Evidence from the Taiwan Stock Exchange</em> (2009). <em>Review of Pacific Basin Financial Markets and Policies</em>.</p>
+</li>
+<li>
+<p><em>Why is there no momentum in the Taiwan stock market?</em> (2009). <em>Journal of Business and Economics</em>. IDEAS/REPEC: eb-07g10003 adjacent.</p>
+</li>
+</ol>
+<h3 id="_3">非同儕審查來源（需降級使用）</h3>
+<ol>
+<li>TEJ. <em>F-Score Strategy: Identifying Undervalued Quality Stocks</em>. tejwin.com, 2023. （行銷/教學等級：台灣 2020-2023 回測，未扣成本，樣本短）</li>
+<li>TEJ. <em>Factor Research – Idiosyncratic Volatility Part 1 &amp; 2</em>. tejwin.com, 2025. （分析教學，2005-2025 台灣資料，方法透明度較高）</li>
+<li>TEJ. <em>Empirical Analysis of Retail Investors Trading Behavior in the Taiwan Stock Market</em>. tejwin.com, 2023. （行銷/教學等級，IC 值分析）</li>
+<li><em>Assessing the effectiveness of Greenblatt's Magic Formula across international stock markets: Literature review</em>. Research Papers in Economics and Finance, 2026. journals.ue.poznan.pl</li>
+</ol>
+<hr />
+<h2 id="_4">附錄：台灣證據強度評級定義</h2>
+<table>
+<thead>
+<tr>
+<th>評級</th>
+<th>定義</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A</strong></td>
+<td>台灣市場的同儕審查論文，有明確的台灣樣本期間和效果量</td>
+</tr>
+<tr>
+<td><strong>A-</strong></td>
+<td>含台灣的亞洲多市場學術論文，或有台灣資料但效果量不確定</td>
+</tr>
+<tr>
+<td><strong>B+</strong></td>
+<td>台灣在跨國研究中被提及且有正向結果，但非台灣獨立驗證</td>
+</tr>
+<tr>
+<td><strong>B</strong></td>
+<td>間接有台灣證據，或台灣學術論文結果混合/不顯著但有方向性</td>
+</tr>
+<tr>
+<td><strong>C</strong></td>
+<td>僅有美股/其他市場學術論文，台灣未驗證；或有台灣論文但結果負向/不顯著</td>
+</tr>
+<tr>
+<td><strong>D</strong></td>
+<td>美股學術確認但台灣學術共識為結構性缺失（如 JT 12-1 動能）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>本報告由 quant-researcher 角色產出，不含投資建議，所有因子在我方 PIT 安全、含下市股的 <code>pit_fundamentals.db</code> 驗證前均為 hypothesis。研究截止日：2026-07-02。</em></p>
+</body></html>
