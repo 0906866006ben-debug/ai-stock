@@ -72,13 +72,18 @@ def get_gemini_model_chain() -> list[str]:
 def ai_key_available() -> bool:
     """Whether the ACTIVE provider's API key is present.
 
-    Replaces the old hard-coded ``GEMINI_API_KEY`` gates: with
-    ``TW_AI_MODEL=anthropic:...`` the relevant key is ``ANTHROPIC_API_KEY``,
-    and a missing Gemini key must NOT force the mock path.
+    Replaces the old hard-coded ``GEMINI_API_KEY`` gates: the relevant key
+    follows the provider prefix of ``TW_AI_MODEL`` (anthropic / openai /
+    google), so a missing key for an UNUSED provider never forces mock.
     """
-    model_id = resolve_ai_model_id()
+    return _provider_key_present(resolve_ai_model_id())
+
+
+def _provider_key_present(model_id: str) -> bool:
     if model_id.startswith("anthropic"):
         return bool(os.getenv("ANTHROPIC_API_KEY"))
+    if model_id.startswith("openai"):
+        return bool(os.getenv("OPENAI_API_KEY"))
     return bool(os.getenv("GEMINI_API_KEY"))
 
 

@@ -20,8 +20,12 @@ services:
         value: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiQmVtQ2hhbmciLCJlbWFpbCI6IjA5MDY4NjYwMDZiZW5AZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.Oz354poBWHKPxDfIAjahF7fWvqQUj4jE6cWSJebpeFQ"
       - key: FINMIND_TOKEN
         value: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjoiQmVtQ2hhbmciLCJlbWFpbCI6IjA5MDY4NjYwMDZiZW5AZ21haWwuY29tIiwidG9rZW5fdmVyc2lvbiI6MH0.Oz354poBWHKPxDfIAjahF7fWvqQUj4jE6cWSJebpeFQ"
-      # Route all TW analysis agents through the user's paid Claude key
-      # (no Gemini free-tier 429; full multi-pillar analysis). Repo is private.
+      # AI model switch — three providers supported (fill the matching key):
+      #   anthropic:claude-sonnet-4-6 / openai:gpt-5.5 / google-gla:gemini-2.5-flash
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
       - key: TW_AI_MODEL
         value: "anthropic:claude-sonnet-4-6"
       # Fast model for the unified pillars call; main summary stays on Sonnet.

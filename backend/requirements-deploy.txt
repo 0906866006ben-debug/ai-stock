@@ -14,9 +14,10 @@
 fastapi==0.136.1
 uvicorn[standard]==0.46.0
 pydantic==2.13.4
-# [anthropic] extra pulls the Claude provider; all analysis runs on
-# TW_AI_MODEL=anthropic:... (Gemini removed — no key, no [google] extra).
-pydantic-ai-slim[anthropic]==1.93.0
+# Tri-provider: analysis model is switchable via TW_AI_MODEL /
+# TW_AI_MODEL_UNIFIED env vars — anthropic:… / openai:… / google-gla:…
+# Each provider activates only when its API key env var is set.
+pydantic-ai-slim[anthropic,openai,google]==1.93.0
 langgraph==1.1.10
 httpx==0.28.1
 requests==2.33.1

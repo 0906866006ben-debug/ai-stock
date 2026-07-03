@@ -103,10 +103,8 @@ def _unified_model_id() -> str:
 
 
 def _provider_key_available() -> bool:
-    model_id = _unified_model_id()
-    if model_id.startswith("anthropic"):
-        return bool(os.getenv("ANTHROPIC_API_KEY"))
-    return bool(os.getenv("GEMINI_API_KEY"))
+    from backend.app.services.gemini_diagnostics import _provider_key_present
+    return _provider_key_present(_unified_model_id())
 
 
 def _build_metrics(metrics_dict: dict) -> FundamentalMetrics:
