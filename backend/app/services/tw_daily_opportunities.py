@@ -1,9 +1,13 @@
-"""每日交易機會（Daily Opportunities）— 研究報告 v2 三桶規則的線上 MVP。
+"""每日交易機會（Daily Opportunities）— 單一長線價值選股桶的線上 MVP。
+
+中線桶已於 2026-07-04 退役（樣本外 T+60≈0，Docs/backtest/experiments_ledger.md
+Iteration 1b）；系統收斂為長線桶為唯一選股桶 + 短線時點疊加。
 
 Strategy basis: Docs/research/tw_screening_strategy_full_v2_2026-07-02.md
-  中線桶: 月營收 YoY 動能 × 外資/投信連買（雙確認）→ S/A/B/C 分級
-  長線桶: 價值綜合（益本比/殖利率/PBR 百分位）+ 營收成長確認（F-Score 待接入）
-  短線:   非獨立桶——僅作進場時點觀察訊號（營收創高公告窗、外資大額買超）
+  長線桶: 價值綜合（益本比/殖利率/PBR 百分位）+ 營收成長為正確認 → S/A/B 分級。
+          選股力經 dev+OOS 對齊回測（experiments_ledger Iteration 1b/2）：金融排除後
+          OOS A T+250 約 +2.6%（輕微高估）。
+  短線:   非獨立桶——長線候選中出現進場時點訊號（營收創高公告窗、外資大額買超）
 
 Data architecture (cloud-safe, no local DB):
   - TWSE STOCK_DAY_ALL  (free, all TWSE stocks, daily OHLCV/turnover)
@@ -39,9 +43,12 @@ FINMIND_BASE = "https://api.finmindtrade.com/api/v4/data"
 # ── Buyable checklist thresholds (report §4; some items MVP-deferred) ──
 MIN_PRICE = 10.0
 MIN_TURNOVER = 30_000_000  # 日成交值 3,000 萬
-EXCLUDED_INDUSTRIES = {"金融保險業", "存託憑證", "金融業"}
+# FinMind TaiwanStockInfo industry labels (verified 2026-07-04): the sector is
+# "金融保險" (NOT "金融保險業") — the old label never matched, silently leaking
+# banks/FHCs into the value pool where their structurally low PBR ranks them
+# artificially cheap. Exclude financials + DRs (aligned with the backtest universe).
+EXCLUDED_INDUSTRIES = {"金融保險", "金融業", "存託憑證"}
 
-MID_SHORTLIST = 100
 LONG_SHORTLIST = 60
 
 
@@ -83,40 +90,14 @@ async def get_daily_opportunities() -> dict:
                 "foreign_net_today": (t86.get(sid, {}).get("foreign") or [0])[0],
             }
 
-        # ── 中線桶候選：法人連買預篩 → FinMind 營收確認 ──
-        pre = [
-            (sid, b) for sid, b in buyable.items()
-            if b["foreign_streak"] >= 3 or b["trust_streak"] >= 3
-        ]
-        pre.sort(key=lambda x: (x[1]["foreign_streak"], x[1]["foreign_net_5d"]), reverse=True)
-        mid_candidates = pre[:MID_SHORTLIST]
-
         token = os.getenv("FINMIND_API_KEY") or os.getenv("FINMIND_TOKEN")
-        rev_map = await _fetch_revenues(client, [sid for sid, _ in mid_candidates], token)
 
-        mid_items = []
-        for sid, b in mid_candidates:
-            rev = rev_map.get(sid)
-            if not rev:
-                continue
-            grade = _grade_mid(rev, b)
-            if grade is None:
-                continue
-            mid_items.append(_item(sid, b, grade, _mid_basis(rev, b), {
-                "revenue_yoy": rev["yoy"], "yoy_streak_months": rev["yoy_streak"],
-                "revenue_14m_high": rev["new_high"], "revenue_month": rev["month"],
-                "foreign_streak_days": b["foreign_streak"], "trust_streak_days": b["trust_streak"],
-                "foreign_net_5d_shares": b["foreign_net_5d"],
-            }))
-        mid_items.sort(key=lambda x: ("SABC".index(x["grade"]), -(x["metrics"]["revenue_yoy"] or 0)))
-
-        # ── 長線桶：價值綜合排名 + 營收成長確認 ──
+        # ── 長線桶（唯一選股桶）：價值綜合排名 + 營收成長確認 ──
         pool = [(sid, b) for sid, b in buyable.items()
                 if (b.get("per") or 0) > 0 and (b.get("yield") or 0) > 0 and (b.get("pbr") or 0) > 0]
         ranked = _value_rank(pool)
         long_short = ranked[:LONG_SHORTLIST]
-        need = [sid for sid, _, _ in long_short if sid not in rev_map]
-        rev_map.update(await _fetch_revenues(client, need, token))
+        rev_map = await _fetch_revenues(client, [sid for sid, _, _ in long_short], token)
 
         long_items = []
         for sid, b, score in long_short:
@@ -130,9 +111,9 @@ async def get_daily_opportunities() -> dict:
             }))
         long_items.sort(key=lambda x: ("SABC".index(x["grade"]), -x["metrics"]["value_score"]))
 
-        # ── 短線＝進場時點觀察訊號（依附於中線候選）──
+        # ── 短線＝進場時點觀察訊號（依附於長線候選，非獨立桶）──
         short_items = []
-        for it in mid_items:
+        for it in long_items:
             sid = it["stock_id"]
             b = buyable[sid]
             rev = rev_map.get(sid) or {}
@@ -144,7 +125,7 @@ async def get_daily_opportunities() -> dict:
                 triggers.append("外資今日買超金額約占當日成交值 5% 以上")
             if triggers:
                 short_items.append(_item(sid, b, it["grade"], "；".join(triggers), {
-                    "from_bucket": "mid", "triggers": triggers,
+                    "from_bucket": "long", "triggers": triggers,
                 }))
 
     result = {
@@ -154,15 +135,16 @@ async def get_daily_opportunities() -> dict:
         "universe_total": len(quotes),
         "buyable_count": len(buyable),
         "buckets": {
-            "short": short_items[:15],
-            "mid": mid_items[:20],
             "long": long_items[:20],
+            "short": short_items[:15],
         },
-        "strategy_basis": "Docs/research/tw_screening_strategy_full_v2_2026-07-02.md",
+        "strategy_basis": "Docs/research/tw_screening_strategy_full_v2_2026-07-02.md；驗證：Docs/backtest/experiments_ledger.md Iteration 1b/2",
         "notices": [
-            "本清單為符合研究報告 v2 條件的候選觀察名單與其支持數據，非投資建議。",
-            "回測驗證與稽核尚未完成——分級規則為文獻起點參數，未經我方資料驗證，不可視為已證實的獲利能力。",
-            "MVP 覆蓋範圍：僅上市（TWSE）個股；市值門檻、MAX 樂透股濾網、IVOL 濾網、F-Score 尚未接入。",
+            "本清單為長線價值選股（價值綜合分位 × 營收成長為正）符合條件的候選觀察名單與支持數據，非投資建議。",
+            "選股力已回測（vs 可買池中位、次日開盤進場、扣 0.585% 成本）：開發期 2012-21 長線 A 級 T+250 約 +4.4%、80% 正年度；樣本外 2022-26 約 +2.6%、60% 正年度（5 年中 3 年）。",
+            "已稽核無前視／資料洩漏，但下市樣本覆蓋不全與未還原除息使數字為「輕微高估」，且近年（2025-26）走弱、樣本偏小——不可視為已證實的獲利能力。",
+            "短線區為長線候選中出現的進場時點觀察訊號（營收創高公告窗、外資大額買超），非獨立策略。",
+            "MVP 覆蓋範圍：僅上市（TWSE）個股，已排除金融保險與存託憑證。",
             "本分析僅供參考，不構成投資建議。",
         ],
     }
@@ -178,35 +160,6 @@ def _item(sid: str, b: dict, grade: str, basis: str, metrics: dict) -> dict:
         "change_pct": b.get("change_pct"), "industry": b.get("industry") or "",
         "grade": grade, "basis": basis, "metrics": metrics,
     }
-
-
-def _grade_mid(rev: dict, b: dict) -> str | None:
-    yoy, streak = rev["yoy"], rev["yoy_streak"]
-    if yoy is None:
-        return None
-    inst = max(b["foreign_streak"], b["trust_streak"])
-    if yoy >= 30 and streak >= 3 and b["foreign_streak"] >= 5:
-        return "S"
-    if yoy >= 10 and streak >= 2 and inst >= 3:
-        return "A"
-    if yoy > 0 and inst >= 3:
-        return "B"
-    if yoy > 0 or b["foreign_streak"] >= 3:
-        return "C"
-    return None
-
-
-def _mid_basis(rev: dict, b: dict) -> str:
-    parts = [f"月營收 YoY {rev['yoy']:+.1f}%（{rev['month']}）"]
-    if rev["yoy_streak"] >= 2:
-        parts.append(f"YoY 連續 {rev['yoy_streak']} 個月為正")
-    if rev["new_high"]:
-        parts.append("營收為近14個月新高")
-    if b["foreign_streak"] >= 3:
-        parts.append(f"外資連續買超 {b['foreign_streak']} 日")
-    if b["trust_streak"] >= 3:
-        parts.append(f"投信連續買超 {b['trust_streak']} 日")
-    return "；".join(parts)
 
 
 def _long_basis(b: dict, rev: dict, score: float) -> str:

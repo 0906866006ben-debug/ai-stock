@@ -42,7 +42,24 @@ COST = 0.00585
 WINDOWS = [5, 20, 60, 120, 250]
 DEDUP_LOOKBACK = 20
 
-# mid-bucket grade thresholds (identical to tw_daily_opportunities._grade_mid)
+# Financial / DR codes excluded to MATCH the live endpoint universe
+# (tw_daily_opportunities.EXCLUDED_INDUSTRIES). Snapshot of 4-digit codes whose
+# FinMind TaiwanStockInfo industry is 金融保險 / 金融業 / 存託憑證, derived via
+# tw_market_heatmap._stock_info_map on 2026-07-04. Banks/FHCs/insurers trade at
+# structurally low PBR and would rank artificially "cheap" in the value composite,
+# so they must be out of both the candidate pool AND the pool-median benchmark.
+FINANCIAL_CODES = frozenset({
+    "2801", "2807", "2809", "2812", "2816", "2820", "2823", "2827", "2831", "2832", "2833",
+    "2834", "2836", "2837", "2838", "2845", "2847", "2849", "2850", "2851", "2852", "2854",
+    "2855", "2856", "2867", "2880", "2881", "2882", "2883", "2884", "2885", "2886", "2887",
+    "2888", "2889", "2890", "2891", "2892", "2897", "5820", "5854", "5859", "5863", "5864",
+    "5876", "5878", "5880", "6004", "6005", "6012", "6015", "6016", "6020", "6021", "6023",
+    "6024", "6026", "6027", "6028", "6035", "6878", "9101", "9102", "9103", "9104", "9105",
+    "9106", "9110", "9136", "9151", "9157", "9188",
+})
+
+# mid-bucket grade thresholds (retired from production 2026-07-04; kept here as the
+# reproducible evidence of the mid bucket's OOS death — see experiments_ledger 1b)
 def grade_rank(yoy, streak_mo, fstreak, tstreak):
     inst = np.maximum(fstreak, tstreak)
     r = np.zeros(yoy.shape, dtype=np.int8)
@@ -161,9 +178,12 @@ def build():
     yoy_m, streak_m, nh_m = rev_state("yoy"), rev_state("yoy_streak"), rev_state("new_high")
 
     log("buyable + grades...")
+    not_fin = ~np.isin(stocks.values, np.array(sorted(FINANCIAL_CODES)))
+    log(f"  excluding {int((~not_fin).sum())} financial/DR codes present in universe")
     buyable = ((close_p >= 10).to_numpy()
                & (avg20_turn.to_numpy() >= 30_000_000)
-               & ~np.isnan(close_p.to_numpy()))
+               & ~np.isnan(close_p.to_numpy())
+               & not_fin[None, :])
     ranks = grade_rank(yoy_m, np.nan_to_num(streak_m), f_str, t_str)
     ranks = np.where(buyable, ranks, 0)
 

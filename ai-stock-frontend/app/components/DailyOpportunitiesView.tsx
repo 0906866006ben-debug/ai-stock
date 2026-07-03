@@ -17,7 +17,7 @@ interface Opportunities {
   date: string;
   universe_total?: number;
   buyable_count?: number;
-  buckets?: { short: OppItem[]; mid: OppItem[]; long: OppItem[] };
+  buckets?: { long: OppItem[]; short: OppItem[] };
   notices?: string[];
 }
 
@@ -30,21 +30,16 @@ const GRADE_STYLE: Record<string, string> = {
   C: 'bg-zinc-400 text-white',
 };
 
-const BUCKETS: { key: 'short' | 'mid' | 'long'; title: string; desc: string }[] = [
-  {
-    key: 'mid',
-    title: '📈 中線桶（1–3 個月）',
-    desc: '月營收 YoY 動能 × 法人連續買超（雙確認）。核心桶。',
-  },
+const BUCKETS: { key: 'long' | 'short'; title: string; desc: string }[] = [
   {
     key: 'long',
-    title: '🏦 長線桶（6–12 個月+）',
-    desc: '價值綜合分位（益本比／殖利率／PBR）＋ 營收成長為正。',
+    title: '🏦 長線價值桶（6–12 個月+）',
+    desc: '價值綜合分位（益本比／殖利率／PBR）＋ 營收成長為正。已排除金融保險與存託憑證。',
   },
   {
     key: 'short',
     title: '⚡ 進場時點觀察（3–15 日）',
-    desc: '非獨立策略——中線候選中出現短期事件觸發者（營收創高公告窗、外資大額買超）。',
+    desc: '非獨立策略——長線候選中出現短期事件觸發者（營收創高公告窗、外資大額買超）。',
   },
 ];
 
@@ -79,7 +74,7 @@ export default function DailyOpportunitiesView({ onSelect }: { onSelect?: (code:
       <div className="rounded-2xl border border-purple-200 bg-gradient-to-r from-pink-50 to-purple-50 p-5 dark:border-purple-900/50 dark:from-pink-950/30 dark:to-purple-950/30">
         <h2 className="text-lg font-bold text-purple-700 dark:text-purple-300">🎯 每日交易機會</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          依研究報告 v2 的三桶規則，列出符合條件的候選觀察名單與支持數據（S/A/B/C 分級）。
+          長線價值選股（價值綜合分位 × 營收成長為正）符合條件的候選觀察名單與支持數據（S/A/B 分級）。
           {data?.date ? ` 資料日：${data.date}` : ''}
           {data?.buyable_count != null ? `　可買性篩查通過：${data.buyable_count}/${data.universe_total} 檔` : ''}
         </p>
