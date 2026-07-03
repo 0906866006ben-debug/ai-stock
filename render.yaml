@@ -24,8 +24,9 @@ services:
       #   anthropic:claude-sonnet-4-6 / openai:gpt-5.5 / google-gla:gemini-2.5-flash
       - key: OPENAI_API_KEY
         sync: false
+      # Gemini backup (free tier ~10 RPM; Claude stays primary)
       - key: GEMINI_API_KEY
-        sync: false
+        value: "AQ.Ab8RN6LPRCeEK_4g7A7m2si75QWTFizJGpSt1qBDsbd6cfbvVw"
       - key: TW_AI_MODEL
         value: "anthropic:claude-sonnet-4-6"
       # Fast model for the unified pillars call; main summary stays on Sonnet.
