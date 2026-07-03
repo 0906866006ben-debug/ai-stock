@@ -1,84 +1,107 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本檔是每個 session 的開機記憶。以下是**上市等級的工程紀律**，不是建議。
 
-## Repo layout
+## 專案定位
 
-Two-app monorepo (no workspace tooling — each app manages its own deps):
-- `backend/` — Python 3.14 FastAPI service
-- `ai-stock-frontend/` — Next.js 16 App Router (TypeScript + Tailwind v4)
-- `specs/001-mvp-stock-analysis/` — original speckit plan, kept for context only
-- `.venv/` at the repo root is the backend venv (used by both `backend/` and root-level `pytest`)
+台股個人投資研究平台（**已上線營運**）：AI 四面向個股分析 + 每日三桶選股（研究實證驅動）+ 美股輔助。
+- 前端 https://ai-stock-rosy-eight.vercel.app （Vercel，push 自動部署）
+- 後端 https://ai-stock-backend-akxd.onrender.com （Render 免費層，push 自動部署；閒置休眠、冷啟動 30-50 秒）
+- Repo **私有**。金鑰經擁有者同意存於 render.yaml；**轉公開前必須先撤光金鑰**（歷史教訓：公開 repo 的 Gemini 金鑰數分鐘內被 Google 偵測撤銷）。
 
-## Commands
+## Repo 佈局
 
-All backend commands run from the repo root (`/home/ben_0527/project/ai-stock`) so the package import `backend.app...` resolves.
+- `backend/` — Python FastAPI；venv 在 repo 根 `.venv/`（**Windows**：`.venv/Scripts/python.exe`）
+- `ai-stock-frontend/` — Next.js 16 App Router（TypeScript + Tailwind v4）
+- `Docs/research/` 策略研究報告、`Docs/planning/` 計畫、`Docs/backtest/experiments_ledger.md` **實驗總帳**、`Docs/orchestration/agents-archive/` 歷代代理定義
+- `backend/historical_data.db`（OHLCV 2003-，962MB）+ `backend/pit_fundamentals.db`（月營收/法人/PER/財報含 filing_date，9.2GB）＝**正典資料庫**（gitignored、只在本機；根目錄 `refresh_data.py` 更新）
+
+## 指令（Windows；一律從 repo 根執行使 `backend.app...` 可解析）
 
 ```bash
-# Backend dev server (auto-reload on save)
-.venv/bin/uvicorn backend.app.main:app --reload --port 8000
-
-# Frontend dev server (default port 3000; falls through to 3001 if busy)
-cd ai-stock-frontend && npm run dev
-
-# Run all backend tests
-.venv/bin/python -m pytest backend/tests/ -q
-
-# Run a single test file or test
-.venv/bin/python -m pytest backend/tests/test_tw_indicators.py -q
-.venv/bin/python -m pytest backend/tests/test_tw_indicators.py::test_rsi_warmup_is_none -q
-
-# Frontend type-check (no test suite yet)
+# 後端測試（全套 ~26 分；平時跑受影響子集）
+.venv/Scripts/python.exe -m pytest backend/tests/ -q
+.venv/Scripts/python.exe -m pytest backend/tests/test_tw_indicators.py::test_rsi_warmup_is_none -q
+# 前端型別檢查（無測試套件；這是前端最低關卡）
 cd ai-stock-frontend && npx tsc --noEmit
+# 本機 dev
+.venv/Scripts/uvicorn backend.app.main:app --reload --port 8000
+cd ai-stock-frontend && npm run dev
+# 回測引擎（本機，讀正典資料庫；直接跑模組需 PYTHONPATH=.）
+.venv/Scripts/python.exe backend/scripts/run_opportunities_backtest.py
 ```
 
-`backend/pytest.ini` sets `asyncio_mode = auto`, so async tests don't need `@pytest.mark.asyncio`.
+`backend/pytest.ini` 設 `asyncio_mode = auto`（async 測試免 marker）。
 
-## Architecture
+## 架構
 
-### Backend pipeline shape
+### 後端管線
+`/analyze`（美股）與 `/analyze/tw`（台股）走 LangGraph 圖（`backend/app/graphs/`）+ 服務層（`backend/app/services/`，命名 `{provider}_{domain}.py`：`fmp_*` 美股、`finmind_*` 台股、`tw_*` 台股聚合運算）。
 
-US analysis (`/analyze`) and TW analysis (`/analyze/tw`) are both composed via **LangGraph state machines** in `backend/app/graphs/`. Each graph node calls one or more **service providers** in `backend/app/services/`, accumulates state, and the route handler in `backend/app/main.py` shapes the final Pydantic response.
+**AI 呼叫鐵則：每次分析只有 2 次呼叫**——主摘要（tw_stock_graph）+ `tw_unified_analysis.py` 的**單次整合呼叫**（四面向敘述+綜合，結構化欄位由程式從原始資料確定性計算）。不得回退成多 agent 逐面向呼叫（374 秒慘案根源）。equity_research 節點預設關（`TW_EQUITY_RESEARCH`）。
 
-Services are thin per-provider modules. The naming convention is `{provider}_{domain}.py`:
-- `fmp_*` → Financial Modeling Prep (US fundamentals/peers/market)
-- `finmind_*` → FinMind (TW market/company/detailed financials)
-- `tw_*` → TW-specific aggregators or computations (no single provider)
-- `yahoo_news`, `tw_macro` → yfinance / Yahoo query2
+### AI 供應商（三家可切換，解析器在 `services/gemini_diagnostics.py`）
+- `TW_AI_MODEL` 主摘要（現役 `anthropic:claude-sonnet-4-6`）、`TW_AI_MODEL_UNIFIED` 整合呼叫（現役 haiku，快 2-3 倍）
+- 格式 `anthropic:…`/`openai:…`/`google-gla:…`；金鑰閘門 `ai_key_available()` 依前綴查對應 env（Gemini 亦接受 `GOOGLE_API_KEY`）
+- 成本 ~NT$1/檔·日；`file_cache` 以（symbol, UTC日）快取，**只快取 AI 成功回應**（mock 永不釘死）
+- 現況：Claude 主力、Gemini 備援（免費 ~10 RPM）、OpenAI 空槽
 
-Every external-data service follows the same contract: **return mock data, never crash, when the relevant API key is missing or the request fails**. Mock fallback is the default path, not the exceptional one. Routes also surface `data_source` / `is_mock` / `status` flags so the UI can show a "● Live" vs "● Mock" badge.
+### 資料層（誠實資料契約）
+- 外部服務失敗一律優雅降級：回 mock/空 + `is_mock`/`data_source`/`status` 旗標，**永不 crash、mock 永不混充真資料**；缺資料回 `status:"no_data"` 與空陣列，不捏數字。
+- 台股基本面走 FinMind 真實 dataset（MonthRevenue/PER/FinancialStatements/BalanceSheet/CashFlows）。dataset `TaiwanStockFinancials` **不存在**，勿用。
+- 全市場批量走 TWSE 官方免費接口（STOCK_DAY_ALL / BWIBBU_ALL / RWD T86）——FinMind 免費層不支援省略 data_id 的按日批量。
+- 雲端**沒有**正典資料庫：依賴它的功能須有雲端 fallback（如 heatmap 的 TWSE fallback）或誠實顯示無資料（screener）。
 
-### Schemas (Pydantic v2, backward-compatible)
+### 前端
+單一 client page（`app/page.tsx`）+ 側欄視圖切換；portfolio/watchlist 僅存 localStorage。圖表用 lightweight-charts v5（`addSeries(SeriesType, options)` API）；`PriceHistoryChart` 多 pane 共享時間軸——**不要呼叫 `fitContent()`**（會蓋掉 bar spacing）。Next.js 16 與訓練資料有落差：動 routing/layout/config 前先讀 `node_modules/next/dist/docs/`。
 
-`backend/app/models/schemas.py` is the single source of truth. Two rules when extending response models:
-1. New fields on existing responses must be **optional + nullable** so existing clients ignoring unknown fields keep working.
-2. Forward references between models in this file resolve automatically — no need to call `model_rebuild()`.
+### 台股特定
+- 指標是純數學（`services/tw_indicators.py`），輸出與輸入等長、暖機期用 None；K 線粒度 `tw_candles.py`（range=D/W/M/Y，指標算在聚合後序列上）。
+- ETF 持股（0050/0056/00878/00919）是策展 mock；未知 ETF 回 `status:"unsupported"`。
+- Telegram bot 用 SQLite（`backend/telegram_watchlist.db`，勿 commit）。
 
-`TaiwanStockAnalysisResponse` has been extended in two phases — Phase 1 added `revenue_summary` / `valuation_summary` / `institutional_summary` / `chip_risk_summary` / `macro_summary` / `etf_summary`; Phase 2 added `next_dividend` / `etf_holdings`. Mirror the same pattern when adding more.
+## 量化紀律（違反即結論作廢）
 
-### TW-specific design points
+1. **PIT 時點**：月營收＝所屬月+1 月 10 日後可見；財報用 `filing_date`；法人買賣超 T 日盤後可見。
+2. **回測防線**：訊號日**次日開盤**進場；扣來回成本 0.585%；分年度看穩定性；事件去重。
+3. **基準**：選股力用「可買池中位數」對照組；市值加權 TAIEX 僅脈絡參考（拿個股中位比 TAIEX 是量尺錯配）。
+4. **樣本外**：dev 2012-2021 / OOS 2022-2026-06。**OOS 已於 2026-07-02 開封一次**——之後任何規則變更不得再以同一 OOS 宣稱驗證。
+5. 門檻**事前註冊**；每次實驗（含失敗）記入 `Docs/backtest/experiments_ledger.md`；同一假設最多調參一次。
+6. **驗證現況**（動「每日交易機會」前必讀）：長線桶 dev+OOS 雙過（OOS A 級 T+250 中位超額 +5.36%）；中線桶 OOS 陣亡（T+60≈0）；已知偏誤：未還原除息（保守向）、下市覆蓋僅 ~184 檔（略高估）。
+7. 未經稽核的結果必標「尚未稽核，不可採信」。
 
-- All TW-only endpoints live under the `/tw/*` prefix.
-- **Indicators are pure math** in `services/tw_indicators.py` (SMA / EMA / RSI / MACD). Always returns arrays aligned with input length using `None` for warm-up periods. Tests in `tests/test_tw_indicators.py` use known fixtures — extend those when adding indicators.
-- **Candle granularity** is handled by `services/tw_candles.py`. The `/tw/price-history` `range` query param accepts `D | W | M | Y` (legacy `1D/5D/1W/1M/1Y` are aliased). Each granularity drives both the FinMind lookback window and an aggregation step (daily → weekly/monthly/yearly buckets). Indicators are computed on the **aggregated** series so MA20 means "20 weeks" on 週線, "20 months" on 月線.
-- **ETF holdings** in `services/tw_etf_holdings.py` are curated mock data for 0050 / 0056 / 00878 / 00919. Unknown ETFs get a stable empty-fields response with `status: "unsupported"` — the UI handles this without crashing.
-- **Telegram bot** uses a SQLite file at `backend/telegram_watchlist.db`. Don't commit it (covered by `.gitignore`). The `/tw/telegram/webhook` route is a thin wrapper around `services/telegram_service.handle_webhook()` queued as a `BackgroundTasks` job.
+## 使用者面鐵則
 
-### Frontend shape
+- **verb-free**：使用者面字串不得出現買/賣/持有/目標價/停損等指令詞——只描述條件與數據。
+- 免責聲明「本分析僅供參考，不構成投資建議。」必須保留。
+- AI 輸出一律 PydanticAI 結構化 JSON（宣告 `output_type`）。
+- UI 慣例：台股**紅漲綠跌**、數字 `tabular-nums`、繁體中文、暗色模式兩套都顧、RWD 必查（使用者主要用手機）。
 
-The whole app is a single client-side page (`app/page.tsx`) with a sidebar that swaps between named views: `analysis` / `portfolio` / `directory` / `news` / `calendar` / `watchlist` / `add-position`. Portfolio and watchlist persist to `localStorage` only — there is no auth or backend persistence.
+## Schema 規則（Pydantic v2）
 
-Charts use **lightweight-charts v5**. The dependency at the repo root `package.json` lists `plotly.js` and `react-plotly.js`, but they are unused in the current code — lightweight-charts handles all chart rendering. `PriceHistoryChart.tsx` uses multiple synchronized chart instances (price + volume + RSI + MACD) sharing a time axis via `subscribeVisibleLogicalRangeChange`. Bar spacing is set explicitly per range so candles stay readable; **do not call `fitContent()` on these panes** — it overrides the bar spacing.
+`backend/app/models/schemas.py` 是唯一真源。既有回應模型加欄位必須 **optional + nullable**（向下相容）；本檔內 forward reference 自動解析。
 
-### Important version notes
+## 測試鐵則（省錢保命）
 
-- **Next.js 16** has breaking changes vs. older versions in this codebase's training data. Per `ai-stock-frontend/AGENTS.md`: read `node_modules/next/dist/docs/` before changing routing, layouts, or config — APIs and conventions may differ.
-- **Pydantic v2** + **PydanticAI 1.x** for structured AI outputs. AI agents must declare an `output_type` and return that exact model.
-- **lightweight-charts v5** uses the `addSeries(SeriesType, options)` API (not the old `addCandlestickSeries`).
+- AI 閘門測試必須清光**所有**供應商 env：`GEMINI_API_KEY, ANTHROPIC_API_KEY, TW_AI_MODEL, TW_AI_MODEL_UNIFIED`——只清 Gemini 會真的打 Claude API（燒錢 + 25 分鐘）。
+- 改「每日交易機會」邏輯 → 本機用**新股票代號**測（當日快取會掩蓋改動）。
 
-## Conventions worth keeping
+## 部署與發布
 
-- AI output is always structured JSON via PydanticAI — never free-form text — and includes `summary`, `trend`, `confidence`, `risks`, `catalysts`, `recommendation`.
-- The `disclaimer` field on TW responses ("本分析僅供參考，不構成投資建議。") must remain — this is positioning info, not financial advice.
-- Don't invent financial facts in prompts or fallbacks. If a data source is missing, the response should reflect that (`status: "no_data"`, empty arrays) rather than fabricated numbers.
-- Backend reads env from `backend/.env` via `dotenv` at import time. Optional keys (all of them): `GEMINI_API_KEY`, `FMP_API_KEY`, `FINNHUB_API_KEY`, `POLYGON_API_KEY`, `FINMIND_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEB_CHAT_ID`. The system runs end-to-end with none of them set — it just returns mock data.
+1. 改動 → 受影響測試 + `tsc` 過 → commit（訊息講 why）→ push `001-mvp-stock-analysis`。
+2. push 即自動部署（Render 3-8 分、Vercel 1-2 分）。**雲端相依改 `backend/requirements-deploy.txt`**——`requirements.txt` 是 Windows freeze（含 pywin32），雲端裝不起，勿用於部署。
+3. **上線驗證迴圈（宣稱完成前必跑）**：`/health` 200 → 未快取代號打 `/analyze/tw` 確認 `analysis_source:"ai"` 且 <90 秒（Render 代理 ~100 秒上限）→ 前端實際載入。
+4. 回滾＝`git revert` + push。
+5. 機密：`backend/.env` **永不 commit**（含 GitHub PAT 等高危金鑰）。
+
+## 已知陷阱（都是真實踩過的）
+
+- `load_dotenv` **不覆蓋**既有 OS 環境變數——.env 改了沒生效先查這個（曾被已撤銷的殭屍金鑰騙過）。
+- 外部 API 401/403 先 `curl` 直測金鑰本身（供應商會主動撤銷）；金鑰格式不做預判（`AQ.` 開頭也是合法 Gemini 金鑰）。
+- `NEXT_PUBLIC_*` build 時固化——改後端網址要重 build 前端（`ai-stock-frontend/.env.production` 已入版控）。
+- PowerShell 5.1：無 `&&`；原生 exe 的 stderr 會顯示成假錯誤（git push 成功也一片紅，看實際輸出判斷）。
+- Windows App Control 擋未簽章 exe（nlm.exe 案例：改用 pip 套件以 python 跑入口函式）。
+
+## 委派原則（主 session 減負）
+
+超過 ~10 次搜尋/讀檔的任務派子代理：researcher（查證，Gemini 引擎）/ auditor（稽核，Opus）/ designer（介面，Sonnet）/ debugger（除錯，codex 引擎）。重要結論用全域 `gpt "<問題>"` 取 GPT 二意見。金融格式產出（論文/估值/財報）優先用官方金融插件。主 session 保留：決策、整合、部署、記憶。
