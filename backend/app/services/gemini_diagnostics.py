@@ -84,7 +84,8 @@ def _provider_key_present(model_id: str) -> bool:
         return bool(os.getenv("ANTHROPIC_API_KEY"))
     if model_id.startswith("openai"):
         return bool(os.getenv("OPENAI_API_KEY"))
-    return bool(os.getenv("GEMINI_API_KEY"))
+    # google-genai SDK officially reads either name; accept both.
+    return bool(os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"))
 
 
 def resolve_ai_model_id(default: str = "gemini-2.5-flash") -> str:
