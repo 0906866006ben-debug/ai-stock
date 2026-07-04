@@ -41,6 +41,8 @@ const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_SIM_POSITIONS = 'stockAssistant.simPositions';
 const STORAGE_FAVORITES = 'stockAssistant.favorites';
+const STORAGE_AUTOBUY_DATE = 'stockAssistant.autoFollow.lastDate';
+const STORAGE_AUTOBUY_ENABLED = 'stockAssistant.autoFollow.enabled';
 const STORAGE_RECENTS = 'stockAssistant.recents';
 
 interface FavoriteItem { code: string; name: string }
@@ -149,6 +151,8 @@ export default function DashboardPage() {
   const [addTarget, setAddTarget] = useState<'real' | 'sim'>('real');
   const [floatingSimAddOpen, setFloatingSimAddOpen] = useState(false);
   const [quickBuyFlash, setQuickBuyFlash] = useState(false);
+  const [autoFollowEnabled, setAutoFollowEnabled] = useState(true);
+  const [autoFollowReport, setAutoFollowReport] = useState<string | null>(null);
 
   // Watchlist / recents
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
@@ -354,6 +358,59 @@ export default function DashboardPage() {
     if (loadedSimPositions.length > 0) {
       refreshSimPortfolioPrices(loadedSimPositions);
     }
+
+    // ── 每日自動跟單：AI 精選各 1 張入練習持倉（重複推薦/已持有不再加）──
+    const followEnabled = localStorage.getItem(STORAGE_AUTOBUY_ENABLED) !== 'off';
+    queueMicrotask(() => setAutoFollowEnabled(followEnabled));
+    if (followEnabled) {
+      (async () => {
+        try {
+          const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim().replace(/\/+$/, '');
+          const r = await fetch(`${base}/tw/daily-opportunities`, { cache: 'no-store' });
+          const d: {
+            status?: string;
+            date?: string;
+            buckets?: Record<string, { stock_id: string; close?: number }[]>;
+            ai_picks?: { status?: string; picks?: { stock_id: string; name: string }[] };
+          } = await r.json();
+          if (d?.status !== 'ok' || !d.date) return;
+          if (localStorage.getItem(STORAGE_AUTOBUY_DATE) === d.date) return;
+          const picks = d.ai_picks?.status === 'ok' ? d.ai_picks?.picks ?? [] : [];
+          if (picks.length === 0) return; // AI 缺席日不跟單、不記標記（隔次載入再試）
+          const closeMap = new Map<string, number>();
+          for (const key of ['long', 'mid', 'short']) {
+            for (const it of d.buckets?.[key] ?? []) {
+              if (it.close) closeMap.set(it.stock_id, it.close);
+            }
+          }
+          const held = new Set(simPositionsRef.current.map((p) => p.stock_code));
+          const additions: Position[] = [];
+          const addedNames: string[] = [];
+          for (const p of picks) {
+            const price = closeMap.get(p.stock_id);
+            if (held.has(p.stock_id) || !price) continue;
+            additions.push({
+              id: `${Date.now()}-${Math.random()}`,
+              stock_code: p.stock_id,
+              company_name: p.name,
+              lots: 1,
+              cost_per_share: price,
+              purchase_date: d.date,
+            });
+            addedNames.push(`${p.stock_id} ${p.name}`);
+          }
+          localStorage.setItem(STORAGE_AUTOBUY_DATE, d.date);
+          if (additions.length > 0) {
+            const next = [...simPositionsRef.current, ...additions];
+            saveSimPositions(next);
+            refreshSimPortfolioPrices(next);
+            setAutoFollowReport(
+              `今日 AI 精選已自動各買 1 張入練習持倉（${d.date}）：${addedNames.join('、')}`
+            );
+          }
+        } catch { /* 網路/後端暫時不可用：靜默，下次載入再試 */ }
+      })();
+    }
   }, [refreshPortfolioPrices, refreshSimPortfolioPrices]);
 
   useEffect(() => {
@@ -538,6 +595,20 @@ export default function DashboardPage() {
             <span className="absolute top-[70%] right-[10%] text-3xl opacity-15 animate-float-soft" style={{ animationDelay: '2s' }}>🌷</span>
             <span className="absolute top-[88%] left-[15%] text-xl opacity-15 animate-float-soft" style={{ animationDelay: '1.5s' }}>♡</span>
           </div>
+
+          {autoFollowReport && (
+            <div className="relative mb-4 flex items-start justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/80 px-4 py-2.5 text-xs text-indigo-800 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-200">
+              <span>🤖 {autoFollowReport}</span>
+              <button
+                type="button"
+                onClick={() => setAutoFollowReport(null)}
+                className="shrink-0 rounded px-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300"
+                aria-label="關閉"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           <div key={page} className="relative mx-auto max-w-6xl space-y-6 animate-fade-in-up">
 
             {/* ── Stock / AI analysis ── */}
@@ -1011,6 +1082,18 @@ export default function DashboardPage() {
           <p className="px-4 pt-3 text-xs text-zinc-500 dark:text-zinc-400">
             ✿ 不會動到真正的小金庫，可以練習買進想試試看的標的～
           </p>
+          <label className="flex cursor-pointer items-center gap-2 px-4 pt-2 text-xs text-zinc-600 dark:text-zinc-300">
+            <input
+              type="checkbox"
+              checked={autoFollowEnabled}
+              onChange={(e) => {
+                setAutoFollowEnabled(e.target.checked);
+                localStorage.setItem(STORAGE_AUTOBUY_ENABLED, e.target.checked ? 'on' : 'off');
+              }}
+              className="h-3.5 w-3.5 accent-pink-500"
+            />
+            每日自動把 AI 精選各買 1 張進練習持倉（已持有／重複推薦不再加）
+          </label>
           <div className="max-h-[70vh] overflow-y-auto px-4 pb-4 pt-2">
             <AddPosition
               onAdd={(pos) => {
