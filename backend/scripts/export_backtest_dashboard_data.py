@@ -35,8 +35,8 @@ OUT = ROOT / "ai-stock-frontend" / "public" / "backtest_dashboard.json"
 WINDOWS = [5, 20, 60, 120, 250]
 DEV_END = "2021-12-31"
 OOS_START = "2022-01-01"
-BUCKET_LABEL = {"long": "長線價值桶", "mid": "中線桶（已退役）"}
-BUCKET_STATUS = {"long": "production", "mid": "retired"}
+BUCKET_LABEL = {"long": "長線價值桶"}
+BUCKET_STATUS = {"long": "production"}
 GRADES = ["S", "A", "B", "C"]
 
 
@@ -139,7 +139,8 @@ def main() -> None:
     yearly_counts_out = {}
     histogram_out = {}
 
-    for bucket in ["long", "mid"]:
+    # 中線桶已退役且依使用者要求不再出現於儀表板（歷史數據仍在 events.csv 與總帳）。
+    for bucket in ["long"]:
         b = ev[ev.bucket == bucket]
         grades_out = {}
         for grade in GRADES:
@@ -188,7 +189,6 @@ def main() -> None:
                 "價格未還原除息（保守向，部分抵銷上述高估）。",
                 "「vs 可買池中位（選股力）」與「vs TAIEX（脈絡參考）」是兩個不同問題——"
                 "個股選股增值 vs 是否贏過大盤——兩者並陳，不可互相替代或混用。",
-                "中線桶已於樣本外歸零（T+60 中位超額 ≈ 0），生產環境已退役，僅作為方法論對照保留。",
             ],
         },
         "headline": headline,

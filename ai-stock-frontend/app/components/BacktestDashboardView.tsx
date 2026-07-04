@@ -29,9 +29,9 @@ interface DashboardData {
     caveats: string[];
   };
   headline: { bucket: string; grade: string; window: number; dev: MetricStat | null; oos: MetricStat | null };
-  buckets: { long: BucketData; mid: BucketData };
-  yearly: { long: YearlyRow[]; mid: YearlyRow[] };
-  histogram: { long: Histogram | null; mid: Histogram | null };
+  buckets: { long: BucketData };
+  yearly: { long: YearlyRow[] };
+  histogram: { long: Histogram | null };
   disclaimer: string;
 }
 
@@ -264,7 +264,6 @@ export default function BacktestDashboardView() {
   }
 
   const long = data.buckets.long;
-  const mid = data.buckets.mid;
 
   return (
     <div className="space-y-6">
@@ -272,7 +271,7 @@ export default function BacktestDashboardView() {
       <div className="rounded-2xl border border-purple-200 bg-gradient-to-r from-pink-50 to-purple-50 p-5 dark:border-purple-900/50 dark:from-pink-950/30 dark:to-purple-950/30">
         <h2 className="text-lg font-bold text-purple-700 dark:text-purple-300">📊 回測儀表板</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          每日選股回測（{long.label} vs {mid.label}）完整結果——分年穩定性、報酬分佈、S/A/B/C 分級單調性。
+          每日選股回測（{long.label}）完整結果——分年穩定性、報酬分佈、S/A/B/C 分級單調性。
           {generatedAt && ` 資料產生時間：${generatedAt}`}
         </p>
       </div>
@@ -394,33 +393,6 @@ export default function BacktestDashboardView() {
               OOS（{data.meta.oos_range[0]} ~，已開封一次）
             </p>
             <GradeTable bucket={long} period="oos" metric={metric} />
-          </div>
-        </div>
-      </section>
-
-      {/* ── Mid bucket: retired, desaturated ── */}
-      <section className="space-y-3 rounded-2xl border border-zinc-300 bg-zinc-100/70 p-4 opacity-80 grayscale-[35%] dark:border-zinc-800 dark:bg-zinc-900/40">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold text-zinc-500 dark:text-zinc-400">🗄️ {mid.label}</h2>
-          <span className="rounded-full bg-zinc-300 px-2 py-0.5 text-[10px] font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
-            已退役——樣本外歸零
-          </span>
-        </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          中線桶 A 級以上 T+60 中位超額於 OOS 趨近於零（見下表），已於 2026-07-04 移出生產環境，僅保留於此供方法論對照。
-        </p>
-        <div>
-          <p className="mb-1.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400">分年中位超額（A 級以上，T+60）</p>
-          <YearlyBars rows={data.yearly.mid} muted />
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <p className="mb-1.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400">DEV</p>
-            <GradeTable bucket={mid} period="dev" metric={metric} />
-          </div>
-          <div>
-            <p className="mb-1.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400">OOS</p>
-            <GradeTable bucket={mid} period="oos" metric={metric} />
           </div>
         </div>
       </section>
