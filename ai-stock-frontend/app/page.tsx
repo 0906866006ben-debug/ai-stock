@@ -148,6 +148,7 @@ export default function DashboardPage() {
   const simPortfolioRefreshSeq = useRef(0);
   const [addTarget, setAddTarget] = useState<'real' | 'sim'>('real');
   const [floatingSimAddOpen, setFloatingSimAddOpen] = useState(false);
+  const [quickBuyFlash, setQuickBuyFlash] = useState(false);
 
   // Watchlist / recents
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
@@ -477,6 +478,26 @@ export default function DashboardPage() {
     : usResult
       ? { stock_code: usResult.symbol, company_name: usResult.company_name }
       : null;
+  const quickBuyPrice: number | null =
+    twResult?.current_price ?? latestTwCandle?.close ?? usResult?.current_price ?? null;
+
+  // 一鍵以最近價格加 1 張到練習持倉（不動真實小金庫）
+  function quickBuySim() {
+    if (!currentAnalyzedStock || quickBuyPrice == null) return;
+    const newPos: Position = {
+      id: `${Date.now()}-${Math.random()}`,
+      stock_code: currentAnalyzedStock.stock_code,
+      company_name: currentAnalyzedStock.company_name,
+      lots: 1,
+      cost_per_share: quickBuyPrice,
+      purchase_date: new Date().toISOString().slice(0, 10),
+    };
+    const next = [...simPositionsRef.current, newPos];
+    saveSimPositions(next);
+    refreshSimPortfolioPrices(next);
+    setQuickBuyFlash(true);
+    setTimeout(() => setQuickBuyFlash(false), 1600);
+  }
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 dark:from-pink-950/20 dark:via-zinc-950 dark:to-purple-950/20">
@@ -948,6 +969,23 @@ export default function DashboardPage() {
           {floatingSimAddOpen ? '✕' : '💗'}
         </span>
       </button>
+
+      {/* ── Floating 快速購入（練習持倉、最近價格、1 張）── */}
+      {currentAnalyzedStock && quickBuyPrice != null && (
+        <button
+          type="button"
+          onClick={quickBuySim}
+          title={`快速購入 ${currentAnalyzedStock.stock_code} ${currentAnalyzedStock.company_name} 1 張（最近價格 ${quickBuyPrice.toFixed(2)}，練習持倉）`}
+          aria-label="快速購入（練習持倉）"
+          className={`fixed right-6 top-[calc(50%+4.5rem)] z-40 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-2xl shadow-xl transition-all hover:scale-110 active:scale-95 ${
+            quickBuyFlash
+              ? 'bg-emerald-500 text-white'
+              : 'bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 text-white hover:from-amber-500 hover:via-orange-500 hover:to-rose-500'
+          }`}
+        >
+          {quickBuyFlash ? '✓' : '⚡'}
+        </button>
+      )}
 
       {floatingSimAddOpen && (
         <div
