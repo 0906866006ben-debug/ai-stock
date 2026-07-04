@@ -120,18 +120,18 @@ function PlainSummary({ plain }: { plain: PlainSummaryData }) {
           </p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">同一池子隨機挑股（中位數）</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">同池中位數個股（單押一檔典型股）</p>
           <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-zinc-600 dark:text-zinc-300">
             {fmtWan(plain.final.pool)}
           </p>
-          <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">名單的價值：贏過隨機挑股的差距</p>
+          <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">分散的隨機組合會高於此線（靠近平均數）</p>
         </div>
         <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">同期市值加權大盤（TAIEX）</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">大盤 TAIEX 同期實際買進抱著</p>
           <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-zinc-600 dark:text-zinc-300">
             {fmtWan(plain.final.taiex)}
           </p>
-          <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">此期間為權值股獨走年代（脈絡參考）</p>
+          <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">指數收盤直算；此期間為權值股獨走年代</p>
         </div>
       </div>
 
@@ -154,8 +154,9 @@ function PlainSummary({ plain }: { plain: PlainSummaryData }) {
           。
         </p>
         <p>
-          📏 <strong>誠實對照</strong>：名單的驗證優勢是「同一池子裡挑股挑得準」（{fmtWan(plain.final.strategy)} vs 隨機的{' '}
-          {fmtWan(plain.final.pool)}）；同期市值加權大盤成長更多（{fmtWan(plain.final.taiex)}），屬台積電等權值股獨走的年代背景。
+          📏 <strong>誠實對照</strong>：名單的驗證優勢是「同一池子裡挑股挑得準」（{fmtWan(plain.final.strategy)} vs 單押典型一檔的{' '}
+          {fmtWan(plain.final.pool)}）；同期大盤指數成長更多（{fmtWan(plain.final.taiex)}），屬台積電等權值股獨走的年代背景。
+          三條線皆未含股息，而名單殖利率約為大盤兩倍——實際差距比圖上小。
         </p>
       </div>
 

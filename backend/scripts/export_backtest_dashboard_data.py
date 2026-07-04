@@ -22,6 +22,7 @@ Run:  .venv/Scripts/python.exe backend/scripts/export_backtest_dashboard_data.py
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,6 +31,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 EVENTS = ROOT / "backend" / "data" / "backtest" / "opps_v2" / "events.csv"
+OHLCV_DB = ROOT / "backend" / "historical_data.db"
 OUT = ROOT / "ai-stock-frontend" / "public" / "backtest_dashboard.json"
 
 WINDOWS = [5, 20, 60, 120, 250]
@@ -133,16 +135,32 @@ def build_histogram(sub: pd.DataFrame, window: int = 250, n_bins: int = 24) -> d
 def build_plain(ev: pd.DataFrame) -> dict:
     """白話版：每年等權跟隨長線桶 S/A 名單，100 萬本金的逐年複利軌跡。
 
-    三條對照線（皆為 T+250 事件視窗、同一事件集）：
-      strategy = ret_250 年均（已扣來回成本 58.5bp，未含股息）
-      pool     = ret_250 - excu_250 → 可買池中位（「隨機挑股」基準）
-      taiex    = ret_250 - exc_250  → 同視窗 TAIEX（市值加權大盤）
-    年度 cohort 視窗跨年重疊，為簡化示意，非精確逐日資金曲線。
+    三條對照線：
+      strategy = ret_250 年均（已扣來回成本 58.5bp，未含股息；事件視窗拼接）
+      pool     = ret_250 - excu_250 → 可買池「中位數個股」——單押一檔典型股的樣貌，
+                 不是分散隨機組合的期望值（那會靠近平均數、高於中位數）
+      taiex    = TAIEX 指數同期「實際買進抱著」（首尾收盤直算，非事件視窗拼接——
+                 拼接法經驗算低估指數約兩成，故改用真值）
+    年度 cohort 視窗跨年重疊，strategy/pool 為簡化示意，非精確逐日資金曲線。
     """
     sa = ev[(ev.bucket == "long") & (ev.grade.isin(["S", "A"]))].copy()
     sa["year"] = sa.signal_date.str[:4]
     start = 1_000_000
-    caps = {"strategy": start, "pool": start, "taiex": start}
+
+    # TAIEX 真實買進抱著：首個 2012 收盤為基準，各年末（或最新）收盤直算。
+    con = sqlite3.connect(str(OHLCV_DB))
+    try:
+        taiex = pd.read_sql_query(
+            "SELECT date, close FROM ohlcv WHERE stock_id='TAIEX' AND date>='2012-01-01' ORDER BY date",
+            con,
+        )
+    finally:
+        con.close()
+    taiex_base = float(taiex.close.iloc[0])
+    taiex["year"] = taiex.date.str[:4]
+    taiex_year_end = taiex.groupby("year").close.last()  # 各年最後收盤（末年=最新）
+
+    caps = {"strategy": start, "pool": start}
     rows = []
     for year, g in sa.groupby("year"):
         r = g.ret_250.dropna()
@@ -151,18 +169,19 @@ def build_plain(ev: pd.DataFrame) -> dict:
         rets = {
             "strategy": float(r.mean()),
             "pool": float((g.ret_250 - g.excu_250).dropna().mean()),
-            "taiex": float((g.ret_250 - g.exc_250).dropna().mean()),
         }
         for k in caps:
             caps[k] *= 1 + rets[k]
+        taiex_cap = start * float(taiex_year_end.get(year, taiex.close.iloc[-1])) / taiex_base
         rows.append({
             "year": year,
             "n": int(len(r)),
             "strategy_ret": round(rets["strategy"], 4),
             "strategy_capital": round(caps["strategy"]),
             "pool_capital": round(caps["pool"]),
-            "taiex_capital": round(caps["taiex"]),
+            "taiex_capital": round(taiex_cap),
         })
+    caps["taiex"] = start * float(taiex.close.iloc[-1]) / taiex_base
     years = len(rows)
     losing = [{"year": r["year"], "ret": r["strategy_ret"]} for r in rows if r["strategy_ret"] < 0]
     return {
@@ -175,9 +194,10 @@ def build_plain(ev: pd.DataFrame) -> dict:
         "rows": rows,
         "assumptions": [
             "每年年初起以等額資金跟隨長線桶 S/A 級名單、每筆持有一年（T+250），逐年複利。",
-            "已扣來回交易成本 0.585%；未含股息——名單殖利率中位約 6~8%，實際總報酬高於此數。",
-            "「隨機挑股」＝同一可買池的中位數股票；「大盤」＝同期間市值加權 TAIEX。",
-            "年度視窗有跨年重疊，屬簡化示意，非精確逐日資金曲線。",
+            "已扣來回交易成本 0.585%；三條線皆未含股息——但名單殖利率（中位約 6~8%）約為大盤（約 3~4%）兩倍，"
+            "省略股息對名單一方較不利，實際差距比圖上小。",
+            "「同池中位數個股」＝單押一檔最典型股票的樣貌；分散持有的隨機組合期望值靠近平均數，會高於此線。",
+            "「大盤」＝TAIEX 指數同期實際買進抱著（收盤價直算）；名單與中位個股線的年度視窗有跨年重疊，屬簡化示意。",
         ],
     }
 
