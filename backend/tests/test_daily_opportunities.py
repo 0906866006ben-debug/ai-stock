@@ -54,6 +54,20 @@ def _no_cache(monkeypatch):
     monkeypatch.setattr(file_cache, "save", lambda *a, **k: None)
 
 
+@pytest.fixture(autouse=True)
+def _no_ai(monkeypatch):
+    """AI 精選一律 patch 成 None（測試永不打真模型），並清光供應商金鑰保險。"""
+    for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+                "TW_AI_MODEL", "TW_AI_MODEL_UNIFIED"):
+        monkeypatch.delenv(var, raising=False)
+    from backend.app.services import tw_ai_daily_picks
+
+    async def _none(core):
+        return None
+
+    monkeypatch.setattr(tw_ai_daily_picks, "get_ai_daily_picks", _none)
+
+
 def _patch_sources(monkeypatch, quotes=None):
     quotes = _VALUATION.keys() if quotes is None else quotes
     q = {sid: _quote(_INDUSTRY[sid]["n"]) for sid in quotes}
@@ -88,6 +102,8 @@ async def test_buckets_are_long_mid_short(monkeypatch):
         assert "快照" in it["basis"]  # 每項標示快照日期（誠實資料契約）
     # 未達驗證門檻的標註必須存在於 notices
     assert any("未達驗證門檻" in n for n in res["notices"])
+    # AI 精選：無金鑰/失敗時誠實缺席，不 mock 混充
+    assert res["ai_picks"] == {"status": "unavailable"}
 
 
 async def test_financials_excluded(monkeypatch):

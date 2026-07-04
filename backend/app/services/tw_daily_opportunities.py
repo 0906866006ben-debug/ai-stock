@@ -66,11 +66,23 @@ def _load_leader_snapshot() -> dict | None:
         return None
 
 
+async def _merge_ai_picks(core: dict) -> dict:
+    """疊加 AI 每日精選（自帶當日快取；失敗→誠實 unavailable，不影響量化桶）。"""
+    from backend.app.services.tw_ai_daily_picks import get_ai_daily_picks
+    out = dict(core)
+    try:
+        picks = await get_ai_daily_picks(core)
+    except Exception:  # noqa: BLE001
+        picks = None
+    out["ai_picks"] = picks if picks else {"status": "unavailable"}
+    return out
+
+
 async def get_daily_opportunities() -> dict:
     today = date.today().strftime("%Y-%m-%d")
     cached = file_cache.load(_CACHE_NS, today)
     if isinstance(cached, dict):
-        return cached
+        return await _merge_ai_picks(cached)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         quotes, valuation = await asyncio.gather(
@@ -195,7 +207,7 @@ async def get_daily_opportunities() -> dict:
         ],
     }
     file_cache.save(_CACHE_NS, today, result)
-    return result
+    return await _merge_ai_picks(result)
 
 
 # ────────────────────────── helpers ──────────────────────────

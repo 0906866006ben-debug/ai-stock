@@ -19,6 +19,20 @@ interface Opportunities {
   buyable_count?: number;
   buckets?: { long: OppItem[]; short: OppItem[]; mid?: OppItem[] };
   mid_meta?: { as_of?: string; regime_on?: boolean; stale?: boolean };
+  ai_picks?: {
+    status: string;
+    market_read?: string;
+    model?: string;
+    picks?: {
+      stock_id: string;
+      name: string;
+      bucket: string;
+      reasons: string[];
+      risk_note: string;
+      watch_condition: string;
+    }[];
+    notices?: string[];
+  };
   notices?: string[];
 }
 
@@ -106,6 +120,49 @@ export default function DailyOpportunitiesView({ onSelect }: { onSelect?: (code:
           暫無資料（可能為非交易日或資料源暫時不可用）。
         </p>
       )}
+
+      {data?.ai_picks?.status === 'ok' && data.ai_picks.picks?.length ? (
+        <section className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50/70 to-white p-4 dark:border-indigo-900/60 dark:from-indigo-950/30 dark:to-zinc-900">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-bold text-indigo-700 dark:text-indigo-300">🤖 AI 每日精選（觀察）</h3>
+            <span className="rounded-full bg-indigo-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
+              AI 生成——僅依當日量化數據
+            </span>
+          </div>
+          {data.ai_picks.market_read && (
+            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{data.ai_picks.market_read}</p>
+          )}
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {data.ai_picks.picks.map((p) => (
+              <div
+                key={p.stock_id}
+                className="cursor-pointer rounded-xl border border-zinc-200 bg-white p-3 hover:border-indigo-300 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-indigo-700"
+                onClick={() => onSelect?.(p.stock_id)}
+                title="點擊查看個股分析"
+              >
+                <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                  {p.stock_id} {p.name}
+                  <span className="ml-2 text-[10px] font-normal text-zinc-400">
+                    {p.bucket === 'long' ? '長線桶（已驗證）' : p.bucket === 'mid' ? '中線桶（觀察）' : '時點觀察'}
+                  </span>
+                </p>
+                <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-xs text-zinc-600 dark:text-zinc-300">
+                  {p.reasons.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">⚠ {p.risk_note}</p>
+                <p className="mt-0.5 text-[11px] text-zinc-400 dark:text-zinc-500">觀察失效條件：{p.watch_condition}</p>
+              </div>
+            ))}
+          </div>
+          {data.ai_picks.notices?.map((n, i) => (
+            <p key={i} className="mt-2 text-[10px] text-zinc-400 dark:text-zinc-500">
+              {n}
+            </p>
+          ))}
+        </section>
+      ) : null}
 
       {data?.buckets &&
         BUCKETS.map(({ key, title, desc, unvalidated }) => {
