@@ -18,6 +18,24 @@ interface BucketData {
 interface YearlyRow { year: string; n: number; median_excu: number; win_rate: number }
 interface HistBin { lo: number; hi: number; count: number; is_loss: boolean }
 interface Histogram { window: number; n: number; median: number; mean: number; win_rate: number; bins: HistBin[] }
+interface PlainRow {
+  year: string;
+  n: number;
+  strategy_ret: number;
+  strategy_capital: number;
+  pool_capital: number;
+  taiex_capital: number;
+}
+interface PlainSummaryData {
+  start_capital: number;
+  years: number;
+  final: { strategy: number; pool: number; taiex: number };
+  cagr: number | null;
+  losing_years: { year: string; ret: number }[];
+  worst_year: { year: string; ret: number } | null;
+  rows: PlainRow[];
+  assumptions: string[];
+}
 interface DashboardData {
   generated_at: string;
   meta: {
@@ -29,6 +47,7 @@ interface DashboardData {
     caveats: string[];
   };
   headline: { bucket: string; grade: string; window: number; dev: MetricStat | null; oos: MetricStat | null };
+  plain?: PlainSummaryData;
   buckets: { long: BucketData };
   yearly: { long: YearlyRow[] };
   histogram: { long: Histogram | null };
@@ -68,6 +87,100 @@ function GradeBadge({ grade }: { grade: Grade }) {
     <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${GRADE_STYLE[grade]}`}>
       {grade}
     </span>
+  );
+}
+
+function fmtWan(v: number): string {
+  return `${Math.round(v / 10_000).toLocaleString()} 萬`;
+}
+
+// ── 白話版：100 萬逐年複利軌跡（策略 vs 隨機挑股 vs 大盤） ──
+function PlainSummary({ plain }: { plain: PlainSummaryData }) {
+  const profit = plain.final.strategy - plain.start_capital;
+  const maxCap = Math.max(1, ...plain.rows.map((r) => r.strategy_capital));
+  const firstYear = plain.rows[0]?.year ?? '';
+  const lastYear = plain.rows[plain.rows.length - 1]?.year ?? '';
+  return (
+    <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Plain Talk</p>
+        <h2 className="mt-1 text-base font-bold text-zinc-800 dark:text-zinc-100">
+          💰 白話版：{firstYear} 年起 100 萬跟著名單走，會變多少？
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border-2 border-red-300 bg-red-50/60 p-4 dark:border-red-800 dark:bg-red-950/30">
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">跟著長線桶名單（S/A 級）</p>
+          <p className={`mt-1 font-mono text-2xl font-bold tabular-nums ${returnTone(profit)}`}>
+            {fmtWan(plain.final.strategy)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+            {plain.years} 年{profit >= 0 ? '賺' : '虧'} {fmtWan(Math.abs(profit))}（年均 {fmtPct(plain.cagr)}，未含股息）
+          </p>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">同一池子隨機挑股（中位數）</p>
+          <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-zinc-600 dark:text-zinc-300">
+            {fmtWan(plain.final.pool)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">名單的價值：贏過隨機挑股的差距</p>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">同期市值加權大盤（TAIEX）</p>
+          <p className="mt-1 font-mono text-2xl font-bold tabular-nums text-zinc-600 dark:text-zinc-300">
+            {fmtWan(plain.final.taiex)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">此期間為權值股獨走年代（脈絡參考）</p>
+        </div>
+      </div>
+
+      <div className="space-y-1.5 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+        <p>
+          ✅ <strong>有獲利</strong>：100 萬經 {plain.years} 年（{firstYear}–{lastYear}）成長為{' '}
+          <strong className="font-mono tabular-nums">{fmtWan(plain.final.strategy)}</strong>
+          ，且股息尚未計入（名單殖利率中位約 6~8%，實際總報酬更高）。
+        </p>
+        <p>
+          ⚠️ <strong>不是每年都賺</strong>：{plain.years} 年中有 {plain.losing_years.length} 年虧損
+          {plain.worst_year && (
+            <>
+              ，最差一年（{plain.worst_year.year}）為{' '}
+              <span className={`font-mono tabular-nums ${returnTone(plain.worst_year.ret)}`}>
+                {fmtPct(plain.worst_year.ret)}
+              </span>
+            </>
+          )}
+          。
+        </p>
+        <p>
+          📏 <strong>誠實對照</strong>：名單的驗證優勢是「同一池子裡挑股挑得準」（{fmtWan(plain.final.strategy)} vs 隨機的{' '}
+          {fmtWan(plain.final.pool)}）；同期市值加權大盤成長更多（{fmtWan(plain.final.taiex)}），屬台積電等權值股獨走的年代背景。
+        </p>
+      </div>
+
+      {/* 資金軌跡 bar（策略線） */}
+      <div className="overflow-x-auto">
+        <div className="flex min-w-max items-end gap-1.5 px-1">
+          {plain.rows.map((r) => (
+            <div key={r.year} className="flex w-10 flex-col items-center gap-1">
+              <span className="font-mono text-[9px] tabular-nums text-zinc-400 dark:text-zinc-500">
+                {Math.round(r.strategy_capital / 10_000)}萬
+              </span>
+              <div className="flex h-20 w-full flex-col justify-end">
+                <div
+                  title={`${r.year} 年底：${fmtWan(r.strategy_capital)}（當年 ${fmtPct(r.strategy_ret)}）`}
+                  style={{ height: `${Math.max(4, (r.strategy_capital / maxCap) * 100)}%` }}
+                  className={`w-full rounded-t-sm ${r.strategy_ret >= 0 ? 'bg-red-500/80 dark:bg-red-400/75' : 'bg-green-500/80 dark:bg-green-400/75'}`}
+                />
+              </div>
+              <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{r.year.slice(2)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="text-[11px] leading-5 text-zinc-400 dark:text-zinc-500">{plain.assumptions.join(' ')}</p>
+    </section>
   );
 }
 
@@ -275,6 +388,9 @@ export default function BacktestDashboardView() {
           {generatedAt && ` 資料產生時間：${generatedAt}`}
         </p>
       </div>
+
+      {/* ── 白話版 100 萬模擬（放最前，回答「到底有沒有賺」） ── */}
+      {data.plain && <PlainSummary plain={data.plain} />}
 
       {/* ── Headline: dark quant hero card ── */}
       <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-xl">

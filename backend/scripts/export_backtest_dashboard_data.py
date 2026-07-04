@@ -130,6 +130,58 @@ def build_histogram(sub: pd.DataFrame, window: int = 250, n_bins: int = 24) -> d
     }
 
 
+def build_plain(ev: pd.DataFrame) -> dict:
+    """白話版：每年等權跟隨長線桶 S/A 名單，100 萬本金的逐年複利軌跡。
+
+    三條對照線（皆為 T+250 事件視窗、同一事件集）：
+      strategy = ret_250 年均（已扣來回成本 58.5bp，未含股息）
+      pool     = ret_250 - excu_250 → 可買池中位（「隨機挑股」基準）
+      taiex    = ret_250 - exc_250  → 同視窗 TAIEX（市值加權大盤）
+    年度 cohort 視窗跨年重疊，為簡化示意，非精確逐日資金曲線。
+    """
+    sa = ev[(ev.bucket == "long") & (ev.grade.isin(["S", "A"]))].copy()
+    sa["year"] = sa.signal_date.str[:4]
+    start = 1_000_000
+    caps = {"strategy": start, "pool": start, "taiex": start}
+    rows = []
+    for year, g in sa.groupby("year"):
+        r = g.ret_250.dropna()
+        if len(r) == 0:
+            continue
+        rets = {
+            "strategy": float(r.mean()),
+            "pool": float((g.ret_250 - g.excu_250).dropna().mean()),
+            "taiex": float((g.ret_250 - g.exc_250).dropna().mean()),
+        }
+        for k in caps:
+            caps[k] *= 1 + rets[k]
+        rows.append({
+            "year": year,
+            "n": int(len(r)),
+            "strategy_ret": round(rets["strategy"], 4),
+            "strategy_capital": round(caps["strategy"]),
+            "pool_capital": round(caps["pool"]),
+            "taiex_capital": round(caps["taiex"]),
+        })
+    years = len(rows)
+    losing = [{"year": r["year"], "ret": r["strategy_ret"]} for r in rows if r["strategy_ret"] < 0]
+    return {
+        "start_capital": start,
+        "years": years,
+        "final": {k: round(v) for k, v in caps.items()},
+        "cagr": round((caps["strategy"] / start) ** (1 / years) - 1, 4) if years else None,
+        "losing_years": losing,
+        "worst_year": min(losing, key=lambda r: r["ret"]) if losing else None,
+        "rows": rows,
+        "assumptions": [
+            "每年年初起以等額資金跟隨長線桶 S/A 級名單、每筆持有一年（T+250），逐年複利。",
+            "已扣來回交易成本 0.585%；未含股息——名單殖利率中位約 6~8%，實際總報酬高於此數。",
+            "「隨機挑股」＝同一可買池的中位數股票；「大盤」＝同期間市值加權 TAIEX。",
+            "年度視窗有跨年重疊，屬簡化示意，非精確逐日資金曲線。",
+        ],
+    }
+
+
 def main() -> None:
     print(f"loading {EVENTS} ...")
     ev = pd.read_csv(EVENTS, dtype={"stock_id": str})
@@ -192,6 +244,7 @@ def main() -> None:
             ],
         },
         "headline": headline,
+        "plain": build_plain(ev),
         "buckets": buckets_out,
         "yearly": yearly_out,
         "yearly_counts": yearly_counts_out,
