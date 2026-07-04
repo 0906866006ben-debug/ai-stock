@@ -151,6 +151,7 @@ export default function DashboardPage() {
   const [addTarget, setAddTarget] = useState<'real' | 'sim'>('real');
   const [floatingSimAddOpen, setFloatingSimAddOpen] = useState(false);
   const [quickBuyFlash, setQuickBuyFlash] = useState(false);
+  const [quickBuyBusy, setQuickBuyBusy] = useState(false);
   const [autoFollowEnabled, setAutoFollowEnabled] = useState(true);
   const [autoFollowReport, setAutoFollowReport] = useState<string | null>(null);
 
@@ -363,54 +364,9 @@ export default function DashboardPage() {
     const followEnabled = localStorage.getItem(STORAGE_AUTOBUY_ENABLED) !== 'off';
     queueMicrotask(() => setAutoFollowEnabled(followEnabled));
     if (followEnabled) {
-      (async () => {
-        try {
-          const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim().replace(/\/+$/, '');
-          const r = await fetch(`${base}/tw/daily-opportunities`, { cache: 'no-store' });
-          const d: {
-            status?: string;
-            date?: string;
-            buckets?: Record<string, { stock_id: string; close?: number }[]>;
-            ai_picks?: { status?: string; picks?: { stock_id: string; name: string }[] };
-          } = await r.json();
-          if (d?.status !== 'ok' || !d.date) return;
-          if (localStorage.getItem(STORAGE_AUTOBUY_DATE) === d.date) return;
-          const picks = d.ai_picks?.status === 'ok' ? d.ai_picks?.picks ?? [] : [];
-          if (picks.length === 0) return; // AI 缺席日不跟單、不記標記（隔次載入再試）
-          const closeMap = new Map<string, number>();
-          for (const key of ['long', 'mid', 'short']) {
-            for (const it of d.buckets?.[key] ?? []) {
-              if (it.close) closeMap.set(it.stock_id, it.close);
-            }
-          }
-          const held = new Set(simPositionsRef.current.map((p) => p.stock_code));
-          const additions: Position[] = [];
-          const addedNames: string[] = [];
-          for (const p of picks) {
-            const price = closeMap.get(p.stock_id);
-            if (held.has(p.stock_id) || !price) continue;
-            additions.push({
-              id: `${Date.now()}-${Math.random()}`,
-              stock_code: p.stock_id,
-              company_name: p.name,
-              lots: 1,
-              cost_per_share: price,
-              purchase_date: d.date,
-            });
-            addedNames.push(`${p.stock_id} ${p.name}`);
-          }
-          localStorage.setItem(STORAGE_AUTOBUY_DATE, d.date);
-          if (additions.length > 0) {
-            const next = [...simPositionsRef.current, ...additions];
-            saveSimPositions(next);
-            refreshSimPortfolioPrices(next);
-            setAutoFollowReport(
-              `今日 AI 精選已自動各買 1 張入練習持倉（${d.date}）：${addedNames.join('、')}`
-            );
-          }
-        } catch { /* 網路/後端暫時不可用：靜默，下次載入再試 */ }
-      })();
+      void buyTodaysPicks(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshPortfolioPrices, refreshSimPortfolioPrices]);
 
   useEffect(() => {
@@ -535,25 +491,71 @@ export default function DashboardPage() {
     : usResult
       ? { stock_code: usResult.symbol, company_name: usResult.company_name }
       : null;
-  const quickBuyPrice: number | null =
-    twResult?.current_price ?? latestTwCandle?.close ?? usResult?.current_price ?? null;
-
-  // 一鍵以最近價格加 1 張到練習持倉（不動真實小金庫）
-  function quickBuySim() {
-    if (!currentAnalyzedStock || quickBuyPrice == null) return;
-    const newPos: Position = {
-      id: `${Date.now()}-${Math.random()}`,
-      stock_code: currentAnalyzedStock.stock_code,
-      company_name: currentAnalyzedStock.company_name,
-      lots: 1,
-      cost_per_share: quickBuyPrice,
-      purchase_date: new Date().toISOString().slice(0, 10),
-    };
-    const next = [...simPositionsRef.current, newPos];
-    saveSimPositions(next);
-    refreshSimPortfolioPrices(next);
-    setQuickBuyFlash(true);
-    setTimeout(() => setQuickBuyFlash(false), 1600);
+  // 把今日 AI 精選各買 1 張進練習持倉。manual=true（⚡按鈕）略過當日已執行標記；
+  // 兩種模式都跳過已持有（重複推薦不再購買）。
+  async function buyTodaysPicks(manual: boolean) {
+    if (manual) setQuickBuyBusy(true);
+    try {
+      const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').trim().replace(/\/+$/, '');
+      const r = await fetch(`${base}/tw/daily-opportunities`, { cache: 'no-store' });
+      const d: {
+        status?: string;
+        date?: string;
+        buckets?: Record<string, { stock_id: string; close?: number }[]>;
+        ai_picks?: { status?: string; picks?: { stock_id: string; name: string }[] };
+      } = await r.json();
+      if (d?.status !== 'ok' || !d.date) {
+        if (manual) setAutoFollowReport('今日推薦暫時無法取得（後端喚醒中或非交易日），稍後再試。');
+        return;
+      }
+      if (!manual && localStorage.getItem(STORAGE_AUTOBUY_DATE) === d.date) return;
+      const picks = d.ai_picks?.status === 'ok' ? d.ai_picks?.picks ?? [] : [];
+      if (picks.length === 0) {
+        if (manual) setAutoFollowReport('今日 AI 精選尚未生成，無可跟單。');
+        return;
+      }
+      const closeMap = new Map<string, number>();
+      for (const key of ['long', 'mid', 'short']) {
+        for (const it of d.buckets?.[key] ?? []) {
+          if (it.close) closeMap.set(it.stock_id, it.close);
+        }
+      }
+      const held = new Set(simPositionsRef.current.map((p) => p.stock_code));
+      const additions: Position[] = [];
+      const addedNames: string[] = [];
+      for (const p of picks) {
+        const price = closeMap.get(p.stock_id);
+        if (held.has(p.stock_id) || !price) continue;
+        additions.push({
+          id: `${Date.now()}-${Math.random()}`,
+          stock_code: p.stock_id,
+          company_name: p.name,
+          lots: 1,
+          cost_per_share: price,
+          purchase_date: d.date,
+        });
+        addedNames.push(`${p.stock_id} ${p.name}`);
+      }
+      localStorage.setItem(STORAGE_AUTOBUY_DATE, d.date);
+      if (additions.length > 0) {
+        const next = [...simPositionsRef.current, ...additions];
+        saveSimPositions(next);
+        refreshSimPortfolioPrices(next);
+        setAutoFollowReport(
+          `今日 AI 精選已各買 1 張入練習持倉（${d.date}）：${addedNames.join('、')}`
+        );
+        if (manual) {
+          setQuickBuyFlash(true);
+          setTimeout(() => setQuickBuyFlash(false), 1600);
+        }
+      } else if (manual) {
+        setAutoFollowReport('今日 AI 精選皆已在練習持倉中，未重複加入。');
+      }
+    } catch {
+      if (manual) setAutoFollowReport('今日推薦暫時無法取得（網路或後端問題），稍後再試。');
+    } finally {
+      if (manual) setQuickBuyBusy(false);
+    }
   }
 
   return (
@@ -1041,22 +1043,21 @@ export default function DashboardPage() {
         </span>
       </button>
 
-      {/* ── Floating 快速購入（練習持倉、最近價格、1 張）── */}
-      {currentAnalyzedStock && quickBuyPrice != null && (
-        <button
-          type="button"
-          onClick={quickBuySim}
-          title={`快速購入 ${currentAnalyzedStock.stock_code} ${currentAnalyzedStock.company_name} 1 張（最近價格 ${quickBuyPrice.toFixed(2)}，練習持倉）`}
-          aria-label="快速購入（練習持倉）"
-          className={`fixed right-6 top-[calc(50%+4.5rem)] z-40 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-2xl shadow-xl transition-all hover:scale-110 active:scale-95 ${
-            quickBuyFlash
-              ? 'bg-emerald-500 text-white'
-              : 'bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 text-white hover:from-amber-500 hover:via-orange-500 hover:to-rose-500'
-          }`}
-        >
-          {quickBuyFlash ? '✓' : '⚡'}
-        </button>
-      )}
+      {/* ── Floating ⚡：一鍵把今日 AI 精選各買 1 張進練習持倉 ── */}
+      <button
+        type="button"
+        onClick={() => void buyTodaysPicks(true)}
+        disabled={quickBuyBusy}
+        title="一鍵把今日 AI 精選各買 1 張進練習持倉（已持有不重複）"
+        aria-label="一鍵跟今日推薦（練習持倉）"
+        className={`fixed right-6 top-[calc(50%+4.5rem)] z-40 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-2xl shadow-xl transition-all hover:scale-110 active:scale-95 disabled:cursor-wait disabled:opacity-70 ${
+          quickBuyFlash
+            ? 'bg-emerald-500 text-white'
+            : 'bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 text-white hover:from-amber-500 hover:via-orange-500 hover:to-rose-500'
+        }`}
+      >
+        {quickBuyFlash ? '✓' : quickBuyBusy ? '⏳' : '⚡'}
+      </button>
 
       {floatingSimAddOpen && (
         <div
