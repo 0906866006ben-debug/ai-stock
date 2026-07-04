@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { Position } from '@/lib/types';
-import { getTwStocks } from '@/lib/api';
+import { getTwPriceHistory, getTwStocks } from '@/lib/api';
 
 const SHARES_PER_LOT = 1000;
 type QuantityUnit = 'lot' | 'share';
@@ -27,6 +27,7 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
   const [error, setError] = useState('');
   const [companyLookupState, setCompanyLookupState] = useState<'idle' | 'loading' | 'found' | 'not-found'>('idle');
   const [companyNameTouched, setCompanyNameTouched] = useState(false);
+  const [quickBuying, setQuickBuying] = useState(false);
 
   useEffect(() => {
     const code = stockCode.trim();
@@ -141,6 +142,51 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
     setCompanyLookupState('idle');
   }
 
+  // 快速購入：成本價自動帶最近收盤價（免手填），其餘驗證同一般送出
+  async function handleQuickBuy() {
+    setError('');
+    const code = stockCode.trim();
+    const quantityNum = parseFloat(quantity);
+    const lotsNum = quantityUnit === 'share' ? quantityNum / SHARES_PER_LOT : quantityNum;
+
+    if (!code) return setError('請輸入股票代碼');
+    if (!quantityNum || quantityNum <= 0) {
+      return setError(quantityUnit === 'share' ? '股數必須大於 0' : '張數必須大於 0');
+    }
+
+    setQuickBuying(true);
+    try {
+      const history = await getTwPriceHistory(code, 'D');
+      const last = history.candles?.[history.candles.length - 1];
+      if (!last || !last.close || history.is_mock) {
+        return setError('抓不到最近價格（代碼有誤或資料源暫時不可用），請手動輸入成本價');
+      }
+      const price = last.close;
+      setCost(String(price));
+      const finalCompanyName = companyName.trim() || (await resolveCompanyName(code));
+
+      onAdd({
+        stock_code: code,
+        company_name: finalCompanyName || code,
+        lots: lotsNum,
+        cost_per_share: price,
+        purchase_date: new Date().toISOString().slice(0, 10),
+      });
+
+      setStockCode('');
+      setCompanyName('');
+      setQuantity('1');
+      setQuantityUnit('lot');
+      setCost('');
+      setCompanyNameTouched(false);
+      setCompanyLookupState('idle');
+    } catch {
+      setError('抓不到最近價格（代碼有誤或資料源暫時不可用），請手動輸入成本價');
+    } finally {
+      setQuickBuying(false);
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -239,12 +285,23 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
         <p className="text-sm text-red-500">{error}</p>
       )}
 
-      <button
-        type="submit"
-        className="rounded-full bg-gradient-to-r from-pink-500 to-rose-500 px-6 py-2 text-sm font-semibold text-white shadow-md hover:from-pink-600 hover:to-rose-600 active:from-pink-700 active:to-rose-700 transition-all"
-      >
-        💖 加入寶貝清單
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          className="rounded-full bg-gradient-to-r from-pink-500 to-rose-500 px-6 py-2 text-sm font-semibold text-white shadow-md hover:from-pink-600 hover:to-rose-600 active:from-pink-700 active:to-rose-700 transition-all"
+        >
+          💖 加入寶貝清單
+        </button>
+        <button
+          type="button"
+          onClick={handleQuickBuy}
+          disabled={quickBuying}
+          title="成本價自動帶入最近收盤價、日期帶今天，其餘欄位照上方輸入"
+          className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-6 py-2 text-sm font-semibold text-white shadow-md transition-all hover:from-amber-500 hover:to-orange-600 active:from-amber-600 active:to-orange-700 disabled:cursor-wait disabled:opacity-60"
+        >
+          {quickBuying ? '⏳ 抓價格中…' : '⚡ 快速購入（最近價格）'}
+        </button>
+      </div>
     </form>
   );
 }
