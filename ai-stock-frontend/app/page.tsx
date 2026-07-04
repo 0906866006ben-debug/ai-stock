@@ -34,8 +34,9 @@ import EntryContextCard from './components/EntryContextCard';
 import BoldPlanView from './components/BoldPlanView';
 import MarketHeatmapView from './components/MarketHeatmapView';
 import DailyOpportunitiesView from './components/DailyOpportunitiesView';
+import BacktestDashboardView from './components/BacktestDashboardView';
 
-type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap' | 'opportunities';
+type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap' | 'opportunities' | 'backtest-dashboard';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_SIM_POSITIONS = 'stockAssistant.simPositions';
@@ -64,6 +65,7 @@ const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'add-position', label: '加新寶貝', icon: '🌷' },
   { page: 'bold-plan', label: '大膽的計畫', icon: '🧪' },
   { page: 'market-heatmap', label: '板塊熱力圖', icon: '🗺️' },
+  { page: 'backtest-dashboard', label: '回測儀表板', icon: '📊' },
 ];
 
 function Sidebar({
@@ -797,6 +799,9 @@ export default function DashboardPage() {
             {page === 'opportunities' && (
               <DailyOpportunitiesView onSelect={(code) => goAnalyze(code, code)} />
             )}
+
+            {/* ── Backtest dashboard (opps_v2 events.csv, aggregated offline) ── */}
+            {page === 'backtest-dashboard' && <BacktestDashboardView />}
 
             {/* ── Portfolio ── */}
             {page === 'portfolio' && (
