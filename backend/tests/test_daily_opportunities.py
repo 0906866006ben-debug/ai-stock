@@ -2,8 +2,9 @@
 
 The endpoint fans out to several async fetchers and one sync industry map; we
 patch those seams so the test is deterministic and offline. Focus: (i) output
-carries only long + short buckets, (ii) financials are excluded, (iii) long
-grading thresholds, (iv) short signals attach to long candidates, (v) no_data.
+carries long + mid + short buckets (mid = CANSLIM 領導股快照, unvalidated 觀察名單),
+(ii) financials are excluded, (iii) long grading thresholds, (iv) short signals
+attach to long candidates, (v) no_data.
 """
 from __future__ import annotations
 
@@ -76,12 +77,17 @@ def _patch_sources(monkeypatch, quotes=None):
     monkeypatch.setattr(opp, "_stock_info_map", lambda: _INDUSTRY)
 
 
-async def test_buckets_are_long_and_short_only(monkeypatch):
+async def test_buckets_are_long_mid_short(monkeypatch):
+    """mid（CANSLIM 領導股）於 2026-07-04 以快照制重新加入——未達驗證門檻的觀察名單。"""
     _patch_sources(monkeypatch)
     res = await opp.get_daily_opportunities()
     assert res["status"] == "ok"
-    assert set(res["buckets"].keys()) == {"long", "short"}
-    assert "mid" not in res["buckets"]
+    assert set(res["buckets"].keys()) == {"long", "mid", "short"}
+    for it in res["buckets"]["mid"]:
+        assert it["grade"] in {"S", "A", "B"}
+        assert "快照" in it["basis"]  # 每項標示快照日期（誠實資料契約）
+    # 未達驗證門檻的標註必須存在於 notices
+    assert any("未達驗證門檻" in n for n in res["notices"])
 
 
 async def test_financials_excluded(monkeypatch):

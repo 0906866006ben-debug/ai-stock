@@ -17,7 +17,8 @@ interface Opportunities {
   date: string;
   universe_total?: number;
   buyable_count?: number;
-  buckets?: { long: OppItem[]; short: OppItem[] };
+  buckets?: { long: OppItem[]; short: OppItem[]; mid?: OppItem[] };
+  mid_meta?: { as_of?: string; regime_on?: boolean; stale?: boolean };
   notices?: string[];
 }
 
@@ -30,11 +31,17 @@ const GRADE_STYLE: Record<string, string> = {
   C: 'bg-zinc-400 text-white',
 };
 
-const BUCKETS: { key: 'long' | 'short'; title: string; desc: string }[] = [
+const BUCKETS: { key: 'long' | 'mid' | 'short'; title: string; desc: string; unvalidated?: boolean }[] = [
   {
     key: 'long',
     title: '🏦 長線價值桶（6–12 個月+）',
     desc: '價值綜合分位（益本比／殖利率／PBR）＋ 營收成長為正。已排除金融保險與存託憑證。',
+  },
+  {
+    key: 'mid',
+    title: '🚀 中線桶（CANSLIM 領導股，1–3 個月）',
+    desc: '貼近 252 日高點 × 月營收 YoY ≥10% 且加速 × 帶量 × 大盤在 100 日線上。回測訊號方向一致（10/10 年為正）但量薄（T+60 中位 +1.4%），未達事前註冊門檻 +2%，且逐事件對大盤為負。',
+    unvalidated: true,
   },
   {
     key: 'short',
@@ -101,14 +108,28 @@ export default function DailyOpportunitiesView({ onSelect }: { onSelect?: (code:
       )}
 
       {data?.buckets &&
-        BUCKETS.map(({ key, title, desc }) => {
+        BUCKETS.map(({ key, title, desc, unvalidated }) => {
           const items = data.buckets?.[key] ?? [];
+          if (key === 'mid' && items.length === 0) return null;
           return (
             <section
               key={key}
               className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
             >
-              <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-100">{title}</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-100">{title}</h3>
+                {unvalidated && (
+                  <span className="rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    未達驗證門檻——觀察名單
+                  </span>
+                )}
+                {key === 'mid' && data.mid_meta?.as_of && (
+                  <span className="text-[10px] text-zinc-400">
+                    快照 {data.mid_meta.as_of}
+                    {data.mid_meta.stale ? '（已過期，判讀請以快照日為準）' : ''}
+                  </span>
+                )}
+              </div>
               <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{desc}</p>
 
               {items.length === 0 ? (

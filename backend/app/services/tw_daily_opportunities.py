@@ -26,8 +26,10 @@ Honesty contract:
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 
@@ -50,6 +52,18 @@ MIN_TURNOVER = 30_000_000  # 日成交值 3,000 萬
 EXCLUDED_INDUSTRIES = {"金融保險", "金融業", "存託憑證"}
 
 LONG_SHORTLIST = 60
+
+# 中線桶（CANSLIM 領導股）快照：本機正典資料庫計算、隨 repo 部署（雲端無正典 DB）。
+# 訊號=experiments_ledger Iteration 4；該回測 FAIL（T+60 excu +1.4% 未達 +2% 門檻、
+# 逐事件輸 TAIEX）→ 本桶僅為「條件觀察名單」，端點必須攜帶誠實標註。
+_LEADER_SNAPSHOT = Path(__file__).resolve().parents[2] / "data" / "leader_snapshot.json"
+
+
+def _load_leader_snapshot() -> dict | None:
+    try:
+        return json.loads(_LEADER_SNAPSHOT.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 async def get_daily_opportunities() -> dict:
@@ -128,6 +142,32 @@ async def get_daily_opportunities() -> dict:
                     "from_bucket": "long", "triggers": triggers,
                 }))
 
+        # ── 中線桶（CANSLIM 領導股，快照制；未達驗證門檻的觀察名單）──
+        mid_items = []
+        mid_meta: dict = {}
+        snap = _load_leader_snapshot()
+        if snap and snap.get("items"):
+            stale_days = (date.today() - date.fromisoformat(snap["as_of"])).days
+            mid_meta = {
+                "as_of": snap["as_of"],
+                "regime_on": snap.get("regime_on"),
+                "stale": stale_days > 7,
+            }
+            for it in snap["items"]:
+                sid = it["stock_id"]
+                live = buyable.get(sid) or {}
+                info = info_map.get(sid) or {}
+                mid_items.append({
+                    "stock_id": sid,
+                    "name": live.get("name") or info.get("n") or sid,
+                    "close": live.get("close") or it["close"],
+                    "change_pct": live.get("change_pct"),
+                    "industry": live.get("industry") or info.get("i") or "",
+                    "grade": it["grade"],
+                    "basis": it["basis"] + f"（快照 {snap['as_of']}）",
+                    "metrics": it["metrics"],
+                })
+
     result = {
         "status": "ok",
         "date": today,
@@ -136,14 +176,20 @@ async def get_daily_opportunities() -> dict:
         "buyable_count": len(buyable),
         "buckets": {
             "long": long_items[:20],
+            "mid": mid_items[:20],
             "short": short_items[:15],
         },
+        "mid_meta": mid_meta,
         "strategy_basis": "Docs/research/tw_screening_strategy_full_v2_2026-07-02.md；驗證：Docs/backtest/experiments_ledger.md Iteration 1b/2",
         "notices": [
             "本清單為長線價值選股（價值綜合分位 × 營收成長為正）符合條件的候選觀察名單與支持數據，非投資建議。",
             "選股力已回測（vs 可買池中位、次日開盤進場、扣 0.585% 成本）：開發期 2012-21 長線 A 級 T+250 約 +4.4%、80% 正年度；樣本外 2022-26 約 +2.6%、60% 正年度（5 年中 3 年）。",
             "已稽核無前視／資料洩漏，但下市樣本覆蓋不全與未還原除息使數字為「輕微高估」，且近年（2025-26）走弱、樣本偏小——不可視為已證實的獲利能力。",
             "短線區為長線候選中出現的進場時點觀察訊號（營收創高公告窗、外資大額買超），非獨立策略。",
+            "中線桶（CANSLIM 領導股：貼近 252 日高點 × 月營收加速 × 帶量 × 大盤在 100 日線上）為條件觀察名單："
+            "回測（2012-21，n=5,561）T+60 選股力中位 +1.4% 未達事前註冊門檻 +2%（10/10 年為正但量薄），"
+            "且逐事件對市值加權大盤為負——未達驗證門檻、非已驗證選股力，分級 S/A/B 亦未經分級別驗證。",
+            "中線桶以本機資料快照計算（見各項『快照』日期），非即時；快照過舊時請以其日期判讀。",
             "MVP 覆蓋範圍：僅上市（TWSE）個股，已排除金融保險與存託憑證。",
             "本分析僅供參考，不構成投資建議。",
         ],

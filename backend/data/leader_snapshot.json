@@ -1,0 +1,248 @@
+{
+ "as_of": "2026-07-03",
+ "generated_at": "2026-07-04T08:26:22.306805+00:00",
+ "regime_on": true,
+ "items": [
+  {
+   "stock_id": "2383",
+   "close": 6080.0,
+   "grade": "S",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +93.6% 且高於前月（+56.6%）；當日量能 1.5x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 93.62,
+    "revenue_yoy_prev": 56.63,
+    "volume_ratio_20d": 1.55
+   }
+  },
+  {
+   "stock_id": "1708",
+   "close": 60.7,
+   "grade": "S",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +42.0% 且高於前月（+5.4%）；當日量能 2.2x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 42.0,
+    "revenue_yoy_prev": 5.36,
+    "volume_ratio_20d": 2.21
+   }
+  },
+  {
+   "stock_id": "1326",
+   "close": 68.0,
+   "grade": "A",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +28.2% 且高於前月（+21.6%）；當日量能 2.5x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 28.23,
+    "revenue_yoy_prev": 21.56,
+    "volume_ratio_20d": 2.55
+   }
+  },
+  {
+   "stock_id": "1409",
+   "close": 31.0,
+   "grade": "A",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +25.1% 且高於前月（+4.8%）；當日量能 2.8x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 25.05,
+    "revenue_yoy_prev": 4.84,
+    "volume_ratio_20d": 2.83
+   }
+  },
+  {
+   "stock_id": "2428",
+   "close": 342.0,
+   "grade": "A",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +19.3% 且高於前月（+11.3%）；當日量能 1.7x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 19.35,
+    "revenue_yoy_prev": 11.26,
+    "volume_ratio_20d": 1.68
+   }
+  },
+  {
+   "stock_id": "2103",
+   "close": 23.5,
+   "grade": "A",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +19.0% 且高於前月（+4.2%）；當日量能 4.0x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 18.98,
+    "revenue_yoy_prev": 4.15,
+    "volume_ratio_20d": 4.02
+   }
+  },
+  {
+   "stock_id": "2332",
+   "close": 20.0,
+   "grade": "A",
+   "basis": "收盤位於 252 日高點 100%；月營收 YoY +18.5% 且高於前月（+5.2%）；當日量能 2.5x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.0025,
+    "revenue_yoy": 18.53,
+    "revenue_yoy_prev": 5.17,
+    "volume_ratio_20d": 2.45
+   }
+  },
+  {
+   "stock_id": "1301",
+   "close": 62.1,
+   "grade": "A",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +13.3% 且高於前月（+1.5%）；當日量能 3.5x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 13.31,
+    "revenue_yoy_prev": 1.53,
+    "volume_ratio_20d": 3.51
+   }
+  },
+  {
+   "stock_id": "1717",
+   "close": 81.6,
+   "grade": "A",
+   "basis": "收盤位於 252 日高點 97%；月營收 YoY +13.0% 且高於前月（+5.4%）；當日量能 4.7x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.0343,
+    "revenue_yoy": 12.99,
+    "revenue_yoy_prev": 5.38,
+    "volume_ratio_20d": 4.73
+   }
+  },
+  {
+   "stock_id": "1710",
+   "close": 18.85,
+   "grade": "A",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +12.9% 且高於前月（+4.0%）；當日量能 3.2x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 12.9,
+    "revenue_yoy_prev": 3.98,
+    "volume_ratio_20d": 3.24
+   }
+  },
+  {
+   "stock_id": "2404",
+   "close": 1350.0,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 97%；月營收 YoY +102.2% 且高於前月（+100.6%）；當日量能 0.4x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.0253,
+    "revenue_yoy": 102.23,
+    "revenue_yoy_prev": 100.58,
+    "volume_ratio_20d": 0.4
+   }
+  },
+  {
+   "stock_id": "2347",
+   "close": 94.8,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 100%；月營收 YoY +84.4% 且高於前月（+64.7%）；當日量能 0.9x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.0021,
+    "revenue_yoy": 84.41,
+    "revenue_yoy_prev": 64.69,
+    "volume_ratio_20d": 0.95
+   }
+  },
+  {
+   "stock_id": "2305",
+   "close": 38.8,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 100%；月營收 YoY +81.1% 且高於前月（+74.9%）；當日量能 0.2x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.0026,
+    "revenue_yoy": 81.07,
+    "revenue_yoy_prev": 74.93,
+    "volume_ratio_20d": 0.19
+   }
+  },
+  {
+   "stock_id": "2059",
+   "close": 8000.0,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +79.1% 且高於前月（+38.9%）；當日量能 0.5x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 79.14,
+    "revenue_yoy_prev": 38.87,
+    "volume_ratio_20d": 0.54
+   }
+  },
+  {
+   "stock_id": "1714",
+   "close": 22.75,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +71.7% 且高於前月（+43.0%）；當日量能 0.5x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 71.71,
+    "revenue_yoy_prev": 42.95,
+    "volume_ratio_20d": 0.45
+   }
+  },
+  {
+   "stock_id": "2460",
+   "close": 38.75,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 96%；月營收 YoY +57.6% 且高於前月（+50.1%）；當日量能 0.7x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.042,
+    "revenue_yoy": 57.62,
+    "revenue_yoy_prev": 50.09,
+    "volume_ratio_20d": 0.68
+   }
+  },
+  {
+   "stock_id": "2345",
+   "close": 2735.0,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 99%；月營收 YoY +53.9% 且高於前月（+44.4%）；當日量能 0.9x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.0055,
+    "revenue_yoy": 53.87,
+    "revenue_yoy_prev": 44.43,
+    "volume_ratio_20d": 0.86
+   }
+  },
+  {
+   "stock_id": "1342",
+   "close": 115.5,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 98%；月營收 YoY +44.5% 且高於前月（+31.7%）；當日量能 0.5x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.017,
+    "revenue_yoy": 44.52,
+    "revenue_yoy_prev": 31.74,
+    "volume_ratio_20d": 0.47
+   }
+  },
+  {
+   "stock_id": "2395",
+   "close": 521.0,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 100%；月營收 YoY +34.6% 且高於前月（+21.8%）；當日量能 0.7x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": -0.0019,
+    "revenue_yoy": 34.61,
+    "revenue_yoy_prev": 21.75,
+    "volume_ratio_20d": 0.67
+   }
+  },
+  {
+   "stock_id": "1303",
+   "close": 197.0,
+   "grade": "B",
+   "basis": "收盤位於 252 日高點 100%（創高）；月營收 YoY +19.4% 且高於前月（+18.1%）；當日量能 0.5x 20日均量",
+   "metrics": {
+    "dist_to_252d_high": 0.0,
+    "revenue_yoy": 19.44,
+    "revenue_yoy_prev": 18.05,
+    "volume_ratio_20d": 0.51
+   }
+  }
+ ],
+ "n_qualified": 22
+}
