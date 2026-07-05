@@ -9,6 +9,7 @@ interface OppItem {
   change_pct?: number | null;
   industry?: string;
   grade: 'S' | 'A' | 'B' | 'C';
+  radar?: boolean;
   basis: string;
   metrics: Record<string, unknown>;
 }
@@ -54,7 +55,7 @@ const BUCKETS: { key: 'long' | 'mid' | 'short'; title: string; desc: string; unv
   {
     key: 'mid',
     title: '🚀 中線桶（CANSLIM 領導股，1–3 個月）',
-    desc: '貼近 252 日高點 × 月營收 YoY ≥10% 且加速 × 帶量 × 大盤在 100 日線上。回測訊號方向一致（10/10 年為正）但量薄（T+60 中位 +1.4%），未達事前註冊門檻 +2%，且逐事件對大盤為負。',
+    desc: '貼近 252 日高點 × 月營收 YoY ≥10% 且加速 × 帶量 × 大盤在 100 日線上。回測訊號方向一致（10/10 年為正）但量薄（T+60 中位 +1.4%），未達事前註冊門檻 +2%，且逐事件對大盤為負。🔥 標記＝近 5 日含接近漲停的單日漲幅（飆股觀察切片）：此類股票學術上平均後期報酬較低（MAX 效應），波動與風險最高，僅供觀察。',
     unvalidated: true,
   },
   {
@@ -217,6 +218,11 @@ export default function DailyOpportunitiesView({ onSelect }: { onSelect?: (code:
                           <td className="py-2 pr-3">
                             <span className="font-semibold text-zinc-800 dark:text-zinc-100">{it.stock_id}</span>{' '}
                             <span className="text-zinc-600 dark:text-zinc-300">{it.name}</span>
+                            {it.radar ? (
+                              <span title="飆股觀察切片：近 5 日含接近漲停的單日漲幅；MAX 效應警示——此類平均後期報酬較低，風險最高">
+                                {' '}🔥
+                              </span>
+                            ) : null}
                             {it.industry ? (
                               <span className="ml-1 text-[10px] text-zinc-400">{it.industry}</span>
                             ) : null}

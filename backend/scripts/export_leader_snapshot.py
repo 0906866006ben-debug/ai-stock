@@ -97,6 +97,12 @@ def main() -> None:
         avg20_vol = float(gpx.volume.iloc[-21:-1].mean() or 0)
         vol_ok = avg20_vol > 0 and vol >= 1.5 * avg20_vol
         at_high = close >= hi252
+        sma20 = float(gpx.close.tail(20).mean())
+        # 飆股雷達：近 5 日出現接近漲停的單日漲幅（>=9%）——純觀察切片，未驗證，
+        # 且與 MAX 效應（樂透股平均後期報酬較低）正面衝突，前端必須帶警語。
+        last5_ret = gpx.close.pct_change().tail(5)
+        max5 = float(last5_ret.max()) if len(last5_ret) else 0.0
+        radar = max5 >= 0.09
         if not regime_on:
             grade = "B"  # 大盤閘關閉 → 一律觀察級
         elif vol_ok and at_high and r.yoy >= 30:
@@ -106,11 +112,12 @@ def main() -> None:
         else:
             grade = "B"
         items.append({
-            "stock_id": sid, "close": close, "grade": grade,
+            "stock_id": sid, "close": close, "grade": grade, "radar": radar,
             "basis": (
                 f"收盤位於 252 日高點 {close / hi252:.0%}"
                 f"{'（創高）' if at_high else ''}；月營收 YoY {r.yoy:+.1f}% 且高於前月"
                 f"（{r.yoy_prev:+.1f}%）；當日量能 {vol / avg20_vol:.1f}x 20日均量"
+                + (f"；近5日含單日 {max5:+.0%} 漲幅" if radar else "")
                 if avg20_vol > 0 else "量能資料不足"
             ),
             "metrics": {
@@ -118,6 +125,9 @@ def main() -> None:
                 "revenue_yoy": round(float(r.yoy), 2),
                 "revenue_yoy_prev": round(float(r.yoy_prev), 2),
                 "volume_ratio_20d": round(vol / avg20_vol, 2) if avg20_vol > 0 else None,
+                "sma20": round(sma20, 2),
+                "dist_to_sma20": round(close / sma20 - 1, 4) if sma20 else None,
+                "max_gain_5d": round(max5, 4),
             },
         })
 

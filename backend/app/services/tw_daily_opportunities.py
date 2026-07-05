@@ -176,6 +176,7 @@ async def get_daily_opportunities() -> dict:
                     "change_pct": live.get("change_pct"),
                     "industry": live.get("industry") or info.get("i") or "",
                     "grade": it["grade"],
+                    "radar": bool(it.get("radar")),
                     "basis": it["basis"] + f"（快照 {snap['as_of']}）",
                     "metrics": it["metrics"],
                 })
