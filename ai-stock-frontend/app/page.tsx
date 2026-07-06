@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  analyzeStock, analyzeTW, getCompetitors, getTwPriceHistory, syncTelegramWatchlist,
+  analyzeStock, analyzeTW, getCompetitors, getTwPriceHistory, getTwRealtimeQuotes, syncTelegramWatchlist,
   StockAnalysisResponse,
 } from '@/lib/api';
 import {
@@ -47,10 +47,19 @@ const STORAGE_RECENTS = 'stockAssistant.recents';
 
 interface FavoriteItem { code: string; name: string }
 
-// 韌性抓價:分批(免費層後端 + FinMind 一次太多會被打掉)、失敗的自動重試一次。
-// 冷啟動時第一批會喚醒後端,重試批多半就成功。回傳成功的 code→現價 對照與失敗數。
+// 韌性抓現價:先用證交所 MIS 盤中即時報價(一次多檔、盤中會動);缺的才退回
+// FinMind 日線收盤(分批+重試,冷啟動也穩)。回傳 code→現價 對照與失敗數。
 async function fetchTwPricesResilient(codes: string[]): Promise<{ prices: Map<string, number>; failed: number }> {
   const prices = new Map<string, number>();
+  // 1) 即時報價(單次呼叫;失敗不致命,直接進日線退路)
+  try {
+    const quotes = await getTwRealtimeQuotes(codes);
+    for (const [code, q] of Object.entries(quotes)) {
+      if (q && typeof q.price === 'number' && q.price > 0) prices.set(code, q.price);
+    }
+  } catch { /* 進日線退路 */ }
+
+  // 2) 即時報價沒給到的,退回日線收盤(分批+重試一次)
   const BATCH = 6;
   async function pass(list: string[]): Promise<string[]> {
     const stillFailed: string[] = [];
@@ -71,12 +80,15 @@ async function fetchTwPricesResilient(codes: string[]): Promise<{ prices: Map<st
     }
     return stillFailed;
   }
-  let failedCodes = await pass(codes);
-  if (failedCodes.length > 0) {
-    await new Promise((res) => setTimeout(res, 1500)); // 給冷啟動的後端一點時間
-    failedCodes = await pass(failedCodes);
+  let missing = codes.filter((c) => !prices.has(c));
+  if (missing.length > 0) {
+    missing = await pass(missing);
+    if (missing.length > 0) {
+      await new Promise((res) => setTimeout(res, 1500)); // 給冷啟動的後端一點時間
+      missing = await pass(missing);
+    }
   }
-  return { prices, failed: failedCodes.length };
+  return { prices, failed: missing.length };
 }
 
 function initialPageFromUrl(): Page {

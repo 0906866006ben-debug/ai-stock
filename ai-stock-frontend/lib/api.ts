@@ -217,6 +217,18 @@ export async function getTwPriceHistory(
   return data;
 }
 
+export interface RealtimeQuote { price: number; prev_close: number | null; is_intraday: boolean }
+
+/** 證交所 MIS 盤中即時報價（一次多檔）；盤後/無成交回昨收。失敗回空物件。 */
+export async function getTwRealtimeQuotes(codes: string[]): Promise<Record<string, RealtimeQuote>> {
+  const list = codes.map((c) => c.trim()).filter((c) => /^\d{4,6}$/.test(c));
+  if (list.length === 0) return {};
+  const { data } = await axios.get<{ status: string; quotes: Record<string, RealtimeQuote> }>(
+    `${API_BASE}/tw/realtime-quotes`, { params: { codes: list.join(',') } }
+  );
+  return data?.quotes ?? {};
+}
+
 export async function getUsPriceHistory(
   symbol: string,
   range: string = 'D',

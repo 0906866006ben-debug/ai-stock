@@ -881,6 +881,24 @@ async def us_price_history(
     )
 
 
+# ── Taiwan realtime quotes (盤中即時報價，供小金庫現價) ─────────────────────────
+
+@app.get("/tw/realtime-quotes")
+async def tw_realtime_quotes(
+    codes: str = Query(..., description="逗號分隔台股代碼，如 2330,2603"),
+) -> dict:
+    """證交所 MIS 官方即時報價；盤中回當下成交價，盤後/無成交回昨收。
+
+    誠實契約：只回成功解析者，失敗代碼缺席（呼叫端可退回日線）；永不 crash。
+    """
+    from .services.tw_realtime_quote import get_tw_realtime_quotes
+    wanted = [c for c in (codes or "").split(",") if c.strip().isdigit()][:50]
+    if not wanted:
+        return {"status": "ok", "quotes": {}}
+    quotes = await get_tw_realtime_quotes(wanted)
+    return {"status": "ok", "quotes": quotes}
+
+
 # ── Taiwan price history ──────────────────────────────────────────────────────
 
 @app.get("/tw/price-history", response_model=PriceHistoryResponse)
