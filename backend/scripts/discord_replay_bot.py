@@ -116,7 +116,12 @@ async def on_message(msg: discord.Message):
                     {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
                     {"type": "text", "text": (msg.content or "這單複盤")},
                 ]}])
-            text = resp.content[0].text + fetch_klines_note(resp.content[0].text)
+            # Claude 可能先回 thinking 區塊,取所有 text 區塊(不能假設 content[0])
+            answer = "".join(getattr(b, "text", "") for b in resp.content
+                             if getattr(b, "type", None) == "text").strip()
+            if not answer:
+                answer = "（模型未回傳文字內容,請再試一次)"
+            text = answer + fetch_klines_note(answer)
     except Exception as e:  # noqa: BLE001
         text = f"複盤失敗:{e}"
     # Discord 單則 2000 字上限 → 分段
