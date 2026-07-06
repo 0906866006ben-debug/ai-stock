@@ -486,10 +486,12 @@ export default function DashboardPage() {
   }
 
   const latestTwCandle = twResult?.chart_data?.[twResult.chart_data.length - 1] ?? null;
+  const onScreenPrice: number | null =
+    twResult?.current_price ?? latestTwCandle?.close ?? usResult?.current_price ?? null;
   const currentAnalyzedStock = twResult
-    ? { stock_code: twResult.symbol, company_name: twResult.company_name }
+    ? { stock_code: twResult.symbol, company_name: twResult.company_name, current_price: onScreenPrice }
     : usResult
-      ? { stock_code: usResult.symbol, company_name: usResult.company_name }
+      ? { stock_code: usResult.symbol, company_name: usResult.company_name, current_price: onScreenPrice }
       : null;
   // 把今日 AI 精選各買 1 張進練習持倉。manual=true（⚡按鈕）略過當日已執行標記；
   // 兩種模式都跳過已持有（重複推薦不再購買）。

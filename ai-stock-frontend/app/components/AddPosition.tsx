@@ -12,6 +12,7 @@ interface Props {
   currentAnalyzedStock?: {
     stock_code: string;
     company_name: string;
+    current_price?: number | null;
   } | null;
 }
 
@@ -156,12 +157,18 @@ export default function AddPosition({ onAdd, currentAnalyzedStock = null }: Prop
 
     setQuickBuying(true);
     try {
-      const history = await getTwPriceHistory(code, 'D');
-      const last = history.candles?.[history.candles.length - 1];
-      if (!last || !last.close || history.is_mock) {
-        return setError('抓不到最近價格（代碼有誤或資料源暫時不可用），請手動輸入成本價');
+      // 先用畫面上已載入的即時價（分析中的個股）——避免冷啟動時的第二次網路請求失敗。
+      let price: number | null = null;
+      if (currentAnalyzedStock && currentAnalyzedStock.stock_code === code && currentAnalyzedStock.current_price) {
+        price = currentAnalyzedStock.current_price;
+      } else {
+        const history = await getTwPriceHistory(code, 'D');
+        const last = history.candles?.[history.candles.length - 1];
+        if (last && last.close && !history.is_mock) price = last.close;
       }
-      const price = last.close;
+      if (!price) {
+        return setError('抓不到最近價格（後端喚醒中或代碼有誤），請稍候再試或手動輸入成本價');
+      }
       setCost(String(price));
       const finalCompanyName = companyName.trim() || (await resolveCompanyName(code));
 
