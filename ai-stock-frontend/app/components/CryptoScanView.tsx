@@ -12,7 +12,7 @@ interface ScanResp {
 }
 
 const REFRESH_SEC = 30;
-const kind = (t: string) => (t.includes('做空') ? 'down' : t.includes('做多') ? 'up' : 'anom');
+const kind = (t: string) => (t.includes('做空') ? 'down' : (t.includes('做多') || t.includes('追多')) ? 'up' : 'anom');
 const fmtPx = (p: number) => (p >= 1 ? p.toFixed(3) : p.toPrecision(4));
 const sgn = (v: number, d = 2) => (v > 0 ? '+' : '') + v.toFixed(d);
 
@@ -79,7 +79,7 @@ export default function CryptoScanView() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {([['all', '全部'], ['down', '🔻做空觀察'], ['up', '🔺做多觀察'], ['anom', '⚡純異常']] as const).map(([k, label]) => (
+        {([['all', '全部'], ['down', '🔻做空(超買擁擠)'], ['up', '🚀追多(軋空)'], ['anom', '⚡純異常']] as const).map(([k, label]) => (
           <button
             key={k}
             onClick={() => setFilter(k)}

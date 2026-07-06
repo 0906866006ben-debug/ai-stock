@@ -128,15 +128,15 @@ export async function GET(request: Request): Promise<Response> {
         tag = '🔻做空觀察(超買+擁擠多單)';
         if (price < e12 && prevBelow) tag += ' ★剛跌破EMA12';
         if (diverg) tag += ' ⚠空方背離';
-      } else if (r <= 32 && fr < 0) {
-        const qFund = clamp((0.5 - fr_pct) / 0.5);
-        const qOI = clamp(-oi_chg / 5);
-        const qExt = clamp(-ext_z / 2);
-        diverg = bullDiv;
-        quality = qFund * 40 + qOI * 35 + qExt * 25;
-        tag = '🔺做多觀察(超賣+擁擠空單)';
-        if (price > e12 && prevAbove) tag += ' ★剛站上EMA12';
-        if (diverg) tag += ' ⚠多方背離';
+      } else if (fr < 0 && vol_z >= 1.5 && price > e12 && closes[closes.length - 1] > closes[closes.length - 2]) {
+        // 負資費(空方擁擠)+ 放量 + 站上 EMA12 向上 = 軋空追多(動能),對稱於做空
+        const qFund = clamp((0.5 - fr_pct) / 0.5);   // 資費越負、空方越擁擠越高分
+        const qVol = clamp((vol_z - 1.5) / 3);       // 放量力道
+        const qBreak = clamp(ext_z / 1.5);           // 向上突破/延伸
+        diverg = false;
+        quality = qFund * 35 + qVol * 35 + qBreak * 30;
+        tag = '🚀軋空追多(負資費+放量突破)';
+        if (prevBelow && price > e12) tag += ' ★剛突破EMA12';
       }
       if (!tag || quality < minQ) return;
       rows.push({
