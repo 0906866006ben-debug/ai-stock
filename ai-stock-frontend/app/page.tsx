@@ -574,6 +574,35 @@ export default function DashboardPage() {
     }
   }
 
+  // 供 AI 精選區塊的「快速購買」按鈕直接呼叫：把已帶價的清單各約 1 萬元加入練習
+  // 持倉（已持有跳過）。回傳加入檔數與跳過檔數,讓按鈕就地顯示回饋。
+  function buyPicksList(items: { stock_id: string; name: string; price: number; date?: string }[]): { added: number; skipped: number } {
+    const held = new Set(simPositionsRef.current.map((p) => p.stock_code));
+    const additions: Position[] = [];
+    const names: string[] = [];
+    let skipped = 0;
+    const today = new Date().toISOString().slice(0, 10);
+    for (const it of items) {
+      if (held.has(it.stock_id) || !it.price || it.price <= 0) { skipped += 1; continue; }
+      const lots = Math.round((TARGET_POSITION_TWD / (it.price * 1000)) * 1000) / 1000;
+      if (lots <= 0) { skipped += 1; continue; }
+      held.add(it.stock_id);
+      additions.push({
+        id: `${Date.now()}-${Math.random()}`,
+        stock_code: it.stock_id, company_name: it.name,
+        lots, cost_per_share: it.price, purchase_date: it.date || today,
+      });
+      names.push(`${it.stock_id} ${it.name}`);
+    }
+    if (additions.length > 0) {
+      const next = [...simPositionsRef.current, ...additions];
+      saveSimPositions(next);
+      refreshSimPortfolioPrices(next);
+      setAutoFollowReport(`已各約 1 萬元加入練習持倉：${names.join('、')}`);
+    }
+    return { added: additions.length, skipped };
+  }
+
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-50 dark:from-pink-950/20 dark:via-zinc-950 dark:to-purple-950/20">
       <Sidebar
@@ -907,7 +936,7 @@ export default function DashboardPage() {
 
             {/* ── Daily opportunities (research-v2 three-bucket screen) ── */}
             {page === 'opportunities' && (
-              <DailyOpportunitiesView onSelect={(code) => goAnalyze(code, code)} />
+              <DailyOpportunitiesView onSelect={(code) => goAnalyze(code, code)} onBuyPicks={buyPicksList} />
             )}
 
             {/* ── Backtest dashboard (opps_v2 events.csv, aggregated offline) ── */}

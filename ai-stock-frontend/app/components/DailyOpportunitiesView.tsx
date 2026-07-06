@@ -73,10 +73,16 @@ function GradeChip({ grade }: { grade: string }) {
   );
 }
 
-export default function DailyOpportunitiesView({ onSelect }: { onSelect?: (code: string) => void }) {
+interface Props {
+  onSelect?: (code: string) => void;
+  onBuyPicks?: (items: { stock_id: string; name: string; price: number; date?: string }[]) => { added: number; skipped: number };
+}
+
+export default function DailyOpportunitiesView({ onSelect, onBuyPicks }: Props) {
   const [data, setData] = useState<Opportunities | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const [buyMsg, setBuyMsg] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -129,9 +135,38 @@ export default function DailyOpportunitiesView({ onSelect }: { onSelect?: (code:
             <span className="rounded-full bg-indigo-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
               AI 生成——僅依當日量化數據
             </span>
+            {onBuyPicks && (
+              <button
+                type="button"
+                onClick={() => {
+                  const closeMap = new Map<string, number>();
+                  for (const key of ['long', 'mid', 'short'] as const) {
+                    for (const it of data.buckets?.[key] ?? []) {
+                      if (typeof it.close === 'number' && it.close > 0) closeMap.set(it.stock_id, it.close);
+                    }
+                  }
+                  const items = (data.ai_picks?.picks ?? [])
+                    .map((p) => ({ stock_id: p.stock_id, name: p.name, price: closeMap.get(p.stock_id) ?? 0 }))
+                    .filter((x) => x.price > 0);
+                  const res = onBuyPicks(items);
+                  setBuyMsg(
+                    res.added > 0
+                      ? `✓ 已各約 1 萬元加入練習持倉 ${res.added} 檔${res.skipped ? `（${res.skipped} 檔已持有/無價，略過）` : ''}`
+                      : '皆已在練習持倉中或無可購入。'
+                  );
+                  setTimeout(() => setBuyMsg(''), 4000);
+                }}
+                className="ml-auto rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-xs font-semibold text-white shadow-sm hover:from-amber-500 hover:to-orange-600"
+              >
+                ⚡ 快速購買（各約1萬·練習）
+              </button>
+            )}
           </div>
           {data.ai_picks.market_read && (
             <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{data.ai_picks.market_read}</p>
+          )}
+          {buyMsg && (
+            <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">{buyMsg}</p>
           )}
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             {data.ai_picks.picks.map((p) => (
