@@ -47,6 +47,38 @@ const STORAGE_RECENTS = 'stockAssistant.recents';
 
 interface FavoriteItem { code: string; name: string }
 
+// 韌性抓價:分批(免費層後端 + FinMind 一次太多會被打掉)、失敗的自動重試一次。
+// 冷啟動時第一批會喚醒後端,重試批多半就成功。回傳成功的 code→現價 對照與失敗數。
+async function fetchTwPricesResilient(codes: string[]): Promise<{ prices: Map<string, number>; failed: number }> {
+  const prices = new Map<string, number>();
+  const BATCH = 6;
+  async function pass(list: string[]): Promise<string[]> {
+    const stillFailed: string[] = [];
+    for (let i = 0; i < list.length; i += BATCH) {
+      const batch = list.slice(i, i + BATCH);
+      const results = await Promise.allSettled(
+        batch.map(async (code) => {
+          const history = await getTwPriceHistory(code, 'D');
+          const latest = history.candles.at(-1);
+          if (!latest || typeof latest.close !== 'number') throw new Error('no close');
+          return [code, latest.close] as const;
+        })
+      );
+      results.forEach((r, j) => {
+        if (r.status === 'fulfilled') prices.set(r.value[0], r.value[1]);
+        else stillFailed.push(batch[j]);
+      });
+    }
+    return stillFailed;
+  }
+  let failedCodes = await pass(codes);
+  if (failedCodes.length > 0) {
+    await new Promise((res) => setTimeout(res, 1500)); // 給冷啟動的後端一點時間
+    failedCodes = await pass(failedCodes);
+  }
+  return { prices, failed: failedCodes.length };
+}
+
 function initialPageFromUrl(): Page {
   if (typeof window === 'undefined') return 'analysis';
   const requestedPage = new URLSearchParams(window.location.search).get('page');
@@ -199,26 +231,9 @@ export default function DashboardPage() {
     setPriceRefreshError(null);
 
     try {
-      const results = await Promise.allSettled(
-        codes.map(async (code) => {
-          const history = await getTwPriceHistory(code, 'D');
-          const latest = history.candles.at(-1);
-          if (!latest || typeof latest.close !== 'number') return null;
-          return [code, latest.close] as const;
-        })
-      );
+      const { prices: priceMap, failed } = await fetchTwPricesResilient(codes);
 
       if (portfolioRefreshSeq.current !== seq) return;
-
-      const priceMap = new Map<string, number>();
-      let failed = 0;
-      results.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value) {
-          priceMap.set(result.value[0], result.value[1]);
-        } else {
-          failed += 1;
-        }
-      });
 
       if (priceMap.size > 0) {
         const updatedAt = new Date().toISOString();
@@ -267,26 +282,9 @@ export default function DashboardPage() {
     setSimPriceRefreshError(null);
 
     try {
-      const results = await Promise.allSettled(
-        codes.map(async (code) => {
-          const history = await getTwPriceHistory(code, 'D');
-          const latest = history.candles.at(-1);
-          if (!latest || typeof latest.close !== 'number') return null;
-          return [code, latest.close] as const;
-        })
-      );
+      const { prices: priceMap, failed } = await fetchTwPricesResilient(codes);
 
       if (simPortfolioRefreshSeq.current !== seq) return;
-
-      const priceMap = new Map<string, number>();
-      let failed = 0;
-      results.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value) {
-          priceMap.set(result.value[0], result.value[1]);
-        } else {
-          failed += 1;
-        }
-      });
 
       if (priceMap.size > 0) {
         const updatedAt = new Date().toISOString();
