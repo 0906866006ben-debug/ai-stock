@@ -42,32 +42,36 @@ async function jget(path: string): Promise<any> {
   return r.json();
 }
 
-// 一大根放量 + 實體收破 EMA20 偵測(非收針)。dir=1 突破(做多)、dir=-1 跌破(做空)。
+// 一大根放量 + 實體收破 EMA20 + 「下一根守住(沒收回均線)」回踩確認。
+// 突破根 = 倒數第二根(n-2),確認根 = 最後一根(n-1)。dir=1 突破(多)、dir=-1 跌破(空)。
 function bigBreak(kl: any[], dir: number, volMult: number, bodyMult: number):
-  { hit: boolean; body: number; vol: number } {
-  if (!Array.isArray(kl) || kl.length < 25) return { hit: false, body: 0, vol: 0 };
+  { hit: boolean; body: number; vol: number; held: boolean } {
+  if (!Array.isArray(kl) || kl.length < 26) return { hit: false, body: 0, vol: 0, held: false };
   const o = kl.map((c) => parseFloat(c[1])), h = kl.map((c) => parseFloat(c[2]));
   const lo = kl.map((c) => parseFloat(c[3])), cl = kl.map((c) => parseFloat(c[4]));
   const v = kl.map((c) => parseFloat(c[5]));
   const n = cl.length;
-  const e20 = emaLast(cl, 20);
-  const O = o[n - 1], H = h[n - 1], L = lo[n - 1], C = cl[n - 1], V = v[n - 1];
+  const bi = n - 2;                                  // 突破那根
+  const e20b = emaLast(cl.slice(0, bi + 1), 20);     // 突破當根的 EMA20
+  const e20c = emaLast(cl, 20);                       // 確認根(n-1)的 EMA20
+  const O = o[bi], H = h[bi], L = lo[bi], C = cl[bi], V = v[bi];
   const body = Math.abs(C - O), range = Math.max(H - L, 1e-12);
-  const bodies = []; for (let i = n - 21; i < n - 1; i++) bodies.push(Math.abs(cl[i] - o[i]));
+  const bodies = []; for (let i = bi - 20; i < bi; i++) bodies.push(Math.abs(cl[i] - o[i]));
   const avgBody = mean(bodies) || 1e-12;
-  const avgVol = mean(v.slice(n - 21, n - 1)) || 1e-12;
+  const avgVol = mean(v.slice(bi - 20, bi)) || 1e-12;
   const bodyMul = body / avgBody, volMul = V / avgVol;
-  const big = bodyMul >= bodyMult;                 // 一大根:實體 >= 均實體 bodyMult 倍
-  const loud = volMul >= volMult;                  // 放量
-  const closePos = (C - L) / range;                // 收盤在 K 棒的位置(0=最低,1=最高)
-  let hit = false;
+  const big = bodyMul >= bodyMult;                   // 一大根
+  const loud = volMul >= volMult;                    // 放量
+  const closePos = (C - L) / range;                  // 收盤在 K 棒位置
+  let broke = false, held = false;
   if (dir < 0) {
-    // 陰線、實體收破 EMA20、收在下 40%(非收針)
-    hit = big && loud && C < e20 && C < O && closePos <= 0.4;
+    broke = big && loud && C < e20b && C < O && closePos <= 0.4;  // 放量陰線實體跌破
+    held = cl[n - 1] < e20c;                                       // 確認根仍收在 EMA20 下(沒收回)
   } else {
-    hit = big && loud && C > e20 && C > O && closePos >= 0.6;
+    broke = big && loud && C > e20b && C > O && closePos >= 0.6;   // 放量陽線實體突破
+    held = cl[n - 1] > e20c;                                       // 確認根仍收在 EMA20 上
   }
-  return { hit, body: bodyMul, vol: volMul };
+  return { hit: broke && held, body: bodyMul, vol: volMul, held };
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -159,8 +163,8 @@ export async function GET(request: Request): Promise<Response> {
       if (b.hit) {
         row.triggered = true;
         row.tag = dirOf[row.sym] < 0
-          ? `🔻做空 ★${trigTf}一大根放量跌破EMA20`
-          : `🔺做多 ★${trigTf}一大根放量突破EMA20`;
+          ? `🔻做空 ★${trigTf}放量實體跌破EMA20+守住`
+          : `🔺做多 ★${trigTf}放量實體突破EMA20+守住`;
       }
     }));
 

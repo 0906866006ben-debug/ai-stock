@@ -123,7 +123,7 @@ export default function CryptoScanView() {
           </button>
         </div>
         <p className="mt-1 text-xs text-zinc-400">
-          設定 15m(超買/超賣×資費擁擠)· 觸發 1m 一大根放量實體破 EMA20(非收針)· ★=已觸發 · Binance 永續
+          設定 15m(超買/超賣×資費擁擠)· 觸發 1m 放量實體破 EMA20 + 下一根守住(回踩確認,非收針)· ★=已觸發 · Binance 永續
           {updatedAt ? ` · 更新 ${updatedAt}` : ''}
           {rows.length ? ` · 🔻${counts.down} 🔺${counts.up} ⚡${counts.anom}` : ''}
         </p>
@@ -163,8 +163,9 @@ export default function CryptoScanView() {
             rows={[['≥2.0', '爆量,真有人砸/搶✅✅'], ['1.5–2.0', '合格放量✅'], ['1.0–1.5', '量普通,沒放量❌'], ['<1.0', '縮量,假訊號嫌疑❌']]}
           />
           <p className="rounded-lg bg-cyan-950/40 px-3 py-2 text-cyan-200">
-            🎯 <b>可以做單</b> = 設定類極端(RSI超買/賣 + 資費分位≥90或≤10 + 延伸z≥2)<b>且</b> 觸發類兩個都 ≥1.5(1m實體≥1.5 且 1m量≥1.5)。
-            只有設定→盯著等;只有觸發→可能雜訊;兩邊到→★。
+            🎯 <b>可以做單(★)</b> = 設定類極端(RSI超買/賣 + 資費分位≥90或≤10 + 延伸z≥2)<b>且</b> 觸發成立:
+            1m一大根(實體≥1.5)+ 放量(≥1.5)+ 實體收破EMA20 + <b className="text-cyan-300">下一根守住沒收回(回踩確認)</b>。
+            只有設定→盯著等;破線但下一根收回→假訊號已濾掉;四關全過→★。
           </p>
         </div>
       </details>
