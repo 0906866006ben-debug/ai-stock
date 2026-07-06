@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 interface Row {
-  sym: string; price: number; rsi: number; fr: number; dist_e12: number;
-  ret_z: number; chg24: number; tag: string; strength: number;
+  sym: string; price: number; rsi: number; fr: number; fr_pct: number;
+  dist_e12: number; ext_z: number; vol_z: number; oi_chg: number;
+  diverg: boolean; chg24: number; tag: string; quality: number;
 }
 interface ScanResp {
   status: string; generated_at?: string; tf?: string; rows?: Row[]; detail?: string;
@@ -50,7 +51,7 @@ export default function CryptoScanView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const rows = (data?.rows ?? []).slice().sort((a, b) => b.strength - a.strength);
+  const rows = (data?.rows ?? []).slice().sort((a, b) => b.quality - a.quality);
   const counts = { down: 0, up: 0, anom: 0 };
   rows.forEach((r) => { counts[kind(r.tag) as 'down' | 'up' | 'anom']++; });
   const shown = rows.filter((r) => filter === 'all' || kind(r.tag) === filter);
@@ -71,7 +72,7 @@ export default function CryptoScanView() {
           </button>
         </div>
         <p className="mt-1 text-xs text-zinc-400">
-          超買/超賣 × 價格異常 × 資費定位 · Binance USDT 永續（tf 15m）
+          極端資費 × OI擁擠 × 過度延伸 × 量能高潮 × RSI背離 · 綜合品質分排序 · Binance 永續
           {updatedAt ? ` · 更新 ${updatedAt}` : ''}
           {rows.length ? ` · 🔻${counts.down} 🔺${counts.up} ⚡${counts.anom}` : ''}
         </p>
@@ -116,16 +117,24 @@ export default function CryptoScanView() {
               <span className={`absolute left-0 top-0 h-full w-[3px] ${bar}`} />
               <div className="flex items-baseline gap-2">
                 <span className="text-base font-bold tracking-wide text-zinc-100">{r.sym.replace('USDT', '')}</span>
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                    r.quality >= 75 ? 'bg-fuchsia-600 text-white' : r.quality >= 65 ? 'bg-amber-500 text-black' : 'bg-zinc-700 text-zinc-200'
+                  }`}
+                  title="綜合品質分(資費極端度+OI擁擠+過度延伸+量能+翻頭+背離)"
+                >
+                  品質 {r.quality}
+                </span>
                 <span className="ml-auto font-mono text-sm tabular-nums text-zinc-400">{fmtPx(r.price)}</span>
               </div>
               <p className={`mt-1 text-xs font-semibold ${tagColor}`}>{r.tag}</p>
               <div className="mt-2 grid grid-cols-3 gap-1.5 font-mono text-xs tabular-nums">
                 <Metric k="RSI" v={r.rsi.toFixed(0)} cls={r.rsi >= 70 ? 'text-red-400' : r.rsi <= 30 ? 'text-emerald-400' : ''} />
-                <Metric k="資費%" v={sgn(r.fr, 3)} cls={r.fr >= 0 ? 'text-emerald-400' : 'text-red-400'} />
-                <Metric k="離EMA12" v={sgn(r.dist_e12, 1) + '%'} cls={r.dist_e12 >= 0 ? 'text-emerald-400' : 'text-red-400'} />
-                <Metric k="報酬z" v={sgn(r.ret_z, 1)} />
+                <Metric k="資費分位" v={r.fr_pct + '%'} cls={r.fr_pct >= 90 || r.fr_pct <= 10 ? 'text-fuchsia-400' : ''} />
+                <Metric k="OI變化" v={sgn(r.oi_chg, 1) + '%'} cls={r.oi_chg >= 0 ? 'text-emerald-400' : 'text-red-400'} />
+                <Metric k="延伸z" v={sgn(r.ext_z, 1)} cls={Math.abs(r.ext_z) >= 2 ? 'text-fuchsia-400' : ''} />
+                <Metric k="量能z" v={sgn(r.vol_z, 1)} cls={r.vol_z >= 2 ? 'text-fuchsia-400' : ''} />
                 <Metric k="24h%" v={sgn(r.chg24, 1) + '%'} cls={r.chg24 >= 0 ? 'text-emerald-400' : 'text-red-400'} />
-                <Metric k="強度" v={r.strength.toFixed(0)} />
               </div>
             </div>
           );
