@@ -35,8 +35,9 @@ import BoldPlanView from './components/BoldPlanView';
 import MarketHeatmapView from './components/MarketHeatmapView';
 import DailyOpportunitiesView from './components/DailyOpportunitiesView';
 import BacktestDashboardView from './components/BacktestDashboardView';
+import CryptoScanView from './components/CryptoScanView';
 
-type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap' | 'opportunities' | 'backtest-dashboard';
+type Page = 'analysis' | 'stock-analysis' | 'portfolio' | 'directory' | 'news' | 'calendar' | 'watchlist' | 'add-position' | 'bold-plan' | 'market-heatmap' | 'opportunities' | 'backtest-dashboard' | 'crypto-scan';
 const TW_RE = /^\d{4,6}$/;
 const STORAGE_POSITIONS = 'stockAssistant.positions';
 const STORAGE_SIM_POSITIONS = 'stockAssistant.simPositions';
@@ -113,6 +114,7 @@ const NAV: { page: Page; label: string; icon: string }[] = [
   { page: 'bold-plan', label: '大膽的計畫', icon: '🧪' },
   { page: 'market-heatmap', label: '板塊熱力圖', icon: '🗺️' },
   { page: 'backtest-dashboard', label: '回測儀表板', icon: '📊' },
+  { page: 'crypto-scan', label: '加密掃描', icon: '📡' },
 ];
 
 function Sidebar({
@@ -941,6 +943,8 @@ export default function DashboardPage() {
 
             {/* ── Backtest dashboard (opps_v2 events.csv, aggregated offline) ── */}
             {page === 'backtest-dashboard' && <BacktestDashboardView />}
+
+            {page === 'crypto-scan' && <CryptoScanView />}
 
             {/* ── Portfolio ── */}
             {page === 'portfolio' && (
