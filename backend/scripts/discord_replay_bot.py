@@ -17,10 +17,12 @@
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
 import re
+import time
 import urllib.request
 from pathlib import Path
 
@@ -39,6 +41,13 @@ TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 MODEL = os.getenv("BOT_AI_MODEL", "claude-sonnet-5")
 CHANNEL_ID = os.getenv("BOT_CHANNEL_ID")
 ai = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+# ── ★ 訊號自動推播設定 ──
+SIGNAL_CHANNEL_ID = int(os.getenv("SIGNAL_CHANNEL_ID", "1523771234230337657"))
+SCAN_URL = os.getenv("SCAN_URL", "https://ai-stock-rosy-eight.vercel.app/api/crypto-scan?minVol=15&minQ=45")
+SIGNAL_SIDE = os.getenv("SIGNAL_SIDE", "both")        # both / short / long
+COOLDOWN_MIN = int(os.getenv("SIGNAL_COOLDOWN_MIN", "30"))
+_last_alert: dict[str, float] = {}                    # sym -> 上次推播時間
 
 SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:多空鏡像=超買/超賣+放量實體破EMA20+資費(空要資費正、多要資費負);觸發=1分一大根放量實體收破EMA20(非收針);背離只是注意不是扳機;逆勢/搶跑是死因;出場目標要配進場框架。
 
@@ -85,9 +94,47 @@ def fetch_klines_note(text: str) -> str:
         return ""
 
 
+async def signal_loop():
+    """每分鐘打掃描 API,發現新的 ★ 觸發就推到訊號頻道(同幣冷卻,不洗版)。
+    不用 Anthropic token(只讀 Binance 免費資料)。"""
+    await bot.wait_until_ready()
+    ch = bot.get_channel(SIGNAL_CHANNEL_ID)
+    if ch is None:
+        print(f"⚠ 找不到訊號頻道 {SIGNAL_CHANNEL_ID}(bot 沒進那個群/沒權限?),訊號推播略過", flush=True)
+        return
+    print(f"🟢 ★訊號推播啟動 → #{getattr(ch, 'name', SIGNAL_CHANNEL_ID)}(每60s掃、同幣冷卻{COOLDOWN_MIN}分)", flush=True)
+    while not bot.is_closed():
+        try:
+            req = urllib.request.Request(SCAN_URL, headers={"User-Agent": "Mozilla/5.0"})
+            data = json.loads(urllib.request.urlopen(req, timeout=20).read())
+            rows = [r for r in data.get("rows", []) if r.get("triggered")]
+            now = time.time()
+            for r in rows:
+                is_short = "做空" in r["tag"]
+                if SIGNAL_SIDE == "short" and not is_short:
+                    continue
+                if SIGNAL_SIDE == "long" and is_short:
+                    continue
+                sym = r["sym"]
+                if now - _last_alert.get(sym, 0) < COOLDOWN_MIN * 60:
+                    continue
+                _last_alert[sym] = now
+                head = "🔻 做空訊號" if is_short else "🔺 做多訊號"
+                msg = (f"**{head}  {sym}**\n{r['tag'].split('★')[-1].strip() if '★' in r['tag'] else r['tag']}\n"
+                       f"品質{r['quality']} · 資費分位{r['fr_pct']}% · 1m實體{r['trig_body']}x · "
+                       f"1m量{r['trig_vol']}x · RSI{round(r['rsi'])} · 價{r['price']}")
+                await ch.send(msg)
+        except Exception as e:  # noqa: BLE001 網路波動不中斷
+            print(f"訊號掃描失敗:{e}", flush=True)
+        await asyncio.sleep(60)
+
+
 @bot.event
 async def on_ready():
     print(f"✓ Bot 上線:{bot.user}  模型={MODEL}", flush=True)
+    if not getattr(bot, "_signal_started", False):
+        bot._signal_started = True  # type: ignore[attr-defined]
+        bot.loop.create_task(signal_loop())
 
 
 @bot.event
