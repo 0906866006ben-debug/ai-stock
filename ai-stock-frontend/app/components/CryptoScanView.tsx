@@ -24,20 +24,62 @@ export default function CryptoScanView() {
   const [filter, setFilter] = useState<'all' | 'down' | 'up' | 'anom'>('all');
   const [countdown, setCountdown] = useState(REFRESH_SEC);
   const [updatedAt, setUpdatedAt] = useState<string>('');
+  const [alertOn, setAlertOn] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevTrig = useRef<Set<string>>(new Set());
+  const alertOnRef = useRef(false);
+
+  // 響一聲(WebAudio,不需檔案)
+  function beep() {
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AC();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = 880;
+      o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      o.start(); o.stop(ctx.currentTime + 0.5);
+    } catch { /* 靜音失敗不致命 */ }
+  }
+
+  function fireAlert(newHits: Row[]) {
+    beep();
+    const names = newHits.map((r) => `${r.sym.replace('USDT', '')} ${r.tag.includes('做空') ? '做空' : '做多'}`).join('、');
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      new Notification('📡 加密觸發 ★', { body: names, tag: 'crypto-scan' });
+    }
+  }
 
   async function load() {
     try {
       const r = await fetch('/api/crypto-scan?tf=15m&minVol=15', { cache: 'no-store' });
       const d: ScanResp = await r.json();
       if (d.status !== 'ok') { setErr(d.detail || '掃描暫時失敗(可能為交易所地區限制)'); }
-      else { setData(d); setErr(''); setUpdatedAt(new Date().toLocaleTimeString('zh-TW')); }
+      else {
+        setData(d); setErr(''); setUpdatedAt(new Date().toLocaleTimeString('zh-TW'));
+        // 偵測「新出現」的 ★ 觸發 → 響鈴+通知(只有開啟通知後才響)
+        const nowTrig = (d.rows || []).filter((x) => x.triggered);
+        const fresh = nowTrig.filter((x) => !prevTrig.current.has(x.sym));
+        if (alertOnRef.current && fresh.length > 0) fireAlert(fresh);
+        prevTrig.current = new Set(nowTrig.map((x) => x.sym));
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : '載入失敗');
     } finally {
       setLoading(false);
       setCountdown(REFRESH_SEC);
     }
+  }
+
+  async function enableAlerts() {
+    if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+      try { await Notification.requestPermission(); } catch { /* ignore */ }
+    }
+    beep(); // 順便解鎖手機的音訊播放權限
+    alertOnRef.current = true;
+    setAlertOn(true);
   }
 
   useEffect(() => {
@@ -66,8 +108,16 @@ export default function CryptoScanView() {
             每 {REFRESH_SEC}s 自動更新 · 下次 {countdown}s
           </span>
           <button
+            onClick={enableAlerts}
+            className={`ml-auto rounded-full px-3 py-1 text-xs font-medium ${
+              alertOn ? 'bg-emerald-600 text-white' : 'border border-amber-600 text-amber-300 hover:bg-amber-950/40'
+            }`}
+          >
+            {alertOn ? '🔔 觸發響鈴已開' : '🔕 開啟觸發響鈴'}
+          </button>
+          <button
             onClick={load}
-            className="ml-auto rounded-full border border-cyan-700 px-3 py-1 text-xs font-medium text-cyan-300 hover:bg-cyan-950/50"
+            className="rounded-full border border-cyan-700 px-3 py-1 text-xs font-medium text-cyan-300 hover:bg-cyan-950/50"
           >
             ↻ 立即刷新
           </button>
