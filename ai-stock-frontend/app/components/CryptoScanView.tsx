@@ -129,6 +129,46 @@ export default function CryptoScanView() {
         </p>
       </div>
 
+      <details className="rounded-xl border border-zinc-800 bg-zinc-900/60">
+        <summary className="cursor-pointer select-none px-4 py-2.5 text-sm font-semibold text-cyan-300">
+          📖 數值怎麼看(速查表)
+        </summary>
+        <div className="space-y-3 px-4 pb-4 text-xs text-zinc-300">
+          <p className="text-zinc-400">
+            <b className="text-zinc-200">設定類</b>(RSI／資費分位／OI／延伸z)= 判斷「站錯邊、擠爆沒」→ <b className="text-fuchsia-400">越極端越好</b>；
+            <b className="text-zinc-200"> 觸發類</b>(1m實體／1m量)= 那根 K 夠不夠力 → <b className="text-cyan-400">≥1.5 才算數</b>。
+          </p>
+          <RefTable
+            title="RSI · 超買超賣"
+            rows={[['≥80', '嚴重超買 → 做空最佳'], ['70–80', '超買 → 做空及格'], ['30–70', '中性,無訊號'], ['20–30', '超賣 → 做多及格'], ['≤20', '嚴重超賣 → 做多最佳']]}
+          />
+          <RefTable
+            title="資費分位 · 人群擠不擠(0–100%)"
+            rows={[['≥90%', '多單擠爆前10% → 做空✅✅'], ['70–90%', '偏擠 → 做空及格'], ['30–70%', '普通,無鑑別力'], ['10–30%', '空單偏擠 → 做多及格'], ['≤10%', '空單擠爆前10% → 做多✅✅']]}
+          />
+          <RefTable
+            title="OI變化 · 槓桿堆積(近3根未平倉量%)"
+            rows={[['≥+8%', '槓桿大量湧入,軋壓燃料足✅'], ['+3~+8%', '有在堆積'], ['−3~+3%', '平淡'], ['大幅負', '部位在撤,擠壓消退⚠️']]}
+          />
+          <RefTable
+            title="延伸z · 過度延伸(離均線幾個波動)"
+            rows={[['≥+2', '往上拉太開 → 做空有回吐空間✅'], ['+1~+2', '有點延伸'], ['−1~+1', '貼均線,沒延伸❌'], ['≤−2', '往下砸太深 → 做多有反彈✅']]}
+          />
+          <RefTable
+            title="1m實體 · 一大根?(幾倍均實體)"
+            rows={[['≥2.0', '超大實體 → 真突破✅✅'], ['1.5–2.0', '合格的一大根✅'], ['1.0–1.5', '普通,不夠力❌'], ['<1.0', '小K擦邊❌(TRIA那根1.4x)']]}
+          />
+          <RefTable
+            title="1m量 · 放量?(幾倍均量)"
+            rows={[['≥2.0', '爆量,真有人砸/搶✅✅'], ['1.5–2.0', '合格放量✅'], ['1.0–1.5', '量普通,沒放量❌'], ['<1.0', '縮量,假訊號嫌疑❌']]}
+          />
+          <p className="rounded-lg bg-cyan-950/40 px-3 py-2 text-cyan-200">
+            🎯 <b>可以做單</b> = 設定類極端(RSI超買/賣 + 資費分位≥90或≤10 + 延伸z≥2)<b>且</b> 觸發類兩個都 ≥1.5(1m實體≥1.5 且 1m量≥1.5)。
+            只有設定→盯著等;只有觸發→可能雜訊;兩邊到→★。
+          </p>
+        </div>
+      </details>
+
       <div className="flex flex-wrap gap-2">
         {([['all', '全部'], ['down', '🔻做空(超買·跌破)'], ['up', '🔺做多(超賣·突破)'], ['anom', '⚡純異常']] as const).map(([k, label]) => (
           <button
@@ -201,6 +241,22 @@ export default function CryptoScanView() {
         觀察輔助工具，非投資建議、無回測背書。做空噴出幣有軋空尾部風險；控槓桿與停損自負。<br />
         綠＝做多方向（超賣反轉）· 紅＝做空方向（超買反轉）· 國際慣例綠漲紅跌。
       </p>
+    </div>
+  );
+}
+
+function RefTable({ title, rows }: { title: string; rows: [string, string][] }) {
+  return (
+    <div>
+      <p className="mb-1 font-semibold text-zinc-200">{title}</p>
+      <div className="overflow-hidden rounded-lg border border-zinc-800">
+        {rows.map(([v, meaning], i) => (
+          <div key={i} className={`flex gap-3 px-2.5 py-1.5 ${i % 2 ? 'bg-zinc-900/40' : 'bg-zinc-900/70'}`}>
+            <span className="w-16 shrink-0 font-mono tabular-nums text-cyan-300">{v}</span>
+            <span className="text-zinc-300">{meaning}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
