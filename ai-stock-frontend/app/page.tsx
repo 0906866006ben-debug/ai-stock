@@ -44,6 +44,7 @@ const STORAGE_FAVORITES = 'stockAssistant.favorites';
 const STORAGE_AUTOBUY_DATE = 'stockAssistant.autoFollow.lastDate';
 const STORAGE_AUTOBUY_ENABLED = 'stockAssistant.autoFollow.enabled';
 const STORAGE_RECENTS = 'stockAssistant.recents';
+const TARGET_POSITION_TWD = 10000; // 每日推薦每檔跟單的固定倉位金額
 
 interface FavoriteItem { code: string; name: string }
 
@@ -370,7 +371,7 @@ export default function DashboardPage() {
       refreshSimPortfolioPrices(loadedSimPositions);
     }
 
-    // ── 每日自動跟單：AI 精選各 1 張入練習持倉（重複推薦/已持有不再加）──
+    // ── 每日自動跟單：AI 精選各約 1 萬元入練習持倉（重複推薦/已持有不再加）──
     const followEnabled = localStorage.getItem(STORAGE_AUTOBUY_ENABLED) !== 'off';
     queueMicrotask(() => setAutoFollowEnabled(followEnabled));
     if (followEnabled) {
@@ -503,7 +504,7 @@ export default function DashboardPage() {
     : usResult
       ? { stock_code: usResult.symbol, company_name: usResult.company_name, current_price: onScreenPrice }
       : null;
-  // 把今日 AI 精選各買 1 張進練習持倉。manual=true（⚡按鈕）略過當日已執行標記；
+  // 把今日 AI 精選各約 1 萬元進練習持倉。manual=true（⚡按鈕）略過當日已執行標記；
   // 兩種模式都跳過已持有（重複推薦不再購買）。
   async function buyTodaysPicks(manual: boolean) {
     if (manual) setQuickBuyBusy(true);
@@ -538,11 +539,14 @@ export default function DashboardPage() {
       for (const p of picks) {
         const price = closeMap.get(p.stock_id);
         if (held.has(p.stock_id) || !price) continue;
+        // 每檔固定倉位 ~10,000 元 → 張數 = 目標金額 / (價格 × 1000 股)，可為零股。
+        const lots = Math.round((TARGET_POSITION_TWD / (price * 1000)) * 1000) / 1000;
+        if (lots <= 0) continue;
         additions.push({
           id: `${Date.now()}-${Math.random()}`,
           stock_code: p.stock_id,
           company_name: p.name,
-          lots: 1,
+          lots,
           cost_per_share: price,
           purchase_date: d.date,
         });
@@ -554,7 +558,7 @@ export default function DashboardPage() {
         saveSimPositions(next);
         refreshSimPortfolioPrices(next);
         setAutoFollowReport(
-          `今日 AI 精選已各買 1 張入練習持倉（${d.date}）：${addedNames.join('、')}`
+          `今日 AI 精選已各約 1 萬元入練習持倉（${d.date}）：${addedNames.join('、')}`
         );
         if (manual) {
           setQuickBuyFlash(true);
@@ -1055,12 +1059,12 @@ export default function DashboardPage() {
         </span>
       </button>
 
-      {/* ── Floating ⚡：一鍵把今日 AI 精選各買 1 張進練習持倉 ── */}
+      {/* ── Floating ⚡：一鍵把今日 AI 精選各約 1 萬元進練習持倉 ── */}
       <button
         type="button"
         onClick={() => void buyTodaysPicks(true)}
         disabled={quickBuyBusy}
-        title="一鍵把今日 AI 精選各買 1 張進練習持倉（已持有不重複）"
+        title="一鍵把今日 AI 精選各約 1 萬元進練習持倉（已持有不重複）"
         aria-label="一鍵跟今日推薦（練習持倉）"
         className={`fixed right-6 top-[calc(50%+4.5rem)] z-40 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-2xl shadow-xl transition-all hover:scale-110 active:scale-95 disabled:cursor-wait disabled:opacity-70 ${
           quickBuyFlash
@@ -1105,7 +1109,7 @@ export default function DashboardPage() {
               }}
               className="h-3.5 w-3.5 accent-pink-500"
             />
-            每日自動把 AI 精選各買 1 張進練習持倉（已持有／重複推薦不再加）
+            每日自動把 AI 精選各約 1 萬元進練習持倉（已持有／重複推薦不再加）
           </label>
           <div className="max-h-[70vh] overflow-y-auto px-4 pb-4 pt-2">
             <AddPosition
