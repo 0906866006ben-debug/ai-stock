@@ -60,6 +60,19 @@ intents.message_content = True
 bot = discord.Client(intents=intents)
 
 
+def _sniff_media_type(raw: bytes) -> str:
+    """從圖檔 magic bytes 判真實格式(Discord 的 content_type 常標錯)。"""
+    if raw[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if raw[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if raw[:4] == b"GIF8":
+        return "image/gif"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/png"
+
+
 def fetch_klines_note(text: str) -> str:
     """若複盤文字提到某 Binance 幣種,附一句即時參考(盡力,不強求)。"""
     m = re.search(r"\b([A-Z0-9]{2,12})\s*/?\s*USDT\b", text)
@@ -92,11 +105,10 @@ async def on_message(msg: discord.Message):
     if not imgs:
         return
     a = imgs[0]
-    _ok = ("image/png", "image/jpeg", "image/gif", "image/webp")
-    media_type = a.content_type if a.content_type in _ok else "image/png"
     try:
         async with msg.channel.typing():
             raw = await a.read()
+            media_type = _sniff_media_type(raw)  # 直接從位元組判真實格式,不信 Discord 標的
             b64 = base64.standard_b64encode(raw).decode()
             resp = ai.messages.create(
                 model=MODEL, max_tokens=1400, system=SYSTEM,
