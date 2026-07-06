@@ -40,20 +40,15 @@ MODEL = os.getenv("BOT_AI_MODEL", "claude-sonnet-5")
 CHANNEL_ID = os.getenv("BOT_CHANNEL_ID")
 ai = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-SYSTEM = """你是使用者的加密永續交易「複盤助手」。使用者的策略鐵則(據此評判每一單):
-- 多空同一套鏡像:超買/超賣 + 放量突破/跌破 EMA20 + 資費(人群擁擠方向:做空要資費正=多單擠,做多要資費負=空單擠)。
-- 觸發定義(可以做單的那一刻):1分K「一大根」(實體明顯大於近20根均實體)+ 放量(量明顯大於均量)+ 「實體」收破 EMA20(收盤在K棒下/上部,不是下影線刺破又收回的「收針」)。
-- 設定看較大週期(15m)的超買超賣+資費+擁擠;觸發看1分放量實體破 EMA20。
-- MACD/RSI 背離只是「注意」訊號,不是進場扳機。強勢趨勢裡背離常會再延伸一大段(超買可以更超買),憑背離逆勢進場是常見死因。
-- 出場目標要跟「進場的時間框架」匹配:用1m/15m訊號進場,就別把停利放到1h級距離(=貪心,常在到達前先被掃損)。
+SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:多空鏡像=超買/超賣+放量實體破EMA20+資費(空要資費正、多要資費負);觸發=1分一大根放量實體收破EMA20(非收針);背離只是注意不是扳機;逆勢/搶跑是死因;出場目標要配進場框架。
 
-任務:分析使用者貼的這張交易截圖,輸出繁體中文複盤,結構:
-1. 【我看到什麼】幣種、方向、進場/停損/目標/風報比/結果(盡量從圖上的持倉工具與數字讀出來)。
-2. 【趨勢背景】均線排列(EMA20/50/100/200)是多頭還空頭、價格在均線上或下。
-3. 【成敗真正原因】對照上面鐵則,這單為什麼賺/賠;特別指出「進場那根 K 是否真的符合『一大根放量實體破 EMA20』」還是搶跑(憑背離/憑感覺)。
-4. 【哪條鐵則沒守好 / 守得好】。
-5. 【一句話教訓】。
-語氣直白、專業、保守、不迎合。若圖上資訊不足就明說。結尾一行:本複盤為觀察分析,非投資建議。"""
+看圖後用繁中輸出**極精簡**複盤,總共不超過 6 行,格式:
+方向/結果:(做多或做空、賺或賠)
+進場:(合不合格?有沒有一大根放量實體破EMA20,還是搶跑)
+趨勢:(均線多頭還空頭、順勢還逆勢)
+問題:(這單最關鍵的一個錯,一句話)
+教訓:(一句)
+不要分段標題、不要客套、不要逐項列數字。若圖資訊不足就一句帶過。結尾不用免責聲明。"""
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -110,12 +105,21 @@ async def on_message(msg: discord.Message):
             raw = await a.read()
             media_type = _sniff_media_type(raw)  # 直接從位元組判真實格式,不信 Discord 標的
             b64 = base64.standard_b64encode(raw).decode()
-            resp = ai.messages.create(
-                model=MODEL, max_tokens=1400, system=SYSTEM,
+            # Opus 保留思考力,但思考預算與輸出都設上限省 token
+            kwargs = dict(
+                model=MODEL, max_tokens=1200, system=SYSTEM,
                 messages=[{"role": "user", "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
-                    {"type": "text", "text": (msg.content or "這單複盤")},
-                ]}])
+                    {"type": "text", "text": (msg.content or "這單複盤,精簡")},
+                ]}],
+            )
+            if "opus" in MODEL or "sonnet-5" in MODEL:
+                kwargs["thinking"] = {"type": "enabled", "budget_tokens": 1024}  # 思考預算下限,省錢
+            try:
+                resp = ai.messages.create(**kwargs)
+            except Exception:
+                kwargs.pop("thinking", None)  # 該模型不支援 thinking 參數就拿掉重試
+                resp = ai.messages.create(**kwargs)
             # Claude 可能先回 thinking 區塊,取所有 text 區塊(不能假設 content[0])
             answer = "".join(getattr(b, "text", "") for b in resp.content
                              if getattr(b, "type", None) == "text").strip()
