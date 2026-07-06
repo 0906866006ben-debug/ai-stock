@@ -72,7 +72,7 @@ export default function CryptoScanView() {
           </button>
         </div>
         <p className="mt-1 text-xs text-zinc-400">
-          極端資費 × OI擁擠 × 過度延伸 × 量能高潮 × RSI背離 · 綜合品質分排序 · Binance 永續
+          三因子品質分:資費擁擠 × OI槓桿堆積 × 過度延伸(刻意精簡防過擬合)· Binance 永續
           {updatedAt ? ` · 更新 ${updatedAt}` : ''}
           {rows.length ? ` · 🔻${counts.down} 🔺${counts.up} ⚡${counts.anom}` : ''}
         </p>

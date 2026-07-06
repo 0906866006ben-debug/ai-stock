@@ -46,7 +46,7 @@ export async function GET(request: Request): Promise<Response> {
   const tf = u.searchParams.get('tf') || '15m';
   const minVol = parseFloat(u.searchParams.get('minVol') || '15');
   const top = parseInt(u.searchParams.get('top') || '35', 10);
-  const minQ = parseFloat(u.searchParams.get('minQ') || '55'); // 最低品質分(0-100),寧缺勿濫
+  const minQ = parseFloat(u.searchParams.get('minQ') || '45'); // 最低品質分(0-100),寧缺勿濫
 
   try {
     const [tickers, prem] = await Promise.all([jget('/fapi/v1/ticker/24hr'), jget('/fapi/v1/premiumIndex')]);
@@ -115,28 +115,25 @@ export async function GET(request: Request): Promise<Response> {
       const pMinI = pSeg.indexOf(Math.min(...pSeg)), rAtPMin = rSeg[pMinI];
       const bullDiv = pMinI >= w - 3 && Math.min(...rSeg.slice(0, w - 2)) < rAtPMin - 3;
 
-      // 綜合品質分(0-100),各維度正規化後加權;做空/做多對稱
+      // 三因子綜合品質分(0-100)——只留最有機制根據的:資費擁擠度、OI 槓桿堆積、
+      // 過度延伸。刻意不加更多因子/不調權重以避免過擬合。量能與背離僅顯示不計分。
       let tag = '', quality = 0, diverg = false;
       const clamp = (x: number) => Math.max(0, Math.min(1, x));
       if (r >= 68 && fr > 0) {
-        const qFund = clamp((fr_pct - 0.7) / 0.3);        // 資費前30%才開始給分,前10%滿分
-        const qExt = clamp((ext_z - 1.5) / 2.5);          // 過度延伸
-        const qOI = clamp(oi_chg / 8);                    // OI 近3根 +8% 滿分(槓桿追多)
-        const qVol = clamp((vol_z - 1) / 3);              // 量能高潮
-        const qRoll = price < e12 ? 1 : 0.3;              // 已翻頭
+        const qFund = clamp((fr_pct - 0.5) / 0.5);   // 資費市場中位以上給分,前段滿分
+        const qOI = clamp(oi_chg / 5);               // OI 近3根 +5% 滿分(槓桿追多)
+        const qExt = clamp(ext_z / 2);               // 過度延伸
         diverg = bearDiv;
-        quality = (qFund * 26 + qExt * 22 + qOI * 22 + qVol * 12 + qRoll * 10 + (diverg ? 8 : 0));
+        quality = qFund * 40 + qOI * 35 + qExt * 25; // 近等權,資費/OI 為主
         tag = '🔻做空觀察(超買+擁擠多單)';
         if (price < e12 && prevBelow) tag += ' ★剛跌破EMA12';
         if (diverg) tag += ' ⚠空方背離';
       } else if (r <= 32 && fr < 0) {
-        const qFund = clamp((0.3 - fr_pct) / 0.3);
-        const qExt = clamp((-ext_z - 1.5) / 2.5);
-        const qOI = clamp(-oi_chg / 8);
-        const qVol = clamp((vol_z - 1) / 3);
-        const qRoll = price > e12 ? 1 : 0.3;
+        const qFund = clamp((0.5 - fr_pct) / 0.5);
+        const qOI = clamp(-oi_chg / 5);
+        const qExt = clamp(-ext_z / 2);
         diverg = bullDiv;
-        quality = (qFund * 26 + qExt * 22 + qOI * 22 + qVol * 12 + qRoll * 10 + (diverg ? 8 : 0));
+        quality = qFund * 40 + qOI * 35 + qExt * 25;
         tag = '🔺做多觀察(超賣+擁擠空單)';
         if (price > e12 && prevAbove) tag += ' ★剛站上EMA12';
         if (diverg) tag += ' ⚠多方背離';
