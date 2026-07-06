@@ -115,28 +115,32 @@ export async function GET(request: Request): Promise<Response> {
       const pMinI = pSeg.indexOf(Math.min(...pSeg)), rAtPMin = rSeg[pMinI];
       const bullDiv = pMinI >= w - 3 && Math.min(...rSeg.slice(0, w - 2)) < rAtPMin - 3;
 
-      // 三因子綜合品質分(0-100)——只留最有機制根據的:資費擁擠度、OI 槓桿堆積、
-      // 過度延伸。刻意不加更多因子/不調權重以避免過擬合。量能與背離僅顯示不計分。
+      // 多空同一套鏡像邏輯:超買超賣 + 放量突破/跌破 EMA12 + 資費(人群擁擠方向)。
+      // 「超買/超賣」用近 5 根 RSI 極端(它剛噴/剛砸),「放量跨越 EMA12」為觸發 ★。
+      const rs5 = rs.slice(-5);
+      const recentHi = Math.max(...rs5.filter((x) => !isNaN(x)));
+      const recentLo = Math.min(...rs5.filter((x) => !isNaN(x)));
+      const volOk = vol_z >= 1.5;
       let tag = '', quality = 0, diverg = false;
       const clamp = (x: number) => Math.max(0, Math.min(1, x));
-      if (r >= 68 && fr > 0) {
-        const qFund = clamp((fr_pct - 0.5) / 0.5);   // 資費市場中位以上給分,前段滿分
-        const qOI = clamp(oi_chg / 5);               // OI 近3根 +5% 滿分(槓桿追多)
-        const qExt = clamp(ext_z / 2);               // 過度延伸
+      if (recentHi >= 68 && fr > 0) {
+        // 做空:近期超買 + 資費正(多單擁擠)+ 放量跌破 EMA12
+        const qFund = clamp((fr_pct - 0.5) / 0.5);   // 資費市場百分位越高、多單越擠
+        const qExt = clamp(ext_z / 2);               // 過度延伸(向上)
+        const qVol = clamp(vol_z / 3);               // 放量
         diverg = bearDiv;
-        quality = qFund * 40 + qOI * 35 + qExt * 25; // 近等權,資費/OI 為主
-        tag = '🔻做空觀察(超買+擁擠多單)';
-        if (price < e12 && prevBelow) tag += ' ★剛跌破EMA12';
-        if (diverg) tag += ' ⚠空方背離';
-      } else if (fr < 0 && vol_z >= 1.5 && price > e12 && closes[closes.length - 1] > closes[closes.length - 2]) {
-        // 負資費(空方擁擠)+ 放量 + 站上 EMA12 向上 = 軋空追多(動能),對稱於做空
-        const qFund = clamp((0.5 - fr_pct) / 0.5);   // 資費越負、空方越擁擠越高分
-        const qVol = clamp((vol_z - 1.5) / 3);       // 放量力道
-        const qBreak = clamp(ext_z / 1.5);           // 向上突破/延伸
-        diverg = false;
-        quality = qFund * 35 + qVol * 35 + qBreak * 30;
-        tag = '🚀軋空追多(負資費+放量突破)';
-        if (prevBelow && price > e12) tag += ' ★剛突破EMA12';
+        quality = qFund * 35 + qExt * 30 + qVol * 35;
+        const triggered = prevBelow && price < e12 && volOk;
+        tag = triggered ? '🔻做空 ★放量跌破EMA12' : '🔻做空觀察(超買+資費正·待跌破)';
+      } else if (recentLo <= 32 && fr < 0) {
+        // 做多:近期超賣 + 資費負(空單擁擠)+ 放量突破 EMA12(鏡像)
+        const qFund = clamp((0.5 - fr_pct) / 0.5);   // 資費越負、空單越擠
+        const qExt = clamp(-ext_z / 2);              // 過度延伸(向下)
+        const qVol = clamp(vol_z / 3);
+        diverg = bullDiv;
+        quality = qFund * 35 + qExt * 30 + qVol * 35;
+        const triggered = prevAbove && price > e12 && volOk;
+        tag = triggered ? '🔺做多 ★放量突破EMA12' : '🔺做多觀察(超賣+資費負·待突破)';
       }
       if (!tag || quality < minQ) return;
       rows.push({

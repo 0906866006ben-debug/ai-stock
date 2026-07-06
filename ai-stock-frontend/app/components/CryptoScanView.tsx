@@ -72,14 +72,14 @@ export default function CryptoScanView() {
           </button>
         </div>
         <p className="mt-1 text-xs text-zinc-400">
-          三因子品質分:資費擁擠 × OI槓桿堆積 × 過度延伸(刻意精簡防過擬合)· Binance 永續
+          多空同一邏輯:超買/超賣 × 放量突破/跌破 EMA12 × 資費擁擠方向 · ★=已觸發 · Binance 永續
           {updatedAt ? ` · 更新 ${updatedAt}` : ''}
           {rows.length ? ` · 🔻${counts.down} 🔺${counts.up} ⚡${counts.anom}` : ''}
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {([['all', '全部'], ['down', '🔻做空(超買擁擠)'], ['up', '🚀追多(軋空)'], ['anom', '⚡純異常']] as const).map(([k, label]) => (
+        {([['all', '全部'], ['down', '🔻做空(超買·跌破)'], ['up', '🔺做多(超賣·突破)'], ['anom', '⚡純異常']] as const).map(([k, label]) => (
           <button
             key={k}
             onClick={() => setFilter(k)}
@@ -113,7 +113,12 @@ export default function CryptoScanView() {
           const bar = k === 'down' ? 'bg-red-500' : k === 'up' ? 'bg-emerald-500' : 'bg-amber-500';
           const tagColor = k === 'down' ? 'text-red-400' : k === 'up' ? 'text-emerald-400' : 'text-amber-400';
           return (
-            <div key={r.sym} className="relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-3">
+            <div
+              key={r.sym}
+              className={`relative overflow-hidden rounded-xl border bg-zinc-900 p-3 ${
+                r.tag.includes('★') ? 'border-cyan-500 ring-1 ring-cyan-500/40' : 'border-zinc-800'
+              }`}
+            >
               <span className={`absolute left-0 top-0 h-full w-[3px] ${bar}`} />
               <div className="flex items-baseline gap-2">
                 <span className="text-base font-bold tracking-wide text-zinc-100">{r.sym.replace('USDT', '')}</span>
