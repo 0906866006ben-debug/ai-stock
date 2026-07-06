@@ -1,6 +1,6 @@
 // 加密永續異常掃描 — Vercel Edge Route(亞洲區,避開 Binance 對美國 IP 的封鎖)。
-// 訊號品質版:極端資費(市場百分位)+ OI 擁擠 + 價格過度延伸 + 量能高潮 + RSI 背離,
-// 正規化綜合品質分 + 最低門檻 → 少而精。純市場資料、無金鑰、無回測背書。
+// 多框架:設定在 15m 找(超買/超賣 + 資費擁擠 + 過度延伸),觸發在 1m 抓
+// 「一大根放量 + 實體收破 EMA20」(非收針)。純市場資料、無金鑰、無回測背書。
 export const runtime = 'edge';
 export const preferredRegion = ['hnd1', 'sin1'];
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,7 @@ interface Row {
   sym: string; price: number; rsi: number; fr: number; fr_pct: number;
   dist_e12: number; ext_z: number; vol_z: number; oi_chg: number;
   diverg: boolean; chg24: number; tag: string; quality: number;
+  triggered: boolean; trig_body: number; trig_vol: number;
 }
 
 function rsiSeries(closes: number[], n = 14): number[] {
@@ -32,8 +33,8 @@ function emaLast(c: number[], span: number): number {
   for (let i = 1; i < c.length; i++) e = a * c[i] + (1 - a) * e;
   return e;
 }
-function mean(a: number[]) { return a.reduce((s, x) => s + x, 0) / (a.length || 1); }
-function std(a: number[]) { const m = mean(a); return Math.sqrt(mean(a.map((x) => (x - m) ** 2))) || 1e-9; }
+const mean = (a: number[]) => a.reduce((s, x) => s + x, 0) / (a.length || 1);
+const std = (a: number[]) => { const m = mean(a); return Math.sqrt(mean(a.map((x) => (x - m) ** 2))) || 1e-9; };
 
 async function jget(path: string): Promise<any> {
   const r = await fetch(BASE + path, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
@@ -41,19 +42,49 @@ async function jget(path: string): Promise<any> {
   return r.json();
 }
 
+// 一大根放量 + 實體收破 EMA20 偵測(非收針)。dir=1 突破(做多)、dir=-1 跌破(做空)。
+function bigBreak(kl: any[], dir: number, volMult: number, bodyMult: number):
+  { hit: boolean; body: number; vol: number } {
+  if (!Array.isArray(kl) || kl.length < 25) return { hit: false, body: 0, vol: 0 };
+  const o = kl.map((c) => parseFloat(c[1])), h = kl.map((c) => parseFloat(c[2]));
+  const lo = kl.map((c) => parseFloat(c[3])), cl = kl.map((c) => parseFloat(c[4]));
+  const v = kl.map((c) => parseFloat(c[5]));
+  const n = cl.length;
+  const e20 = emaLast(cl, 20);
+  const O = o[n - 1], H = h[n - 1], L = lo[n - 1], C = cl[n - 1], V = v[n - 1];
+  const body = Math.abs(C - O), range = Math.max(H - L, 1e-12);
+  const bodies = []; for (let i = n - 21; i < n - 1; i++) bodies.push(Math.abs(cl[i] - o[i]));
+  const avgBody = mean(bodies) || 1e-12;
+  const avgVol = mean(v.slice(n - 21, n - 1)) || 1e-12;
+  const bodyMul = body / avgBody, volMul = V / avgVol;
+  const big = bodyMul >= bodyMult;                 // 一大根:實體 >= 均實體 bodyMult 倍
+  const loud = volMul >= volMult;                  // 放量
+  const closePos = (C - L) / range;                // 收盤在 K 棒的位置(0=最低,1=最高)
+  let hit = false;
+  if (dir < 0) {
+    // 陰線、實體收破 EMA20、收在下 40%(非收針)
+    hit = big && loud && C < e20 && C < O && closePos <= 0.4;
+  } else {
+    hit = big && loud && C > e20 && C > O && closePos >= 0.6;
+  }
+  return { hit, body: bodyMul, vol: volMul };
+}
+
 export async function GET(request: Request): Promise<Response> {
   const u = new URL(request.url);
-  const tf = u.searchParams.get('tf') || '15m';
+  const tf = u.searchParams.get('tf') || '15m';          // 設定框架
+  const trigTf = u.searchParams.get('trigTf') || '1m';   // 觸發框架(你的 1 分鐘)
   const minVol = parseFloat(u.searchParams.get('minVol') || '15');
   const top = parseInt(u.searchParams.get('top') || '35', 10);
-  const minQ = parseFloat(u.searchParams.get('minQ') || '45'); // 最低品質分(0-100),寧缺勿濫
+  const minQ = parseFloat(u.searchParams.get('minQ') || '45');
+  const volMult = parseFloat(u.searchParams.get('volMult') || '1.5');   // 放量倍數
+  const bodyMult = parseFloat(u.searchParams.get('bodyMult') || '1.5');  // 一大根倍數
 
   try {
     const [tickers, prem] = await Promise.all([jget('/fapi/v1/ticker/24hr'), jget('/fapi/v1/premiumIndex')]);
     const funding: Record<string, number> = {};
     for (const p of prem) funding[p.symbol] = parseFloat(p.lastFundingRate || '0') || 0;
 
-    // 候選池 + 資費的「市場橫截面百分位」(極端擁擠才有意義,而非僅>0)
     const chgMap: Record<string, number> = {};
     const pool: string[] = [];
     for (const t of tickers) {
@@ -64,95 +95,79 @@ export async function GET(request: Request): Promise<Response> {
       pool.push(sym);
     }
     const frVals = pool.map((s) => funding[s] ?? 0).sort((a, b) => a - b);
-    const frPct = (v: number) => {
+    const frPct = (val: number) => {
       let lo = 0, hi = frVals.length;
-      while (lo < hi) { const m = (lo + hi) >> 1; if (frVals[m] < v) lo = m + 1; else hi = m; }
-      return frVals.length ? lo / frVals.length : 0.5; // 0..1
+      while (lo < hi) { const m = (lo + hi) >> 1; if (frVals[m] < val) lo = m + 1; else hi = m; }
+      return frVals.length ? lo / frVals.length : 0.5;
     };
-    const shortlist = pool
-      .sort((a, b) => Math.abs(chgMap[b]) - Math.abs(chgMap[a]))
-      .slice(0, Math.max(top, 20));
+    const shortlist = pool.sort((a, b) => Math.abs(chgMap[b]) - Math.abs(chgMap[a])).slice(0, Math.max(top, 20));
 
+    // ── 第一階段:15m 設定偵測 ──
     const rows: Row[] = [];
+    const dirOf: Record<string, number> = {};
     await Promise.all(shortlist.map(async (sym) => {
       let k: any, oiHist: any = null;
       try { k = await jget(`/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=120`); } catch { return; }
       try { oiHist = await jget(`/futures/data/openInterestHist?symbol=${sym}&period=${tf}&limit=12`); } catch { /* OI 可缺 */ }
       if (!Array.isArray(k) || k.length < 40) return;
       const closes = k.map((c: any) => parseFloat(c[4]));
-      const highs = k.map((c: any) => parseFloat(c[2]));
       const vols = k.map((c: any) => parseFloat(c[5]));
       const price = closes[closes.length - 1];
       const rs = rsiSeries(closes);
       const r = rs[rs.length - 1];
-      const e12 = emaLast(closes, 12);
       const e20 = emaLast(closes, 20);
       const fr = funding[sym] ?? 0;
       const fr_pct = frPct(fr);
-
-      // 價格過度延伸(離 EMA20 幾個近期波動 std)——跨幣可比的「超買/超賣」度
       const recent = closes.slice(-30);
       const ext_z = (price - e20) / (std(recent.map((c, i) => (i ? c - recent[i - 1] : 0)).slice(1)) * Math.sqrt(20) || 1e-9);
-      // 量能高潮
       const vpast = vols.slice(-21, -1);
-      const vol_z = (vols[vols.length - 1] - mean(vpast)) / (std(vpast));
-      // OI 變化%(近 ~3 根)——槓桿擁擠代理
+      const vol_z = (vols[vols.length - 1] - mean(vpast)) / std(vpast);
       let oi_chg = 0;
       if (Array.isArray(oiHist) && oiHist.length >= 4) {
         const a = parseFloat(oiHist[oiHist.length - 4].sumOpenInterest);
         const b = parseFloat(oiHist[oiHist.length - 1].sumOpenInterest);
         if (a > 0) oi_chg = (b / a - 1) * 100;
       }
-      const dist_e12 = (price / e12 - 1) * 100;
-      const prevBelow = closes[closes.length - 2] < emaLast(closes.slice(0, -1), 12);
-      const prevAbove = closes[closes.length - 2] > emaLast(closes.slice(0, -1), 12);
-
-      // RSI 背離:近 20 根價創高但 RSI 未創高(空方背離)/ 反之(多方背離)
-      const w = 20;
-      const pSeg = closes.slice(-w), rSeg = rs.slice(-w);
-      const pMaxI = pSeg.indexOf(Math.max(...pSeg)), rAtPMax = rSeg[pMaxI];
-      const bearDiv = pMaxI >= w - 3 && Math.max(...rSeg.slice(0, w - 2)) > rAtPMax + 3; // 價新高、RSI背離
-      const pMinI = pSeg.indexOf(Math.min(...pSeg)), rAtPMin = rSeg[pMinI];
-      const bullDiv = pMinI >= w - 3 && Math.min(...rSeg.slice(0, w - 2)) < rAtPMin - 3;
-
-      // 多空同一套鏡像邏輯:超買超賣 + 放量突破/跌破 EMA12 + 資費(人群擁擠方向)。
-      // 「超買/超賣」用近 5 根 RSI 極端(它剛噴/剛砸),「放量跨越 EMA12」為觸發 ★。
-      const rs5 = rs.slice(-5);
-      const recentHi = Math.max(...rs5.filter((x) => !isNaN(x)));
-      const recentLo = Math.min(...rs5.filter((x) => !isNaN(x)));
-      const volOk = vol_z >= 1.5;
-      let tag = '', quality = 0, diverg = false;
+      const rs5 = rs.slice(-5).filter((x) => !isNaN(x));
+      const recentHi = Math.max(...rs5), recentLo = Math.min(...rs5);
       const clamp = (x: number) => Math.max(0, Math.min(1, x));
+      let tag = '', quality = 0, dir = 0;
       if (recentHi >= 68 && fr > 0) {
-        // 做空:近期超買 + 資費正(多單擁擠)+ 放量跌破 EMA12
-        const qFund = clamp((fr_pct - 0.5) / 0.5);   // 資費市場百分位越高、多單越擠
-        const qExt = clamp(ext_z / 2);               // 過度延伸(向上)
-        const qVol = clamp(vol_z / 3);               // 放量
-        diverg = bearDiv;
-        quality = qFund * 35 + qExt * 30 + qVol * 35;
-        const triggered = prevBelow && price < e12 && volOk;
-        tag = triggered ? '🔻做空 ★放量跌破EMA12' : '🔻做空觀察(超買+資費正·待跌破)';
+        quality = clamp((fr_pct - 0.5) / 0.5) * 35 + clamp(ext_z / 2) * 30 + clamp(vol_z / 3) * 35;
+        tag = '🔻做空觀察(超買+資費正·待1m跌破)'; dir = -1;
       } else if (recentLo <= 32 && fr < 0) {
-        // 做多:近期超賣 + 資費負(空單擁擠)+ 放量突破 EMA12(鏡像)
-        const qFund = clamp((0.5 - fr_pct) / 0.5);   // 資費越負、空單越擠
-        const qExt = clamp(-ext_z / 2);              // 過度延伸(向下)
-        const qVol = clamp(vol_z / 3);
-        diverg = bullDiv;
-        quality = qFund * 35 + qExt * 30 + qVol * 35;
-        const triggered = prevAbove && price > e12 && volOk;
-        tag = triggered ? '🔺做多 ★放量突破EMA12' : '🔺做多觀察(超賣+資費負·待突破)';
+        quality = clamp((0.5 - fr_pct) / 0.5) * 35 + clamp(-ext_z / 2) * 30 + clamp(vol_z / 3) * 35;
+        tag = '🔺做多觀察(超賣+資費負·待1m突破)'; dir = 1;
       }
       if (!tag || quality < minQ) return;
+      dirOf[sym] = dir;
       rows.push({
         sym, price, rsi: r, fr: fr * 100, fr_pct: Math.round(fr_pct * 100),
-        dist_e12, ext_z, vol_z, oi_chg, diverg, chg24: chgMap[sym], tag,
-        quality: Math.round(quality),
+        dist_e12: (price / e20 - 1) * 100, ext_z, vol_z, oi_chg, diverg: false,
+        chg24: chgMap[sym], tag, quality: Math.round(quality),
+        triggered: false, trig_body: 0, trig_vol: 0,
       });
     }));
 
-    rows.sort((a, b) => b.quality - a.quality);
+    // ── 第二階段:只對「設定成立」者抓 1m,驗「一大根放量實體破 EMA20」──
+    await Promise.all(rows.map(async (row) => {
+      let k1: any;
+      try { k1 = await jget(`/fapi/v1/klines?symbol=${row.sym}&interval=${trigTf}&limit=40`); } catch { return; }
+      const b = bigBreak(k1, dirOf[row.sym], volMult, bodyMult);
+      row.trig_body = Math.round(b.body * 10) / 10;
+      row.trig_vol = Math.round(b.vol * 10) / 10;
+      if (b.hit) {
+        row.triggered = true;
+        row.tag = dirOf[row.sym] < 0
+          ? `🔻做空 ★${trigTf}一大根放量跌破EMA20`
+          : `🔺做多 ★${trigTf}一大根放量突破EMA20`;
+      }
+    }));
+
+    // 已觸發排前面,再依品質分
+    rows.sort((a, b) => (Number(b.triggered) - Number(a.triggered)) || (b.quality - a.quality));
     return new Response(JSON.stringify({
-      status: 'ok', generated_at: new Date().toISOString(), tf, min_quality: minQ, rows,
+      status: 'ok', generated_at: new Date().toISOString(), tf, trig_tf: trigTf, min_quality: minQ, rows,
     }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
   } catch (e: unknown) {
     return new Response(JSON.stringify({ status: 'error', detail: e instanceof Error ? e.message : 'scan failed' }),

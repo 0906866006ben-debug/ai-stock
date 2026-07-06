@@ -6,6 +6,7 @@ interface Row {
   sym: string; price: number; rsi: number; fr: number; fr_pct: number;
   dist_e12: number; ext_z: number; vol_z: number; oi_chg: number;
   diverg: boolean; chg24: number; tag: string; quality: number;
+  triggered: boolean; trig_body: number; trig_vol: number;
 }
 interface ScanResp {
   status: string; generated_at?: string; tf?: string; rows?: Row[]; detail?: string;
@@ -72,7 +73,7 @@ export default function CryptoScanView() {
           </button>
         </div>
         <p className="mt-1 text-xs text-zinc-400">
-          多空同一邏輯:超買/超賣 × 放量突破/跌破 EMA12 × 資費擁擠方向 · ★=已觸發 · Binance 永續
+          設定 15m(超買/超賣×資費擁擠)· 觸發 1m 一大根放量實體破 EMA20(非收針)· ★=已觸發 · Binance 永續
           {updatedAt ? ` · 更新 ${updatedAt}` : ''}
           {rows.length ? ` · 🔻${counts.down} 🔺${counts.up} ⚡${counts.anom}` : ''}
         </p>
@@ -138,8 +139,8 @@ export default function CryptoScanView() {
                 <Metric k="資費分位" v={r.fr_pct + '%'} cls={r.fr_pct >= 90 || r.fr_pct <= 10 ? 'text-fuchsia-400' : ''} />
                 <Metric k="OI變化" v={sgn(r.oi_chg, 1) + '%'} cls={r.oi_chg >= 0 ? 'text-emerald-400' : 'text-red-400'} />
                 <Metric k="延伸z" v={sgn(r.ext_z, 1)} cls={Math.abs(r.ext_z) >= 2 ? 'text-fuchsia-400' : ''} />
-                <Metric k="量能z" v={sgn(r.vol_z, 1)} cls={r.vol_z >= 2 ? 'text-fuchsia-400' : ''} />
-                <Metric k="24h%" v={sgn(r.chg24, 1) + '%'} cls={r.chg24 >= 0 ? 'text-emerald-400' : 'text-red-400'} />
+                <Metric k="1m實體x" v={r.trig_body ? r.trig_body.toFixed(1) : '—'} cls={r.trig_body >= 1.5 ? 'text-cyan-400' : ''} />
+                <Metric k="1m量x" v={r.trig_vol ? r.trig_vol.toFixed(1) : '—'} cls={r.trig_vol >= 1.5 ? 'text-cyan-400' : ''} />
               </div>
             </div>
           );
