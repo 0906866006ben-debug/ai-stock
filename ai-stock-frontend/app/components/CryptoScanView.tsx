@@ -84,18 +84,23 @@ export default function CryptoScanView() {
   }
 
   useEffect(() => {
-    load();
+    const initial = setTimeout(() => { void load(); }, 0);
     timer.current = setInterval(() => {
       setCountdown((c) => {
-        if (c <= 1) { load(); return REFRESH_SEC; }
+        if (c <= 1) { void load(); return REFRESH_SEC; }
         return c - 1;
       });
     }, 1000);
-    return () => { if (timer.current) clearInterval(timer.current); };
+    return () => {
+      clearTimeout(initial);
+      if (timer.current) clearInterval(timer.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const rows = (data?.rows ?? []).slice().sort((a, b) => b.quality - a.quality);
+  const rows = (data?.rows ?? []).slice().sort((a, b) => (
+    Number(b.triggered) - Number(a.triggered)
+  ) || (b.quality - a.quality));
   const counts = { down: 0, up: 0, anom: 0 };
   rows.forEach((r) => { counts[kind(r.tag) as 'down' | 'up' | 'anom']++; });
   const shown = rows.filter((r) => filter === 'all' || kind(r.tag) === filter);

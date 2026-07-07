@@ -6,6 +6,35 @@ export const preferredRegion = ['hnd1', 'sin1'];
 export const dynamic = 'force-dynamic';
 
 const BASE = 'https://fapi.binance.com';
+const FETCH_TIMEOUT_MS = 8000;
+const JSON_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' };
+const SETUP_INTERVALS = new Set(['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d']);
+const TRIGGER_INTERVALS = new Set(['1m', '3m', '5m', '15m']);
+
+type BinanceTicker = {
+  symbol: string;
+  quoteVolume?: string;
+  priceChangePercent?: string;
+};
+
+type BinancePremium = {
+  symbol: string;
+  lastFundingRate?: string;
+};
+
+type BinanceKline = [
+  number | string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  ...unknown[],
+];
+
+type OpenInterestPoint = {
+  sumOpenInterest?: string;
+};
 
 interface Row {
   sym: string; price: number; rsi: number; fr: number; fr_pct: number;
@@ -37,15 +66,44 @@ function emaLast(c: number[], span: number): number {
 const mean = (a: number[]) => a.reduce((s, x) => s + x, 0) / (a.length || 1);
 const std = (a: number[]) => { const m = mean(a); return Math.sqrt(mean(a.map((x) => (x - m) ** 2))) || 1e-9; };
 
-async function jget(path: string): Promise<any> {
-  const r = await fetch(BASE + path, { headers: { 'User-Agent': 'Mozilla/5.0' }, cache: 'no-store' });
-  if (!r.ok) throw new Error(`${path} ${r.status}`);
-  return r.json();
+function boundedNumber(raw: string | null, fallback: number, min: number, max: number): number {
+  const value = raw === null ? fallback : Number.parseFloat(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
+function boundedInteger(raw: string | null, fallback: number, min: number, max: number): number {
+  return Math.round(boundedNumber(raw, fallback, min, max));
+}
+
+function intervalParam(raw: string | null, fallback: string, allowed: Set<string>): string {
+  return raw !== null && allowed.has(raw) ? raw : fallback;
+}
+
+async function jget<T>(path: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(BASE + path, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (!r.ok) throw new Error(`${path} ${r.status}`);
+    return await r.json() as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`${path} upstream timeout`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // 一大根放量 + 實體收破 EMA20 + 「下一根守住(沒收回均線)」回踩確認。
 // 突破根 = 倒數第二根(n-2),確認根 = 最後一根(n-1)。dir=1 突破(多)、dir=-1 跌破(空)。
-function bigBreak(kl: any[], dir: number, volMult: number, bodyMult: number):
+function bigBreak(kl: BinanceKline[], dir: number, volMult: number, bodyMult: number):
   { hit: boolean; loud: boolean; body: number; vol: number; held: boolean } {
   if (!Array.isArray(kl) || kl.length < 26) return { hit: false, loud: false, body: 0, vol: 0, held: false };
   const o = kl.map((c) => parseFloat(c[1])), h = kl.map((c) => parseFloat(c[2]));
@@ -73,21 +131,24 @@ function bigBreak(kl: any[], dir: number, volMult: number, bodyMult: number):
     held = cl[n - 1] > e20c;
   }
   // hit = 扳機成立(整根實體收破+守住,無需放量);loud = 有放量(升級為 ★ 用)
-  return { hit: broke && held, loud: volMul >= volMult, body: bodyMul, vol: volMul, held };
+  return { hit: broke && held, loud, body: bodyMul, vol: volMul, held };
 }
 
 export async function GET(request: Request): Promise<Response> {
   const u = new URL(request.url);
-  const tf = u.searchParams.get('tf') || '1h';           // 設定框架(1h 過度偏離 + EMA12 目標)
-  const trigTf = u.searchParams.get('trigTf') || '1m';   // 觸發框架(你的 1 分鐘)
-  const minVol = parseFloat(u.searchParams.get('minVol') || '15');
-  const top = parseInt(u.searchParams.get('top') || '35', 10);
-  const minQ = parseFloat(u.searchParams.get('minQ') || '30');
-  const volMult = parseFloat(u.searchParams.get('volMult') || '1.5');   // 放量倍數
-  const bodyMult = parseFloat(u.searchParams.get('bodyMult') || '1.5');  // 一大根倍數
+  const tf = intervalParam(u.searchParams.get('tf'), '1h', SETUP_INTERVALS);           // 設定框架(1h 過度偏離 + EMA12 目標)
+  const trigTf = intervalParam(u.searchParams.get('trigTf'), '1m', TRIGGER_INTERVALS); // 觸發框架(你的 1 分鐘)
+  const minVol = boundedNumber(u.searchParams.get('minVol'), 15, 1, 5000);
+  const top = boundedInteger(u.searchParams.get('top'), 35, 1, 60);
+  const minQ = boundedNumber(u.searchParams.get('minQ'), 30, 0, 100);
+  const volMult = boundedNumber(u.searchParams.get('volMult'), 1.5, 0.1, 10);   // 放量倍數
+  const bodyMult = boundedNumber(u.searchParams.get('bodyMult'), 1.5, 0.1, 10);  // 一大根倍數
 
   try {
-    const [tickers, prem] = await Promise.all([jget('/fapi/v1/ticker/24hr'), jget('/fapi/v1/premiumIndex')]);
+    const [tickers, prem] = await Promise.all([
+      jget<BinanceTicker[]>('/fapi/v1/ticker/24hr'),
+      jget<BinancePremium[]>('/fapi/v1/premiumIndex'),
+    ]);
     const funding: Record<string, number> = {};
     for (const p of prem) funding[p.symbol] = parseFloat(p.lastFundingRate || '0') || 0;
 
@@ -108,33 +169,35 @@ export async function GET(request: Request): Promise<Response> {
     };
     const shortlist = pool.sort((a, b) => Math.abs(chgMap[b]) - Math.abs(chgMap[a])).slice(0, Math.max(top, 20));
 
-    // ── 第一階段:15m 設定偵測 ──
+    // ── 第一階段:1h RSI 超買超賣(設定)+ 15m EMA12(拉回目標/偏離)──
     const rows: Row[] = [];
     const dirOf: Record<string, number> = {};
     await Promise.all(shortlist.map(async (sym) => {
-      let k: any, oiHist: any = null;
-      try { k = await jget(`/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=120`); } catch { return; }
-      try { oiHist = await jget(`/futures/data/openInterestHist?symbol=${sym}&period=${tf}&limit=12`); } catch { /* OI 可缺 */ }
+      let k: BinanceKline[] | null = null, k15: BinanceKline[] | null = null, oiHist: OpenInterestPoint[] | null = null;
+      try { k = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=120`); } catch { return; }        // 1h → RSI 超買超賣
+      try { k15 = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=120`); } catch { return; }        // 15m → EMA12 目標
+      try { oiHist = await jget<OpenInterestPoint[]>(`/futures/data/openInterestHist?symbol=${sym}&period=${tf}&limit=12`); } catch { /* OI 可缺 */ }
       if (!Array.isArray(k) || k.length < 40) return;
-      const closes = k.map((c: any) => parseFloat(c[4]));
-      const vols = k.map((c: any) => parseFloat(c[5]));
-      const price = closes[closes.length - 1];
+      if (!Array.isArray(k15) || k15.length < 20) return;
+      const closes = k.map((c) => parseFloat(c[4]));         // 1h 收盤 → RSI
       const rs = rsiSeries(closes);
-      const r = rs[rs.length - 1];
-      const e20 = emaLast(closes, 20);
+      const r = rs[rs.length - 1];                           // 1h RSI-14(超買超賣鐵門檻)
+      const closes15 = k15.map((c) => parseFloat(c[4]));      // 15m 收盤 → 目標/偏離
+      const vols = k15.map((c) => parseFloat(c[5]));          // 15m 量(context)
+      const price = closes15[closes15.length - 1];
       const fr = funding[sym] ?? 0;
       const fr_pct = frPct(fr);
-      const e12 = emaLast(closes, 12);                       // 拉回目標
-      const dist_e12 = (price / e12 - 1) * 100;              // 距 EMA12 %(=拉回空間/獲利目標)
-      const recent = closes.slice(-30);
-      // 過度偏離(離 EMA12 幾個波動)——均值回歸的「前提」,必要條件
+      const e12 = emaLast(closes15, 12);                     // 15m EMA12 = 拉回目標
+      const dist_e12 = (price / e12 - 1) * 100;              // 距 15m EMA12 %(=拉回空間/獲利目標)
+      const recent = closes15.slice(-30);
+      // 過度偏離 15m EMA12(幾個波動)——均值回歸的「前提」+ 獲利空間
       const ext_z = (price - e12) / (std(recent.map((c, i) => (i ? c - recent[i - 1] : 0)).slice(1)) * Math.sqrt(20) || 1e-9);
       const vpast = vols.slice(-21, -1);
       const vol_z = (vols[vols.length - 1] - mean(vpast)) / std(vpast);
       let oi_chg = 0;
       if (Array.isArray(oiHist) && oiHist.length >= 4) {
-        const a = parseFloat(oiHist[oiHist.length - 4].sumOpenInterest);
-        const b = parseFloat(oiHist[oiHist.length - 1].sumOpenInterest);
+        const a = parseFloat(oiHist[oiHist.length - 4].sumOpenInterest || '0');
+        const b = parseFloat(oiHist[oiHist.length - 1].sumOpenInterest || '0');
         if (a > 0) oi_chg = (b / a - 1) * 100;
       }
       const clamp = (x: number) => Math.max(0, Math.min(1, x));
@@ -142,9 +205,9 @@ export async function GET(request: Request): Promise<Response> {
       // ── 均值回歸:硬門檻=1h RSI-14 超買/超賣(75/25),沒到免談;方向由它決定 ──
       const RSI_HI = 75, RSI_LO = 25, EXT_MIN = 1.0;
       let tag = '', dir = 0;
-      if (r >= RSI_HI && ext_z >= EXT_MIN) { dir = -1; tag = '🔻做空觀察(1h超買≥75·待1m整根收破)'; }
-      else if (r <= RSI_LO && ext_z <= -EXT_MIN) { dir = 1; tag = '🔺做多觀察(1h超賣≤25·待1m整根收破)'; }
-      if (!tag) return;   // 沒超買超賣(或偏離方向不符)= 直接不進名單
+      if (r >= RSI_HI && ext_z >= EXT_MIN && fr > 0) { dir = -1; tag = '🔻做空觀察(1h超買≥75·資費正·待1m整根收破)'; }
+      else if (r <= RSI_LO && ext_z <= -EXT_MIN && fr < 0) { dir = 1; tag = '🔺做多觀察(1h超賣≤25·資費負·待1m整根收破)'; }
+      if (!tag) return;   // 沒超買超賣、偏離方向不符、或資費方向不符 = 直接不進名單
 
       // 品質分(0-100):偏離幅度為主 + 資費擠/OI堆積 加分(RSI 已是門檻不再計分)
       const oi_state = oi_chg >= 3 ? '堆積' : oi_chg <= -3 ? '消退' : '中性';
@@ -169,8 +232,8 @@ export async function GET(request: Request): Promise<Response> {
 
     // ── 第二階段:只對「設定成立」者抓 1m,驗「一大根放量實體破 EMA20」──
     await Promise.all(rows.map(async (row) => {
-      let k1: any;
-      try { k1 = await jget(`/fapi/v1/klines?symbol=${row.sym}&interval=${trigTf}&limit=40`); } catch { return; }
+      let k1: BinanceKline[];
+      try { k1 = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${row.sym}&interval=${trigTf}&limit=40`); } catch { return; }
       const b = bigBreak(k1, dirOf[row.sym], volMult, bodyMult);
       row.trig_body = Math.round(b.body * 10) / 10;
       row.trig_vol = Math.round(b.vol * 10) / 10;
@@ -185,11 +248,13 @@ export async function GET(request: Request): Promise<Response> {
 
     // 已觸發排前面,再依品質分
     rows.sort((a, b) => (Number(b.triggered) - Number(a.triggered)) || (b.quality - a.quality));
-    return new Response(JSON.stringify({
+    return Response.json({
       status: 'ok', generated_at: new Date().toISOString(), tf, trig_tf: trigTf, min_quality: minQ, rows,
-    }), { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+    }, { headers: JSON_HEADERS });
   } catch (e: unknown) {
-    return new Response(JSON.stringify({ status: 'error', detail: e instanceof Error ? e.message : 'scan failed' }),
-      { status: 200, headers: { 'content-type': 'application/json' } });
+    return Response.json(
+      { status: 'error', detail: e instanceof Error ? e.message : 'scan failed' },
+      { status: 502, headers: JSON_HEADERS },
+    );
   }
 }

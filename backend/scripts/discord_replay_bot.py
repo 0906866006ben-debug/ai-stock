@@ -44,7 +44,7 @@ ai = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # ── 訊號自動推播設定 ──
 SIGNAL_CHANNEL_ID = int(os.getenv("SIGNAL_CHANNEL_ID", "1523771234230337657"))
-# minQ=1:只靠掃描端點的 1h RSI 75/25 鐵門檻過濾,冒出來就是超買/超賣設定
+# minQ=1:放寬品質分,但掃描端點仍會過 1h RSI 75/25 + 資費方向 + EMA12 偏離 gate。
 SCAN_URL = os.getenv("SCAN_URL", "https://ai-stock-rosy-eight.vercel.app/api/crypto-scan?minVol=15&minQ=1")
 SIGNAL_SIDE = os.getenv("SIGNAL_SIDE", "both")        # both / short / long
 COOLDOWN_MIN = int(os.getenv("SIGNAL_COOLDOWN_MIN", "30"))
@@ -123,7 +123,7 @@ async def signal_loop():
                 sym = r["sym"]
                 rsi = round(r.get("rsi", 0))
                 if r.get("triggered"):
-                    # ★/◆ 1m 整根實體收破 EMA20 = 進場觀察(較強)
+                    # ★/◆ 1m 整根實體收破 EMA20 = 觸發觀察(較強)
                     if now - _trig_alert.get(sym, 0) < COOLDOWN_MIN * 60:
                         continue
                     _trig_alert[sym] = now
