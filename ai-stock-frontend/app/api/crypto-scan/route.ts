@@ -12,7 +12,7 @@ interface Row {
   dist_e12: number; ext_z: number; vol_z: number; oi_chg: number;
   oi_state: string; ext_extreme: boolean;
   diverg: boolean; chg24: number; tag: string; quality: number;
-  triggered: boolean; trig_body: number; trig_vol: number;
+  triggered: boolean; tier: string; trig_body: number; trig_vol: number;
 }
 
 function rsiSeries(closes: number[], n = 14): number[] {
@@ -46,8 +46,8 @@ async function jget(path: string): Promise<any> {
 // 一大根放量 + 實體收破 EMA20 + 「下一根守住(沒收回均線)」回踩確認。
 // 突破根 = 倒數第二根(n-2),確認根 = 最後一根(n-1)。dir=1 突破(多)、dir=-1 跌破(空)。
 function bigBreak(kl: any[], dir: number, volMult: number, bodyMult: number):
-  { hit: boolean; body: number; vol: number; held: boolean } {
-  if (!Array.isArray(kl) || kl.length < 26) return { hit: false, body: 0, vol: 0, held: false };
+  { hit: boolean; loud: boolean; body: number; vol: number; held: boolean } {
+  if (!Array.isArray(kl) || kl.length < 26) return { hit: false, loud: false, body: 0, vol: 0, held: false };
   const o = kl.map((c) => parseFloat(c[1])), h = kl.map((c) => parseFloat(c[2]));
   const lo = kl.map((c) => parseFloat(c[3])), cl = kl.map((c) => parseFloat(c[4]));
   const v = kl.map((c) => parseFloat(c[5]));
@@ -66,22 +66,23 @@ function bigBreak(kl: any[], dir: number, volMult: number, bodyMult: number):
   const closePos = (C - L) / range;                  // 收盤在 K 棒位置
   let broke = false, held = false;
   if (dir < 0) {
-    broke = big && loud && C < e20b && C < O && closePos <= 0.4;  // 放量陰線實體跌破
-    held = cl[n - 1] < e20c;                                       // 確認根仍收在 EMA20 下(沒收回)
+    broke = big && C < e20b && C < O && closePos <= 0.4;  // 一大根陰線實體收破(均值回歸扳機,不含放量)
+    held = cl[n - 1] < e20c;                              // 確認根仍收在 EMA20 下(沒收回)
   } else {
-    broke = big && loud && C > e20b && C > O && closePos >= 0.6;   // 放量陽線實體突破
-    held = cl[n - 1] > e20c;                                       // 確認根仍收在 EMA20 上
+    broke = big && C > e20b && C > O && closePos >= 0.6;  // 一大根陽線實體收破
+    held = cl[n - 1] > e20c;
   }
-  return { hit: broke && held, body: bodyMul, vol: volMul, held };
+  // hit = 扳機成立(整根實體收破+守住,無需放量);loud = 有放量(升級為 ★ 用)
+  return { hit: broke && held, loud: volMul >= volMult, body: bodyMul, vol: volMul, held };
 }
 
 export async function GET(request: Request): Promise<Response> {
   const u = new URL(request.url);
-  const tf = u.searchParams.get('tf') || '15m';          // 設定框架
+  const tf = u.searchParams.get('tf') || '1h';           // 設定框架(1h 過度偏離 + EMA12 目標)
   const trigTf = u.searchParams.get('trigTf') || '1m';   // 觸發框架(你的 1 分鐘)
   const minVol = parseFloat(u.searchParams.get('minVol') || '15');
   const top = parseInt(u.searchParams.get('top') || '35', 10);
-  const minQ = parseFloat(u.searchParams.get('minQ') || '45');
+  const minQ = parseFloat(u.searchParams.get('minQ') || '30');
   const volMult = parseFloat(u.searchParams.get('volMult') || '1.5');   // 放量倍數
   const bodyMult = parseFloat(u.searchParams.get('bodyMult') || '1.5');  // 一大根倍數
 
@@ -123,8 +124,11 @@ export async function GET(request: Request): Promise<Response> {
       const e20 = emaLast(closes, 20);
       const fr = funding[sym] ?? 0;
       const fr_pct = frPct(fr);
+      const e12 = emaLast(closes, 12);                       // 拉回目標
+      const dist_e12 = (price / e12 - 1) * 100;              // 距 EMA12 %(=拉回空間/獲利目標)
       const recent = closes.slice(-30);
-      const ext_z = (price - e20) / (std(recent.map((c, i) => (i ? c - recent[i - 1] : 0)).slice(1)) * Math.sqrt(20) || 1e-9);
+      // 過度偏離(離 EMA12 幾個波動)——均值回歸的「前提」,必要條件
+      const ext_z = (price - e12) / (std(recent.map((c, i) => (i ? c - recent[i - 1] : 0)).slice(1)) * Math.sqrt(20) || 1e-9);
       const vpast = vols.slice(-21, -1);
       const vol_z = (vols[vols.length - 1] - mean(vpast)) / std(vpast);
       let oi_chg = 0;
@@ -136,33 +140,35 @@ export async function GET(request: Request): Promise<Response> {
       const rs5 = rs.slice(-5).filter((x) => !isNaN(x));
       const recentHi = Math.max(...rs5), recentLo = Math.min(...rs5);
       const clamp = (x: number) => Math.max(0, Math.min(1, x));
-      let tag = '', quality = 0, dir = 0;
-      if (recentHi >= 68 && fr > 0) {
-        quality = clamp((fr_pct - 0.5) / 0.5) * 35 + clamp(ext_z / 2) * 30 + clamp(vol_z / 3) * 35;
-        tag = '🔻做空觀察(超買+資費正·待1m跌破)'; dir = -1;
-      } else if (recentLo <= 32 && fr < 0) {
-        quality = clamp((0.5 - fr_pct) / 0.5) * 35 + clamp(-ext_z / 2) * 30 + clamp(vol_z / 3) * 35;
-        tag = '🔺做多觀察(超賣+資費負·待1m突破)'; dir = 1;
-      }
-      // OI 擁擠確認(研究:做空要價漲+OI漲、做多要價跌+OI漲=槓桿新倉堆積=燃料足;
-      // OI 下降=擁擠正在消退,把握下降)+ 延伸極端(|z|≥3=多半已竭盡)
+
+      // ── 均值回歸:必要=過度偏離(離 EMA12 夠遠);方向由偏離方向決定 ──
+      const EXT_MIN = 1.5;
+      let tag = '', dir = 0;
+      if (ext_z >= EXT_MIN) { dir = -1; tag = '🔻做空觀察(偏離EMA12過高·待1m整根收破)'; }
+      else if (ext_z <= -EXT_MIN) { dir = 1; tag = '🔺做多觀察(偏離EMA12過低·待1m整根收破)'; }
+      if (!tag) return;
+
+      // 品質分(0-100):偏離幅度為主,其餘全為加分項(超買/賣、資費擠、OI堆積、延伸極端)
       const oi_state = oi_chg >= 3 ? '堆積' : oi_chg <= -3 ? '消退' : '中性';
       const ext_extreme = Math.abs(ext_z) >= 3;
-      if (tag) {
-        quality += oi_chg >= 3 ? 6 : oi_chg <= -3 ? -10 : 0;   // 堆積加分、消退扣分
-        if (ext_extreme) quality += 4;
-        quality = Math.max(0, Math.min(100, quality));
-        if (oi_state === '堆積') tag += ' 🔥OI堆積';
-        else if (oi_state === '消退') tag += ' ⚠️OI消退';
-        if (ext_extreme) tag += ' 極端延伸';
-      }
-      if (!tag || quality < minQ) return;
+      const over = dir < 0 ? clamp((recentHi - 68) / 12) : clamp((32 - recentLo) / 12);  // 超買/超賣加分
+      let quality = clamp((Math.abs(ext_z) - EXT_MIN) / 2) * 45   // 偏離越大越好(核心)
+        + (dir < 0 ? clamp((fr_pct - 0.6) / 0.4) : clamp((0.4 - fr_pct) / 0.4)) * 20  // 資費擠(加分)
+        + over * 20                                                                   // 1h 超買/賣(加分)
+        + (oi_chg >= 3 ? 10 : oi_chg <= -3 ? -8 : 0)                                   // OI 堆積/消退
+        + (ext_extreme ? 5 : 0);
+      quality = Math.max(0, Math.min(100, quality));
+      if (over > 0.5) tag += dir < 0 ? ' 超買+' : ' 超賣+';
+      if (oi_state === '堆積') tag += ' 🔥OI堆積';
+      else if (oi_state === '消退') tag += ' ⚠️OI消退';
+      if (ext_extreme) tag += ' 極端偏離';
+      if (quality < minQ) return;
       dirOf[sym] = dir;
       rows.push({
         sym, price, rsi: r, fr: fr * 100, fr_pct: Math.round(fr_pct * 100),
-        dist_e12: (price / e20 - 1) * 100, ext_z, vol_z, oi_chg, oi_state, ext_extreme, diverg: false,
+        dist_e12, ext_z, vol_z, oi_chg, oi_state, ext_extreme, diverg: false,
         chg24: chgMap[sym], tag, quality: Math.round(quality),
-        triggered: false, trig_body: 0, trig_vol: 0,
+        triggered: false, tier: '', trig_body: 0, trig_vol: 0,
       });
     }));
 
@@ -175,9 +181,10 @@ export async function GET(request: Request): Promise<Response> {
       row.trig_vol = Math.round(b.vol * 10) / 10;
       if (b.hit) {
         row.triggered = true;
-        row.tag = dirOf[row.sym] < 0
-          ? `🔻做空 ★${trigTf}放量實體跌破EMA20+守住`
-          : `🔺做多 ★${trigTf}放量實體突破EMA20+守住`;
+        row.tier = b.loud ? '★' : '◆';   // ★=整根收破+放量(最高把握)、◆=整根收破無量
+        const dirTxt = dirOf[row.sym] < 0 ? '🔻做空' : '🔺做多';
+        const brk = dirOf[row.sym] < 0 ? '整根實體跌破' : '整根實體突破';
+        row.tag = `${dirTxt} ${row.tier}${trigTf}${brk}EMA20+守住${b.loud ? '+放量' : '(無量)'}`;
       }
     }));
 

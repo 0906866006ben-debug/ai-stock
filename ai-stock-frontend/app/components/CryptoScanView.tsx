@@ -7,7 +7,7 @@ interface Row {
   dist_e12: number; ext_z: number; vol_z: number; oi_chg: number;
   oi_state: string; ext_extreme: boolean;
   diverg: boolean; chg24: number; tag: string; quality: number;
-  triggered: boolean; trig_body: number; trig_vol: number;
+  triggered: boolean; tier: string; trig_body: number; trig_vol: number;
 }
 interface ScanResp {
   status: string; generated_at?: string; tf?: string; rows?: Row[]; detail?: string;
@@ -55,7 +55,7 @@ export default function CryptoScanView() {
 
   async function load() {
     try {
-      const r = await fetch('/api/crypto-scan?tf=15m&minVol=15', { cache: 'no-store' });
+      const r = await fetch('/api/crypto-scan?minVol=15', { cache: 'no-store' });
       const d: ScanResp = await r.json();
       if (d.status !== 'ok') { setErr(d.detail || '掃描暫時失敗(可能為交易所地區限制)'); }
       else {
@@ -124,7 +124,7 @@ export default function CryptoScanView() {
           </button>
         </div>
         <p className="mt-1 text-xs text-zinc-400">
-          設定 15m(超買/超賣×資費擁擠)· 觸發 1m 放量實體破 EMA20 + 下一根守住(回踩確認,非收針)· ★=已觸發 · Binance 永續
+          均值回歸:1h 過度偏離 EMA12(必要)→ 1m 整根實體收破 EMA20 + 守住(扳機,無需放量)· ◆無量/★有量 · 目標拉回 EMA12 · Binance 永續
           {updatedAt ? ` · 更新 ${updatedAt}` : ''}
           {rows.length ? ` · 🔻${counts.down} 🔺${counts.up} ⚡${counts.anom}` : ''}
         </p>
@@ -136,37 +136,28 @@ export default function CryptoScanView() {
         </summary>
         <div className="space-y-3 px-4 pb-4 text-xs text-zinc-300">
           <p className="text-zinc-400">
-            <b className="text-zinc-200">設定類</b>(RSI／資費分位／OI／延伸z)= 判斷「站錯邊、擠爆沒」→ <b className="text-fuchsia-400">越極端越好</b>；
-            <b className="text-zinc-200"> 觸發類</b>(1m實體／1m量)= 那根 K 夠不夠力 → <b className="text-cyan-400">≥1.5 才算數</b>。
+            <b className="text-zinc-200">均值回歸邏輯</b>:價格離 EMA12 太遠(<b className="text-fuchsia-400">必要</b>)→ 等 1m 整根實體收破 EMA20(<b className="text-cyan-400">扳機,無需放量</b>)→ 目標拉回 EMA12。
+            超買/超賣、資費、OI、放量 都是 <b className="text-amber-300">加分</b>,不是門檻。
           </p>
           <RefTable
-            title="RSI · 超買超賣"
-            rows={[['≥80', '嚴重超買 → 做空最佳'], ['70–80', '超買 → 做空及格'], ['30–70', '中性,無訊號'], ['20–30', '超賣 → 做多及格'], ['≤20', '嚴重超賣 → 做多最佳']]}
+            title="偏離z · 離 EMA12 多遠(必要條件+獲利空間)"
+            rows={[['≥+3', '極端偏離,多半已竭盡 ✅✅ 做空'], ['+1.5~+3', '過度偏離 → 做空(拉回空間大)'], ['−1.5~+1.5', '沒偏離夠,無訊號❌'], ['≤−3', '極端 ✅✅ 做多']]}
           />
           <RefTable
-            title="資費分位 · 人群擠不擠(0–100%)"
-            rows={[['≥90%', '多單擠爆前10% → 做空✅✅'], ['70–90%', '偏擠 → 做空及格'], ['30–70%', '普通,無鑑別力'], ['10–30%', '空單偏擠 → 做多及格'], ['≤10%', '空單擠爆前10% → 做多✅✅']]}
+            title="距 EMA12 目標% = 拉回停利空間"
+            rows={[['絕對值越大', '拉回 EMA12 的肉越多,這單越值得'], ['做空', '現價在 EMA12 上方,目標往下拉回'], ['做多', '現價在 EMA12 下方,目標往上拉回']]}
           />
           <RefTable
-            title="OI🔥堆積 / ⚠️消退(關鍵:OI 相對價格的方向)"
-            rows={[['🔥 +3%以上', '槓桿新倉一直進(做空要價漲+OI漲、做多要價跌+OI漲)= 燃料足,把握↑'], ['−3~+3%', '中性'], ['⚠️ −3%以下', '擁擠正在消退,反轉燃料在退,把握↓'], ['配資費', 'OI高+資費極端同時=最脆弱擁擠✅✅']]}
+            title="扳機:1m 整根實體收破 EMA20(◆/★)"
+            rows={[['◆ 無量', '整根實體決定性收破+守住 = 你的實際扳機(均值回歸不需量)'], ['★ 有量', '整根收破 再加放量 = 最高把握'], ['1m實體 ≥1.5', '一大根、決定性(非收針)'], ['守住', '下一根沒收回均線才算數(濾假破)']]}
           />
           <RefTable
-            title="延伸z · 過度延伸(離均線幾個波動)"
-            rows={[['≥+3', '極端延伸,多半已竭盡 ✅✅ 做空'], ['+2~+3', '拉太開 → 做空有回吐空間✅'], ['−1~+1', '貼均線,沒延伸❌'], ['≤−3', '極端,多半已竭盡 ✅✅ 做多']]}
-          />
-          <RefTable
-            title="1m實體 · 一大根?(幾倍均實體)"
-            rows={[['≥2.0', '超大實體 → 真突破✅✅'], ['1.5–2.0', '合格的一大根✅'], ['1.0–1.5', '普通,不夠力❌'], ['<1.0', '小K擦邊,假訊號嫌疑❌']]}
-          />
-          <RefTable
-            title="1m量 · 放量?(幾倍均量)"
-            rows={[['≥2.0', '爆量,真有人砸/搶✅✅'], ['1.5–2.0', '合格放量✅'], ['1.0–1.5', '量普通,沒放量❌'], ['<1.0', '縮量,假訊號嫌疑❌']]}
+            title="加分項(不是門檻,只提高把握)"
+            rows={[['RSI(1h) 超買/賣', '偏離的確認,+把握'], ['資費分位 ≥90 / ≤10', '人群擠爆,+把握'], ['OI🔥堆積', '槓桿燃料足,+把握;⚠️消退則−'], ['放量(★)', '有真實拋壓/搶單,+把握']]}
           />
           <p className="rounded-lg bg-cyan-950/40 px-3 py-2 text-cyan-200">
-            🎯 <b>可以做單(★)</b> = 設定類極端(RSI超買/賣 + 資費分位≥90或≤10 + 延伸z≥2)<b>且</b> 觸發成立:
-            1m一大根(實體≥1.5)+ 放量(≥1.5)+ 實體收破EMA20 + <b className="text-cyan-300">下一根守住沒收回(回踩確認)</b>。
-            只有設定→盯著等;破線但下一根收回→假訊號已濾掉;四關全過→★。
+            🎯 <b>可以做單</b> = 偏離z ≥1.5(過度偏離,必要)<b>且</b> 1m 整根實體收破 EMA20 + 守住(◆)。
+            再有放量 = ★(最高把握)。加分項越多、品質分越高。目標:拉回 EMA12 停利。
           </p>
         </div>
       </details>
@@ -209,7 +200,8 @@ export default function CryptoScanView() {
             <div
               key={r.sym}
               className={`relative overflow-hidden rounded-xl border bg-zinc-900 p-3 ${
-                r.tag.includes('★') ? 'border-cyan-500 ring-1 ring-cyan-500/40' : 'border-zinc-800'
+                r.tier === '★' ? 'border-cyan-500 ring-1 ring-cyan-500/50'
+                  : r.tier === '◆' ? 'border-amber-500 ring-1 ring-amber-500/40' : 'border-zinc-800'
               }`}
             >
               <span className={`absolute left-0 top-0 h-full w-[3px] ${bar}`} />
@@ -227,13 +219,12 @@ export default function CryptoScanView() {
               </div>
               <p className={`mt-1 text-xs font-semibold ${tagColor}`}>{r.tag}</p>
               <div className="mt-2 grid grid-cols-3 gap-1.5 font-mono text-xs tabular-nums">
-                <Metric k="RSI" v={r.rsi.toFixed(0)} cls={r.rsi >= 70 ? 'text-red-400' : r.rsi <= 30 ? 'text-emerald-400' : ''} />
+                <Metric k="距EMA12目標" v={sgn(r.dist_e12, 1) + '%'} cls="text-cyan-300" />
+                <Metric k="偏離z" v={sgn(r.ext_z, 1)} cls={r.ext_extreme ? 'text-fuchsia-400' : Math.abs(r.ext_z) >= 2 ? 'text-fuchsia-300' : ''} />
+                <Metric k="RSI(1h)" v={r.rsi.toFixed(0)} cls={r.rsi >= 70 ? 'text-red-400' : r.rsi <= 30 ? 'text-emerald-400' : ''} />
                 <Metric k="資費分位" v={r.fr_pct + '%'} cls={r.fr_pct >= 90 || r.fr_pct <= 10 ? 'text-fuchsia-400' : ''} />
-                <Metric k="OI變化" v={sgn(r.oi_chg, 1) + '%'} cls={r.oi_chg >= 0 ? 'text-emerald-400' : 'text-red-400'} />
-                <Metric k="延伸z" v={sgn(r.ext_z, 1)} cls={r.ext_extreme ? 'text-fuchsia-400' : Math.abs(r.ext_z) >= 2 ? 'text-fuchsia-300' : ''} />
                 <Metric k={`OI${r.oi_state === '堆積' ? '🔥' : r.oi_state === '消退' ? '⚠️' : ''}`} v={sgn(r.oi_chg, 1) + '%'} cls={r.oi_state === '堆積' ? 'text-emerald-400' : r.oi_state === '消退' ? 'text-red-400' : ''} />
-                <Metric k="1m實體x" v={r.trig_body ? r.trig_body.toFixed(1) : '—'} cls={r.trig_body >= 1.5 ? 'text-cyan-400' : ''} />
-                <Metric k="1m量x" v={r.trig_vol ? r.trig_vol.toFixed(1) : '—'} cls={r.trig_vol >= 1.5 ? 'text-cyan-400' : ''} />
+                <Metric k="1m實體/量x" v={r.trig_body ? `${r.trig_body.toFixed(1)}/${r.trig_vol.toFixed(1)}` : '—'} cls={r.trig_body >= 1.5 ? 'text-cyan-400' : ''} />
               </div>
             </div>
           );
