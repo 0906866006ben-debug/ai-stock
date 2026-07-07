@@ -200,51 +200,125 @@ export default function CryptoScanView() {
         </p>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {shown.map((r) => {
-          const k = kind(r.tag);
-          const bar = k === 'down' ? 'bg-red-500' : k === 'up' ? 'bg-emerald-500' : 'bg-amber-500';
-          const tagColor = k === 'down' ? 'text-red-400' : k === 'up' ? 'text-emerald-400' : 'text-amber-400';
-          return (
-            <div
-              key={r.sym}
-              className={`relative overflow-hidden rounded-xl border bg-zinc-900 p-3 ${
-                r.tier === '★' ? 'border-cyan-500 ring-1 ring-cyan-500/50'
-                  : r.tier === '◆' ? 'border-amber-500 ring-1 ring-amber-500/40' : 'border-zinc-800'
-              }`}
-            >
-              <span className={`absolute left-0 top-0 h-full w-[3px] ${bar}`} />
-              <div className="flex items-baseline gap-2">
-                <span className="text-base font-bold tracking-wide text-zinc-100">{r.sym.replace('USDT', '')}</span>
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                    r.quality >= 75 ? 'bg-fuchsia-600 text-white' : r.quality >= 65 ? 'bg-amber-500 text-black' : 'bg-zinc-700 text-zinc-200'
-                  }`}
-                  title="綜合品質分(資費極端度+OI擁擠+過度延伸+量能+翻頭+背離)"
-                >
-                  品質 {r.quality}
-                </span>
-                <span className="ml-auto font-mono text-sm tabular-nums text-zinc-400">{fmtPx(r.price)}</span>
-              </div>
-              <p className={`mt-1 text-xs font-semibold ${tagColor}`}>{r.tag}</p>
-              <div className="mt-2 grid grid-cols-3 gap-1.5 font-mono text-xs tabular-nums">
-                <Metric k="距EMA12目標" v={sgn(r.dist_e12, 1) + '%'} cls="text-cyan-300" />
-                <Metric k="偏離z" v={sgn(r.ext_z, 1)} cls={r.ext_extreme ? 'text-fuchsia-400' : Math.abs(r.ext_z) >= 2 ? 'text-fuchsia-300' : ''} />
-                <Metric k="RSI(1h)" v={r.rsi.toFixed(0)} cls={r.rsi >= 70 ? 'text-red-400' : r.rsi <= 30 ? 'text-emerald-400' : ''} />
-                <Metric k="資費分位" v={r.fr_pct + '%'} cls={r.fr_pct >= 90 || r.fr_pct <= 10 ? 'text-fuchsia-400' : ''} />
-                <Metric k={`OI${r.oi_state === '堆積' ? '🔥' : r.oi_state === '消退' ? '⚠️' : ''}`} v={sgn(r.oi_chg, 1) + '%'} cls={r.oi_state === '堆積' ? 'text-emerald-400' : r.oi_state === '消退' ? 'text-red-400' : ''} />
-                <Metric k="1m EMA12/量x" v={r.trig_body ? `${r.trig_body.toFixed(1)}/${r.trig_vol.toFixed(1)}` : '—'} cls={r.trig_body >= 1.5 ? 'text-cyan-400' : ''} />
-              </div>
-            </div>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {shown.map((r) => (
+          <SignalCard key={r.sym} r={r} />
+        ))}
       </div>
 
       <p className="pt-2 text-center text-[11px] leading-6 text-zinc-500">
         觀察輔助工具，非投資建議、無回測背書。做空噴出幣有軋空尾部風險；控槓桿與停損自負。<br />
-        綠＝做多方向（超賣反轉）· 紅＝做空方向（超買反轉）· 國際慣例綠漲紅跌。
+        <span className="text-red-400">紅＝做空</span>（1h超買·目標往下）·{' '}
+        <span className="text-emerald-400">綠＝做多</span>（1h超賣·目標往上）· 國際慣例綠漲紅跌。
       </p>
     </div>
+  );
+}
+
+function SignalCard({ r }: { r: Row }) {
+  const short = r.tag.includes('做空');
+  const state: 'star' | 'diamond' | 'watch' = r.triggered ? (r.tier === '★' ? 'star' : 'diamond') : 'watch';
+
+  // 方向色
+  const dirText = short ? 'text-red-400' : 'text-emerald-400';
+  const dirBg = short ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/15 text-emerald-300';
+  const rail = short ? 'bg-red-500' : 'bg-emerald-500';
+
+  // 卡片外框依狀態(觸發>觀察)
+  const frame = state === 'star'
+    ? 'border-cyan-500/70 ring-1 ring-cyan-400/40 shadow-lg shadow-cyan-500/10'
+    : state === 'diamond'
+      ? 'border-amber-500/60 ring-1 ring-amber-500/25'
+      : 'border-zinc-800';
+
+  // 狀態徽章
+  const badge = state === 'star'
+    ? { txt: '★ 訊號·放量', cls: 'bg-gradient-to-r from-cyan-400 to-fuchsia-500 text-black' }
+    : state === 'diamond'
+      ? { txt: '◆ 訊號', cls: 'bg-amber-400 text-black' }
+      : { txt: '👀 觀察', cls: 'bg-zinc-700 text-zinc-200' };
+
+  const targetArrow = short ? '↓' : '↑';
+
+  return (
+    <div className={`relative overflow-hidden rounded-2xl border bg-zinc-900/90 ${frame}`}>
+      <span className={`absolute left-0 top-0 h-full w-1 ${rail}`} />
+      <div className="p-4 pl-5">
+        {/* 標頭:幣種 · 方向 · 狀態 */}
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-extrabold tracking-wide text-zinc-50">{r.sym.replace('USDT', '')}</span>
+          <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold ${dirBg}`}>{short ? '🔻做空' : '🔺做多'}</span>
+          <span className={`ml-auto rounded-full px-2.5 py-1 text-[11px] font-bold ${badge.cls}`}>{badge.txt}</span>
+        </div>
+
+        {/* 觸發橫幅(只有觸發才顯示) */}
+        {r.triggered && (
+          <div className={`mt-2.5 rounded-lg px-3 py-2 text-xs font-semibold ${short ? 'bg-red-950/50 text-red-200' : 'bg-emerald-950/50 text-emerald-200'}`}>
+            ⚡ 1m 整根實體{short ? '跌破' : '突破'} EMA12 + 守住
+            <span className="ml-1 font-mono tabular-nums text-zinc-300">實體 {r.trig_body.toFixed(1)}x · 量 {r.trig_vol.toFixed(1)}x</span>
+          </div>
+        )}
+
+        {/* 主角:距 15m EMA12 目標 + RSI 量表 */}
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] text-zinc-500">距 15m EMA12 目標</div>
+            <div className={`font-mono text-2xl font-black tabular-nums leading-tight ${dirText}`}>
+              {targetArrow} {Math.abs(r.dist_e12).toFixed(1)}<span className="text-base">%</span>
+            </div>
+          </div>
+          <div className="w-[46%] shrink-0">
+            <div className="mb-1 flex items-baseline justify-between text-[11px]">
+              <span className="text-zinc-500">1h RSI</span>
+              <span className={`font-mono text-sm font-bold tabular-nums ${r.rsi >= 75 ? 'text-red-400' : r.rsi <= 25 ? 'text-emerald-400' : 'text-zinc-300'}`}>{r.rsi.toFixed(0)}</span>
+            </div>
+            <RsiBar rsi={r.rsi} />
+          </div>
+        </div>
+
+        {/* 次要:現價 + context chips */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
+          <span className="rounded-md bg-zinc-800/70 px-2 py-1 font-mono tabular-nums text-zinc-300">
+            <span className="text-zinc-500">價 </span>{fmtPx(r.price)}
+          </span>
+          <Chip label="偏離z" value={sgn(r.ext_z, 1)} tone={r.ext_extreme ? 'text-fuchsia-400' : Math.abs(r.ext_z) >= 2 ? 'text-fuchsia-300' : 'text-zinc-300'} />
+          <Chip label="資費" value={r.fr_pct + '%'} tone={r.fr_pct >= 90 || r.fr_pct <= 10 ? 'text-fuchsia-400' : 'text-zinc-300'} />
+          <Chip
+            label={`OI${r.oi_state === '堆積' ? '🔥' : r.oi_state === '消退' ? '⚠️' : ''}`}
+            value={sgn(r.oi_chg, 1) + '%'}
+            tone={r.oi_state === '堆積' ? 'text-emerald-400' : r.oi_state === '消退' ? 'text-red-400' : 'text-zinc-300'}
+          />
+          <span
+            className={`ml-auto rounded-md px-2 py-1 text-[10px] font-bold ${r.quality >= 60 ? 'bg-fuchsia-600/80 text-white' : r.quality >= 35 ? 'bg-amber-500/80 text-black' : 'bg-zinc-700 text-zinc-300'}`}
+            title="品質分:RSI深度+偏離+資費順風+OI(僅排序,非門檻)"
+          >
+            品質 {r.quality}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// RSI 迷你量表:0-100,25/75 為門檻刻度
+function RsiBar({ rsi }: { rsi: number }) {
+  const pct = Math.max(0, Math.min(100, rsi));
+  const color = rsi >= 75 ? 'bg-red-500' : rsi <= 25 ? 'bg-emerald-500' : 'bg-zinc-500';
+  return (
+    <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-zinc-700/70">
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      <span className="absolute top-0 h-full w-px bg-zinc-500/60" style={{ left: '25%' }} />
+      <span className="absolute top-0 h-full w-px bg-zinc-500/60" style={{ left: '75%' }} />
+    </div>
+  );
+}
+
+function Chip({ label, value, tone = 'text-zinc-300' }: { label: string; value: string; tone?: string }) {
+  return (
+    <span className="inline-flex items-baseline gap-1 rounded-md bg-zinc-800/70 px-2 py-1">
+      <span className="text-zinc-500">{label}</span>
+      <span className={`font-mono font-semibold tabular-nums ${tone}`}>{value}</span>
+    </span>
   );
 }
 
@@ -264,11 +338,3 @@ function RefTable({ title, rows }: { title: string; rows: [string, string][] }) 
   );
 }
 
-function Metric({ k, v, cls = '' }: { k: string; v: string; cls?: string }) {
-  return (
-    <div className="rounded-md bg-zinc-800/60 px-2 py-1">
-      <div className="text-[9px] text-zinc-500">{k}</div>
-      <div className={`text-[13px] font-bold ${cls || 'text-zinc-200'}`}>{v}</div>
-    </div>
-  );
-}
