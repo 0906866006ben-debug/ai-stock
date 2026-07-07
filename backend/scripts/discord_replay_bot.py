@@ -49,7 +49,9 @@ SIGNAL_SIDE = os.getenv("SIGNAL_SIDE", "both")        # both / short / long
 COOLDOWN_MIN = int(os.getenv("SIGNAL_COOLDOWN_MIN", "30"))
 _last_alert: dict[str, float] = {}                    # sym -> 上次推播時間
 
-SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:多空鏡像=超買/超賣+放量實體破EMA20+資費(空要資費正、多要資費負);觸發=1分一大根放量實體收破EMA20(非收針);背離只是注意不是扳機;逆勢/搶跑是死因;出場目標要配進場框架。
+SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:設定看1hr超買超賣;多空鏡像=超買/超賣+放量實體破EMA+資費(空要資費正、多要資費負);觸發=1分一大根放量實體收破EMA20(非收針);目標=拉回EMA12(均線修正);背離只是注意不是扳機;逆勢/搶跑是死因;出場=吃反轉那根就走或保本續抱。
+
+若給了多張圖=同一單的不同時間框架:大週期(1h)判「設定/方向/超買超賣」、小週期(1m/15m)判「觸發那根合不合格」,綜合後給一個結論,不要每張圖各講一段。
 
 看圖後用繁中輸出**極精簡**複盤,總共不超過 6 行,格式:
 方向/結果:(做多或做空、賺或賠)
@@ -143,22 +145,26 @@ async def on_message(msg: discord.Message):
         return
     if CHANNEL_ID and str(msg.channel.id) != str(CHANNEL_ID):
         return
-    imgs = [a for a in msg.attachments if (a.content_type or "").startswith("image")]
+    imgs = [a for a in msg.attachments if (a.content_type or "").startswith("image")][:6]  # 一次最多 6 張
     if not imgs:
         return
-    a = imgs[0]
     try:
         async with msg.channel.typing():
-            raw = await a.read()
-            media_type = _sniff_media_type(raw)  # 直接從位元組判真實格式,不信 Discord 標的
-            b64 = base64.standard_b64encode(raw).decode()
-            # Opus 保留思考力,但思考預算與輸出都設上限省 token
+            # 讀所有圖 → 多個 image 區塊(多時間框架綜合判讀)
+            content: list = []
+            for idx, a in enumerate(imgs):
+                raw = await a.read()
+                media_type = _sniff_media_type(raw)  # 從位元組判真實格式,不信 Discord 標的
+                b64 = base64.standard_b64encode(raw).decode()
+                if len(imgs) > 1:
+                    content.append({"type": "text", "text": f"[圖{idx + 1}/{len(imgs)}]"})
+                content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}})
+            hint = "這單複盤,精簡" if len(imgs) == 1 else \
+                f"這是同一單的 {len(imgs)} 個時間框架,綜合判讀後精簡複盤"
+            content.append({"type": "text", "text": (msg.content or hint)})
             kwargs = dict(
                 model=MODEL, max_tokens=1200, system=SYSTEM,
-                messages=[{"role": "user", "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
-                    {"type": "text", "text": (msg.content or "這單複盤,精簡")},
-                ]}],
+                messages=[{"role": "user", "content": content}],
             )
             if "opus" in MODEL or "sonnet-5" in MODEL:
                 kwargs["thinking"] = {"type": "enabled", "budget_tokens": 1024}  # 思考預算下限,省錢
