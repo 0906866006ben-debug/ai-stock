@@ -124,7 +124,7 @@ export default function CryptoScanView() {
           </button>
         </div>
         <p className="mt-1 text-xs text-zinc-400">
-          均值回歸:1h 過度偏離 EMA12(必要)→ 1m 整根實體收破 EMA20 + 守住(扳機,無需放量)· ◆無量/★有量 · 目標拉回 EMA12 · Binance 永續
+          均值回歸:1h RSI-14 超買≥75/超賣≤25(硬門檻)+ 過度偏離 EMA12 → 1m 整根實體收破 EMA20+守住(扳機,無需放量)· ◆無量/★有量 · 目標拉回 EMA12
           {updatedAt ? ` · 更新 ${updatedAt}` : ''}
           {rows.length ? ` · 🔻${counts.down} 🔺${counts.up} ⚡${counts.anom}` : ''}
         </p>
@@ -136,12 +136,16 @@ export default function CryptoScanView() {
         </summary>
         <div className="space-y-3 px-4 pb-4 text-xs text-zinc-300">
           <p className="text-zinc-400">
-            <b className="text-zinc-200">均值回歸邏輯</b>:價格離 EMA12 太遠(<b className="text-fuchsia-400">必要</b>)→ 等 1m 整根實體收破 EMA20(<b className="text-cyan-400">扳機,無需放量</b>)→ 目標拉回 EMA12。
-            超買/超賣、資費、OI、放量 都是 <b className="text-amber-300">加分</b>,不是門檻。
+            <b className="text-zinc-200">均值回歸邏輯</b>:<b className="text-fuchsia-400">1h RSI 超買≥75 / 超賣≤25(鐵門檻,沒到不進名單)</b>+ 離 EMA12 夠遠 → 等 1m 整根實體收破 EMA20(<b className="text-cyan-400">扳機,無需放量</b>)→ 目標拉回 EMA12。
+            資費、OI、放量 才是 <b className="text-amber-300">加分</b>。
           </p>
           <RefTable
-            title="偏離z · 離 EMA12 多遠(必要條件+獲利空間)"
-            rows={[['≥+3', '極端偏離,多半已竭盡 ✅✅ 做空'], ['+1.5~+3', '過度偏離 → 做空(拉回空間大)'], ['−1.5~+1.5', '沒偏離夠,無訊號❌'], ['≤−3', '極端 ✅✅ 做多']]}
+            title="1h RSI-14 · 鐵門檻(沒到直接不出現)"
+            rows={[['≥75', '超買 → 只找做空'], ['25~75', '不夠極端,不進名單❌'], ['≤25', '超賣 → 只找做多']]}
+          />
+          <RefTable
+            title="偏離z · 離 EMA12 多遠(獲利空間)"
+            rows={[['≥+3', '極端偏離,多半已竭盡 ✅✅ 做空'], ['+1~+3', '過度偏離 → 做空(拉回空間大)'], ['≤−3', '極端 ✅✅ 做多']]}
           />
           <RefTable
             title="距 EMA12 目標% = 拉回停利空間"
@@ -153,11 +157,11 @@ export default function CryptoScanView() {
           />
           <RefTable
             title="加分項(不是門檻,只提高把握)"
-            rows={[['RSI(1h) 超買/賣', '偏離的確認,+把握'], ['資費分位 ≥90 / ≤10', '人群擠爆,+把握'], ['OI🔥堆積', '槓桿燃料足,+把握;⚠️消退則−'], ['放量(★)', '有真實拋壓/搶單,+把握']]}
+            rows={[['資費分位 ≥90 / ≤10', '人群擠爆,+把握'], ['OI🔥堆積', '槓桿燃料足,+把握;⚠️消退則−'], ['放量(★)', '有真實拋壓/搶單,+把握']]}
           />
           <p className="rounded-lg bg-cyan-950/40 px-3 py-2 text-cyan-200">
-            🎯 <b>可以做單</b> = 偏離z ≥1.5(過度偏離,必要)<b>且</b> 1m 整根實體收破 EMA20 + 守住(◆)。
-            再有放量 = ★(最高把握)。加分項越多、品質分越高。目標:拉回 EMA12 停利。
+            🎯 <b>可以做單</b> = 1h RSI 超買≥75/超賣≤25(鐵門檻)<b>且</b> 離 EMA12 夠遠 <b>且</b> 1m 整根實體收破 EMA20 + 守住(◆)。
+            再有放量 = ★(最高把握)。目標:拉回 EMA12 停利。
           </p>
         </div>
       </details>

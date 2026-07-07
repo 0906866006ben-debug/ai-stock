@@ -137,28 +137,23 @@ export async function GET(request: Request): Promise<Response> {
         const b = parseFloat(oiHist[oiHist.length - 1].sumOpenInterest);
         if (a > 0) oi_chg = (b / a - 1) * 100;
       }
-      const rs5 = rs.slice(-5).filter((x) => !isNaN(x));
-      const recentHi = Math.max(...rs5), recentLo = Math.min(...rs5);
       const clamp = (x: number) => Math.max(0, Math.min(1, x));
 
-      // ── 均值回歸:必要=過度偏離(離 EMA12 夠遠);方向由偏離方向決定 ──
-      const EXT_MIN = 1.5;
+      // ── 均值回歸:硬門檻=1h RSI-14 超買/超賣(75/25),沒到免談;方向由它決定 ──
+      const RSI_HI = 75, RSI_LO = 25, EXT_MIN = 1.0;
       let tag = '', dir = 0;
-      if (ext_z >= EXT_MIN) { dir = -1; tag = '🔻做空觀察(偏離EMA12過高·待1m整根收破)'; }
-      else if (ext_z <= -EXT_MIN) { dir = 1; tag = '🔺做多觀察(偏離EMA12過低·待1m整根收破)'; }
-      if (!tag) return;
+      if (r >= RSI_HI && ext_z >= EXT_MIN) { dir = -1; tag = '🔻做空觀察(1h超買≥75·待1m整根收破)'; }
+      else if (r <= RSI_LO && ext_z <= -EXT_MIN) { dir = 1; tag = '🔺做多觀察(1h超賣≤25·待1m整根收破)'; }
+      if (!tag) return;   // 沒超買超賣(或偏離方向不符)= 直接不進名單
 
-      // 品質分(0-100):偏離幅度為主,其餘全為加分項(超買/賣、資費擠、OI堆積、延伸極端)
+      // 品質分(0-100):偏離幅度為主 + 資費擠/OI堆積 加分(RSI 已是門檻不再計分)
       const oi_state = oi_chg >= 3 ? '堆積' : oi_chg <= -3 ? '消退' : '中性';
       const ext_extreme = Math.abs(ext_z) >= 3;
-      const over = dir < 0 ? clamp((recentHi - 68) / 12) : clamp((32 - recentLo) / 12);  // 超買/超賣加分
-      let quality = clamp((Math.abs(ext_z) - EXT_MIN) / 2) * 45   // 偏離越大越好(核心)
-        + (dir < 0 ? clamp((fr_pct - 0.6) / 0.4) : clamp((0.4 - fr_pct) / 0.4)) * 20  // 資費擠(加分)
-        + over * 20                                                                   // 1h 超買/賣(加分)
+      let quality = clamp((Math.abs(ext_z) - EXT_MIN) / 2.5) * 50   // 偏離越大越好(核心)
+        + (dir < 0 ? clamp((fr_pct - 0.6) / 0.4) : clamp((0.4 - fr_pct) / 0.4)) * 25  // 資費擠(加分)
         + (oi_chg >= 3 ? 10 : oi_chg <= -3 ? -8 : 0)                                   // OI 堆積/消退
-        + (ext_extreme ? 5 : 0);
+        + (ext_extreme ? 8 : 0);
       quality = Math.max(0, Math.min(100, quality));
-      if (over > 0.5) tag += dir < 0 ? ' 超買+' : ' 超賣+';
       if (oi_state === '堆積') tag += ' 🔥OI堆積';
       else if (oi_state === '消退') tag += ' ⚠️OI消退';
       if (ext_extreme) tag += ' 極端偏離';
