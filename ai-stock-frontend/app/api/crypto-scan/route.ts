@@ -101,8 +101,8 @@ async function jget<T>(path: string): Promise<T> {
   }
 }
 
-// 一大根 + 實體收破 EMA12 + 「下一根守住(沒收回均線)」回踩確認。
-// 突破根 = 倒數第二根(n-2),確認根 = 最後一根(n-1)。dir=1 突破(多)、dir=-1 跌破(空)。
+// 一大根 + 實體收破 EMA12 + 「下一根守住(沒收回均線)」確認。全用「已收 K」:
+// 排除幣安最後一根未收 K(n-1);確認根 = 最後已收(n-2)、突破根 = n-3。dir=1 多、dir=-1 空。
 function bigBreak(kl: BinanceKline[], dir: number, volMult: number, bodyMult: number):
   { hit: boolean; loud: boolean; body: number; vol: number; held: boolean } {
   if (!Array.isArray(kl) || kl.length < 26) return { hit: false, loud: false, body: 0, vol: 0, held: false };
@@ -110,10 +110,13 @@ function bigBreak(kl: BinanceKline[], dir: number, volMult: number, bodyMult: nu
   const lo = kl.map((c) => parseFloat(c[3])), cl = kl.map((c) => parseFloat(c[4]));
   const v = kl.map((c) => parseFloat(c[5]));
   const n = cl.length;
-  const bi = n - 2;                                  // 突破那根
+  // 幣安最後一根 cl[n-1] 是「當下未收完」的 K——排除,只用已收 K 判斷,否則會用半根 K 提前跳訊號。
+  const ci = n - 2;                                  // 確認根(已收的最後一根)
+  const bi = ci - 1;                                  // 突破那根(已收)
+  if (bi < 21) return { hit: false, loud: false, body: 0, vol: 0, held: false };
   const e12p = emaLast(cl.slice(0, bi), 12);          // 突破前一根的 EMA12
   const e12b = emaLast(cl.slice(0, bi + 1), 12);      // 突破當根的 EMA12
-  const e12c = emaLast(cl, 12);                       // 確認根(n-1)的 EMA12
+  const e12c = emaLast(cl.slice(0, ci + 1), 12);      // 確認根的 EMA12(不含未收根)
   const O = o[bi], H = h[bi], L = lo[bi], C = cl[bi], V = v[bi];
   const prevC = cl[bi - 1];
   const body = Math.abs(C - O), range = Math.max(H - L, 1e-12);
@@ -127,10 +130,10 @@ function bigBreak(kl: BinanceKline[], dir: number, volMult: number, bodyMult: nu
   let broke = false, held = false;
   if (dir < 0) {
     broke = big && prevC >= e12p && C < e12b && C < O && closePos <= 0.4;
-    held = cl[n - 1] < e12c;                              // 確認根仍收在 EMA12 下(沒收回)
+    held = cl[ci] < e12c;                                 // 確認根(已收)仍收在 EMA12 下
   } else {
     broke = big && prevC <= e12p && C > e12b && C > O && closePos >= 0.6;
-    held = cl[n - 1] > e12c;
+    held = cl[ci] > e12c;                                 // 確認根(已收)仍收在 EMA12 上
   }
   // hit = 扳機成立(整根實體收破+守住,無需放量);loud = 有放量(升級為 ★ 用)
   return { hit: broke && held, loud, body: bodyMul, vol: volMul, held };
@@ -240,7 +243,7 @@ export async function GET(request: Request): Promise<Response> {
     // ── 第二階段:只對「設定成立」者抓 1m,驗「一大根實體破 EMA12」──
     await Promise.all(rows.map(async (row) => {
       let k1: BinanceKline[];
-      try { k1 = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${row.sym}&interval=${trigTf}&limit=40`); } catch { return; }
+      try { k1 = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${row.sym}&interval=${trigTf}&limit=60`); } catch { return; }
       const b = bigBreak(k1, dirOf[row.sym], volMult, bodyMult);
       row.trig_body = Math.round(b.body * 10) / 10;
       row.trig_vol = Math.round(b.vol * 10) / 10;
