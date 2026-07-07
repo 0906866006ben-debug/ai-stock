@@ -42,14 +42,16 @@ MODEL = os.getenv("BOT_AI_MODEL", "claude-sonnet-5")
 CHANNEL_ID = os.getenv("BOT_CHANNEL_ID")
 ai = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-# ── ★ 訊號自動推播設定 ──
+# ── 訊號自動推播設定 ──
 SIGNAL_CHANNEL_ID = int(os.getenv("SIGNAL_CHANNEL_ID", "1523771234230337657"))
-SCAN_URL = os.getenv("SCAN_URL", "https://ai-stock-rosy-eight.vercel.app/api/crypto-scan?minVol=15&minQ=45")
+# minQ=1:只靠掃描端點的 1h RSI 75/25 鐵門檻過濾,冒出來就是超買/超賣設定
+SCAN_URL = os.getenv("SCAN_URL", "https://ai-stock-rosy-eight.vercel.app/api/crypto-scan?minVol=15&minQ=1")
 SIGNAL_SIDE = os.getenv("SIGNAL_SIDE", "both")        # both / short / long
 COOLDOWN_MIN = int(os.getenv("SIGNAL_COOLDOWN_MIN", "30"))
-_last_alert: dict[str, float] = {}                    # sym -> 上次推播時間
+_setup_alert: dict[str, float] = {}                   # sym -> 上次「👀超買超賣觀察」推播時間
+_trig_alert: dict[str, float] = {}                    # sym -> 上次「★1m收破訊號」推播時間
 
-SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:設定看1hr超買超賣;多空鏡像=超買/超賣+放量實體破EMA+資費(空要資費正、多要資費負);觸發=1分一大根放量實體收破EMA20(非收針);目標=拉回EMA12(均線修正);背離只是注意不是扳機;逆勢/搶跑是死因;出場=吃反轉那根就走或保本續抱。
+SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:設定看1hr RSI-14超買≥75/超賣≤25(鐵門檻,沒到不做);多空鏡像=超買做空/超賣做多+資費(空要資費正、多要資費負);觸發=1分一大根整根實體收破EMA20(非收針,均值回歸不強求放量);目標=拉回EMA12(均線修正);背離只是注意不是扳機;逆勢/搶跑是死因;出場=吃反轉那根就走或保本續抱。
 
 若給了多張圖=同一單的不同時間框架:大週期(1h)判「設定/方向/超買超賣」、小週期(1m/15m)判「觸發那根合不合格」,綜合後給一個結論,不要每張圖各講一段。
 
@@ -104,12 +106,13 @@ async def signal_loop():
     if ch is None:
         print(f"⚠ 找不到訊號頻道 {SIGNAL_CHANNEL_ID}(bot 沒進那個群/沒權限?),訊號推播略過", flush=True)
         return
-    print(f"🟢 ★訊號推播啟動 → #{getattr(ch, 'name', SIGNAL_CHANNEL_ID)}(每60s掃、同幣冷卻{COOLDOWN_MIN}分)", flush=True)
+    print(f"🟢 訊號推播啟動 → #{getattr(ch, 'name', SIGNAL_CHANNEL_ID)}"
+          f"(每60s掃、👀超買超賣觀察+★1m收破、同幣冷卻{COOLDOWN_MIN}分)", flush=True)
     while not bot.is_closed():
         try:
             req = urllib.request.Request(SCAN_URL, headers={"User-Agent": "Mozilla/5.0"})
             data = json.loads(urllib.request.urlopen(req, timeout=20).read())
-            rows = [r for r in data.get("rows", []) if r.get("triggered")]
+            rows = data.get("rows", [])   # 每列都已過 1h RSI 75/25 鐵門檻
             now = time.time()
             for r in rows:
                 is_short = "做空" in r["tag"]
@@ -118,13 +121,28 @@ async def signal_loop():
                 if SIGNAL_SIDE == "long" and is_short:
                     continue
                 sym = r["sym"]
-                if now - _last_alert.get(sym, 0) < COOLDOWN_MIN * 60:
-                    continue
-                _last_alert[sym] = now
-                head = "🔻 做空訊號" if is_short else "🔺 做多訊號"
-                msg = (f"**{head}  {sym}**\n{r['tag'].split('★')[-1].strip() if '★' in r['tag'] else r['tag']}\n"
-                       f"品質{r['quality']} · 資費分位{r['fr_pct']}% · 1m實體{r['trig_body']}x · "
-                       f"1m量{r['trig_vol']}x · RSI{round(r['rsi'])} · 價{r['price']}")
+                rsi = round(r.get("rsi", 0))
+                if r.get("triggered"):
+                    # ★/◆ 1m 整根實體收破 EMA20 = 進場觀察(較強)
+                    if now - _trig_alert.get(sym, 0) < COOLDOWN_MIN * 60:
+                        continue
+                    _trig_alert[sym] = now
+                    _setup_alert[sym] = now   # 觸發也算一次設定,避免緊接著又推觀察
+                    head = "🔻 做空訊號" if is_short else "🔺 做多訊號"
+                    tier = r.get("tier") or "◆"
+                    msg = (f"**{tier} {head}  {sym}**  1m整根收破EMA20\n"
+                           f"RSI{rsi} · 偏離z{r['ext_z']} · 距EMA12目標{r['dist_e12']}% · "
+                           f"資費分位{r['fr_pct']}% · 1m實體{r['trig_body']}x/量{r['trig_vol']}x · 品質{r['quality']}\n"
+                           f"目標:拉回 EMA12。價{r['price']}")
+                else:
+                    # 👀 只是 1h 超買/超賣設定,還沒 1m 收破 → 提醒去盯 1m
+                    if now - _setup_alert.get(sym, 0) < COOLDOWN_MIN * 60:
+                        continue
+                    _setup_alert[sym] = now
+                    head = "👀 超買·做空觀察" if is_short else "👀 超賣·做多觀察"
+                    msg = (f"**{head}  {sym}**  1h RSI{rsi}\n"
+                           f"偏離z{r['ext_z']} · 距EMA12目標{r['dist_e12']}% · 資費分位{r['fr_pct']}% · {r['oi_state']}\n"
+                           f"去盯 1m,等整根實體收破 EMA20 再進。價{r['price']}")
                 await ch.send(msg)
         except Exception as e:  # noqa: BLE001 網路波動不中斷
             print(f"訊號掃描失敗:{e}", flush=True)
