@@ -10,6 +10,7 @@ const BASE = 'https://fapi.binance.com';
 interface Row {
   sym: string; price: number; rsi: number; fr: number; fr_pct: number;
   dist_e12: number; ext_z: number; vol_z: number; oi_chg: number;
+  oi_state: string; ext_extreme: boolean;
   diverg: boolean; chg24: number; tag: string; quality: number;
   triggered: boolean; trig_body: number; trig_vol: number;
 }
@@ -143,11 +144,23 @@ export async function GET(request: Request): Promise<Response> {
         quality = clamp((0.5 - fr_pct) / 0.5) * 35 + clamp(-ext_z / 2) * 30 + clamp(vol_z / 3) * 35;
         tag = '🔺做多觀察(超賣+資費負·待1m突破)'; dir = 1;
       }
+      // OI 擁擠確認(研究:做空要價漲+OI漲、做多要價跌+OI漲=槓桿新倉堆積=燃料足;
+      // OI 下降=擁擠正在消退,把握下降)+ 延伸極端(|z|≥3=多半已竭盡)
+      const oi_state = oi_chg >= 3 ? '堆積' : oi_chg <= -3 ? '消退' : '中性';
+      const ext_extreme = Math.abs(ext_z) >= 3;
+      if (tag) {
+        quality += oi_chg >= 3 ? 6 : oi_chg <= -3 ? -10 : 0;   // 堆積加分、消退扣分
+        if (ext_extreme) quality += 4;
+        quality = Math.max(0, Math.min(100, quality));
+        if (oi_state === '堆積') tag += ' 🔥OI堆積';
+        else if (oi_state === '消退') tag += ' ⚠️OI消退';
+        if (ext_extreme) tag += ' 極端延伸';
+      }
       if (!tag || quality < minQ) return;
       dirOf[sym] = dir;
       rows.push({
         sym, price, rsi: r, fr: fr * 100, fr_pct: Math.round(fr_pct * 100),
-        dist_e12: (price / e20 - 1) * 100, ext_z, vol_z, oi_chg, diverg: false,
+        dist_e12: (price / e20 - 1) * 100, ext_z, vol_z, oi_chg, oi_state, ext_extreme, diverg: false,
         chg24: chgMap[sym], tag, quality: Math.round(quality),
         triggered: false, trig_body: 0, trig_vol: 0,
       });

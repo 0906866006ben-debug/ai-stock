@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 interface Row {
   sym: string; price: number; rsi: number; fr: number; fr_pct: number;
   dist_e12: number; ext_z: number; vol_z: number; oi_chg: number;
+  oi_state: string; ext_extreme: boolean;
   diverg: boolean; chg24: number; tag: string; quality: number;
   triggered: boolean; trig_body: number; trig_vol: number;
 }
@@ -147,12 +148,12 @@ export default function CryptoScanView() {
             rows={[['≥90%', '多單擠爆前10% → 做空✅✅'], ['70–90%', '偏擠 → 做空及格'], ['30–70%', '普通,無鑑別力'], ['10–30%', '空單偏擠 → 做多及格'], ['≤10%', '空單擠爆前10% → 做多✅✅']]}
           />
           <RefTable
-            title="OI變化 · 槓桿堆積(近3根未平倉量%)"
-            rows={[['≥+8%', '槓桿大量湧入,軋壓燃料足✅'], ['+3~+8%', '有在堆積'], ['−3~+3%', '平淡'], ['大幅負', '部位在撤,擠壓消退⚠️']]}
+            title="OI🔥堆積 / ⚠️消退(關鍵:OI 相對價格的方向)"
+            rows={[['🔥 +3%以上', '槓桿新倉一直進(做空要價漲+OI漲、做多要價跌+OI漲)= 燃料足,把握↑'], ['−3~+3%', '中性'], ['⚠️ −3%以下', '擁擠正在消退,反轉燃料在退,把握↓'], ['配資費', 'OI高+資費極端同時=最脆弱擁擠✅✅']]}
           />
           <RefTable
             title="延伸z · 過度延伸(離均線幾個波動)"
-            rows={[['≥+2', '往上拉太開 → 做空有回吐空間✅'], ['+1~+2', '有點延伸'], ['−1~+1', '貼均線,沒延伸❌'], ['≤−2', '往下砸太深 → 做多有反彈✅']]}
+            rows={[['≥+3', '極端延伸,多半已竭盡 ✅✅ 做空'], ['+2~+3', '拉太開 → 做空有回吐空間✅'], ['−1~+1', '貼均線,沒延伸❌'], ['≤−3', '極端,多半已竭盡 ✅✅ 做多']]}
           />
           <RefTable
             title="1m實體 · 一大根?(幾倍均實體)"
@@ -229,7 +230,8 @@ export default function CryptoScanView() {
                 <Metric k="RSI" v={r.rsi.toFixed(0)} cls={r.rsi >= 70 ? 'text-red-400' : r.rsi <= 30 ? 'text-emerald-400' : ''} />
                 <Metric k="資費分位" v={r.fr_pct + '%'} cls={r.fr_pct >= 90 || r.fr_pct <= 10 ? 'text-fuchsia-400' : ''} />
                 <Metric k="OI變化" v={sgn(r.oi_chg, 1) + '%'} cls={r.oi_chg >= 0 ? 'text-emerald-400' : 'text-red-400'} />
-                <Metric k="延伸z" v={sgn(r.ext_z, 1)} cls={Math.abs(r.ext_z) >= 2 ? 'text-fuchsia-400' : ''} />
+                <Metric k="延伸z" v={sgn(r.ext_z, 1)} cls={r.ext_extreme ? 'text-fuchsia-400' : Math.abs(r.ext_z) >= 2 ? 'text-fuchsia-300' : ''} />
+                <Metric k={`OI${r.oi_state === '堆積' ? '🔥' : r.oi_state === '消退' ? '⚠️' : ''}`} v={sgn(r.oi_chg, 1) + '%'} cls={r.oi_state === '堆積' ? 'text-emerald-400' : r.oi_state === '消退' ? 'text-red-400' : ''} />
                 <Metric k="1m實體x" v={r.trig_body ? r.trig_body.toFixed(1) : '—'} cls={r.trig_body >= 1.5 ? 'text-cyan-400' : ''} />
                 <Metric k="1m量x" v={r.trig_vol ? r.trig_vol.toFixed(1) : '—'} cls={r.trig_vol >= 1.5 ? 'text-cyan-400' : ''} />
               </div>
