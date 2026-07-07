@@ -25,6 +25,7 @@ import re
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 import discord
 from anthropic import Anthropic
@@ -49,7 +50,7 @@ SCAN_URL = os.getenv("SCAN_URL", "https://ai-stock-rosy-eight.vercel.app/api/cry
 SIGNAL_SIDE = os.getenv("SIGNAL_SIDE", "both")        # both / short / long
 COOLDOWN_MIN = int(os.getenv("SIGNAL_COOLDOWN_MIN", "30"))
 _setup_alert: dict[str, float] = {}                   # sym -> 上次「👀超買超賣觀察」推播時間
-_trig_alert: dict[str, float] = {}                    # sym -> 上次「★1m收破訊號」推播時間
+_trig_alert: dict[str, float] = {}                    # sym -> 上次「1m EMA12 觸發觀察」推播時間
 
 SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:設定看1hr RSI-14超買≥75/超賣≤25(鐵門檻,沒到不做);多空鏡像=超買做空/超賣做多;資費只作順風/逆風參考不是跳訊號門檻;觸發=1分一大根整根實體收破EMA12(非收針,均值回歸不強求放量);目標=拉回15m EMA12(目標參考,不是篩選條件);背離只是注意不是扳機;逆勢/搶跑是死因;出場=吃反轉那根就走或保本續抱。
 
@@ -98,6 +99,64 @@ def fetch_klines_note(text: str) -> str:
         return ""
 
 
+def _row_num(row: dict[str, Any], key: str, default: float = 0.0) -> float:
+    try:
+        return float(row.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _target_text(dist_pct: float) -> str:
+    if dist_pct > 0:
+        position = "現價在上方"
+    elif dist_pct < 0:
+        position = "現價在下方"
+    else:
+        position = "貼近"
+    return f"15m EMA12距離{abs(dist_pct):.1f}%({position})"
+
+
+def build_signal_message(row: dict[str, Any]) -> tuple[str, bool]:
+    """Build Discord signal-channel copy aligned with the crypto scan contract.
+
+    Returns the message and whether the row is short-side observation.
+    """
+    tag = str(row.get("tag", ""))
+    sym = str(row.get("sym", "?"))
+    rsi = round(_row_num(row, "rsi"))
+    is_short = "做空" in tag or rsi >= 75
+    triggered = bool(row.get("triggered"))
+    side = "空向" if is_short else "多向"
+    setup = f"1h RSI{rsi} {'超買≥75' if is_short else '超賣≤25'}"
+    action = "跌破" if is_short else "突破"
+    target = _target_text(_row_num(row, "dist_e12"))
+    fr_pct = round(_row_num(row, "fr_pct"))
+    oi_state = str(row.get("oi_state", "OI?"))
+    quality = round(_row_num(row, "quality"))
+    price = _row_num(row, "price")
+
+    if triggered:
+        tier = str(row.get("tier") or "◆")
+        head = "🔻 1m EMA12跌破觀察" if is_short else "🔺 1m EMA12突破觀察"
+        body_x = _row_num(row, "trig_body")
+        vol_x = _row_num(row, "trig_vol")
+        msg = (
+            f"**{tier} {head}  {sym}**\n"
+            f"設定:{setup} → {side}觀察\n"
+            f"扳機:1m整根實體{action}EMA12+守住 · 實體{body_x:.1f}x/量{vol_x:.1f}x\n"
+            f"目標參考:{target} · 資費分位{fr_pct}%/{oi_state}/品質{quality} · 價{price:g}"
+        )
+    else:
+        head = "👀 超買觀察·空向" if is_short else "👀 超賣觀察·多向"
+        msg = (
+            f"**{head}  {sym}**\n"
+            f"設定:{setup} → 先進觀察名單\n"
+            f"等待:1m EMA12{action}+守住,尚未觸發\n"
+            f"目標參考:{target} · 資費分位{fr_pct}%/{oi_state}/品質{quality} · 價{price:g}"
+        )
+    return msg, is_short
+
+
 async def signal_loop():
     """每分鐘打掃描 API,發現新的 ★ 觸發就推到訊號頻道(同幣冷卻,不洗版)。
     不用 Anthropic token(只讀 Binance 免費資料)。"""
@@ -107,7 +166,7 @@ async def signal_loop():
         print(f"⚠ 找不到訊號頻道 {SIGNAL_CHANNEL_ID}(bot 沒進那個群/沒權限?),訊號推播略過", flush=True)
         return
     print(f"🟢 訊號推播啟動 → #{getattr(ch, 'name', SIGNAL_CHANNEL_ID)}"
-          f"(每60s掃、👀超買超賣觀察+★1m收破、同幣冷卻{COOLDOWN_MIN}分)", flush=True)
+          f"(每60s掃、1h超買超賣觀察+1m EMA12觸發、同幣冷卻{COOLDOWN_MIN}分)", flush=True)
     while not bot.is_closed():
         try:
             req = urllib.request.Request(SCAN_URL, headers={"User-Agent": "Mozilla/5.0"})
@@ -115,34 +174,25 @@ async def signal_loop():
             rows = data.get("rows", [])   # 每列都已過 1h RSI 75/25 鐵門檻
             now = time.time()
             for r in rows:
-                is_short = "做空" in r["tag"]
+                if not isinstance(r, dict):
+                    continue
+                msg, is_short = build_signal_message(r)
                 if SIGNAL_SIDE == "short" and not is_short:
                     continue
                 if SIGNAL_SIDE == "long" and is_short:
                     continue
-                sym = r["sym"]
-                rsi = round(r.get("rsi", 0))
+                sym = str(r.get("sym", "?"))
                 if r.get("triggered"):
                     # ★/◆ 1m 整根實體收破 EMA12 = 觸發觀察(較強)
                     if now - _trig_alert.get(sym, 0) < COOLDOWN_MIN * 60:
                         continue
                     _trig_alert[sym] = now
                     _setup_alert[sym] = now   # 觸發也算一次設定,避免緊接著又推觀察
-                    head = "🔻 做空訊號" if is_short else "🔺 做多訊號"
-                    tier = r.get("tier") or "◆"
-                    msg = (f"**{tier} {head}  {sym}**  1m整根收破EMA12\n"
-                           f"RSI{rsi} · 偏離z{r['ext_z']} · 距EMA12目標{r['dist_e12']}% · "
-                           f"資費分位{r['fr_pct']}% · 1m實體{r['trig_body']}x/量{r['trig_vol']}x · 品質{r['quality']}\n"
-                           f"目標:拉回 EMA12。價{r['price']}")
                 else:
                     # 👀 只是 1h 超買/超賣設定,還沒 1m EMA12 收破 → 提醒去盯 1m
                     if now - _setup_alert.get(sym, 0) < COOLDOWN_MIN * 60:
                         continue
                     _setup_alert[sym] = now
-                    head = "👀 超買·做空觀察" if is_short else "👀 超賣·做多觀察"
-                    msg = (f"**{head}  {sym}**  1h RSI{rsi}\n"
-                           f"距15m EMA12目標{r['dist_e12']}% · 資費分位{r['fr_pct']}% · {r['oi_state']}\n"
-                           f"去盯 1m,等整根實體收破 EMA12。價{r['price']}")
                 await ch.send(msg)
         except Exception as e:  # noqa: BLE001 網路波動不中斷
             print(f"訊號掃描失敗:{e}", flush=True)
