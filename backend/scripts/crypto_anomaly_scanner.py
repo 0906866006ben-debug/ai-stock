@@ -1,12 +1,13 @@
-"""加密永續「超買/超賣 x 偏離 EMA12 x 資費方向 x 1m 觸發」即時掃描器。
+"""加密永續「1h 超買/超賣 x 1m EMA12 觸發 x 15m EMA12 目標」即時掃描器。
 
 用途:輔助觀察/進場,**非策略、不宣稱 edge、無回測背書**。只把符合條件的
 幣即時排出來,判斷與風控由使用者自負。資料源 Binance USDT 永續(免費、無金鑰)。
 
 訊號邏輯(對齊 Next `/api/crypto-scan`):
-  做空觀察 = 1h RSI >= 75 + 15m 價格高於 EMA12 且偏離足夠 + 資費為正
-  做多觀察 = 1h RSI <= 25 + 15m 價格低於 EMA12 且偏離足夠 + 資費為負
-  觸發 = 1m 一大根實體收破 EMA20 + 下一根守住;放量升級為 ★,無量為 ◆
+  做空觀察 = 1h RSI >= 75
+  做多觀察 = 1h RSI <= 25
+  觸發 = 1m 一大根實體收破 EMA12 + 下一根守住;放量升級為 ★,無量為 ◆
+  15m EMA12 = 目標參考,不是觀察名單的篩選條件
 
 Run:  .venv/Scripts/python.exe backend/scripts/crypto_anomaly_scanner.py
       .venv/Scripts/python.exe backend/scripts/crypto_anomaly_scanner.py --top 30 --min-vol 30
@@ -93,9 +94,11 @@ def big_break(klines: list[list[Any]], direction: int, vol_mult: float, body_mul
     closes = np.array([float(c[4]) for c in klines], dtype=float)
     vols = np.array([float(c[5]) for c in klines], dtype=float)
     idx = len(closes) - 2
-    e20_break = ema_last(closes[: idx + 1], 20)
-    e20_confirm = ema_last(closes, 20)
+    e12_prev = ema_last(closes[:idx], 12)
+    e12_break = ema_last(closes[: idx + 1], 12)
+    e12_confirm = ema_last(closes, 12)
     open_, high, low, close, volume = opens[idx], highs[idx], lows[idx], closes[idx], vols[idx]
+    prev_close = closes[idx - 1]
     body = abs(close - open_)
     candle_range = max(high - low, 1e-12)
     body_mul = body / (float(np.mean(np.abs(closes[idx - 20:idx] - opens[idx - 20:idx]))) or 1e-12)
@@ -104,11 +107,11 @@ def big_break(klines: list[list[Any]], direction: int, vol_mult: float, body_mul
     loud = vol_mul >= vol_mult
     close_pos = (close - low) / candle_range
     if direction < 0:
-        broke = big and close < e20_break and close < open_ and close_pos <= 0.4
-        held = closes[-1] < e20_confirm
+        broke = big and prev_close >= e12_prev and close < e12_break and close < open_ and close_pos <= 0.4
+        held = closes[-1] < e12_confirm
     else:
-        broke = big and close > e20_break and close > open_ and close_pos >= 0.6
-        held = closes[-1] > e20_confirm
+        broke = big and prev_close <= e12_prev and close > e12_break and close > open_ and close_pos >= 0.6
+        held = closes[-1] > e12_confirm
     return {"hit": bool(broke and held), "loud": bool(loud), "body": float(body_mul), "vol": float(vol_mul), "held": bool(held)}
 
 
@@ -116,9 +119,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--tf", default="1h", help="設定框架,預設 1h")
     ap.add_argument("--trig-tf", default="1m", help="觸發框架,預設 1m")
-    ap.add_argument("--top", type=int, default=35, help="先按 24h 異常取前 N 檔細掃")
+    ap.add_argument("--top", type=int, default=150, help="先按 24h 異常取前 N 檔細掃")
     ap.add_argument("--min-vol", type=float, default=15.0, help="24h 成交額下限(百萬美元)")
-    ap.add_argument("--min-q", type=float, default=30.0, help="品質分下限")
+    ap.add_argument("--min-q", type=float, default=0.0, help="品質分下限")
     ap.add_argument("--rsi-hi", type=float, default=75.0)
     ap.add_argument("--rsi-lo", type=float, default=25.0)
     ap.add_argument("--vol-mult", type=float, default=1.5, help="1m 放量倍數")
@@ -164,13 +167,30 @@ def scan_once(args: argparse.Namespace, verbose: bool = False) -> tuple[list[dic
     for sym in shortlist:
         try:
             k = _get("/fapi/v1/klines", {"symbol": sym, "interval": args.tf, "limit": 120})
-            k15 = _get("/fapi/v1/klines", {"symbol": sym, "interval": "15m", "limit": 120})
         except Exception:
             continue
-        if len(k) < 40 or len(k15) < 20:
+        if len(k) < 40:
             continue
         closes = np.array([float(c[4]) for c in k], dtype=float)
         rsi = float(rsi_series(closes)[-1])
+
+        direction = 0
+        tag = ""
+        if rsi >= args.rsi_hi:
+            direction = -1
+            tag = "🔻做空觀察(1h超買≥75·待1m EMA12跌破)"
+        elif rsi <= args.rsi_lo:
+            direction = 1
+            tag = "🔺做多觀察(1h超賣≤25·待1m EMA12突破)"
+        if not tag:
+            continue
+
+        try:
+            k15 = _get("/fapi/v1/klines", {"symbol": sym, "interval": "15m", "limit": 120})
+        except Exception:
+            continue
+        if len(k15) < 20:
+            continue
         closes15 = np.array([float(c[4]) for c in k15], dtype=float)
         vols15 = np.array([float(c[5]) for c in k15], dtype=float)
         price = float(closes15[-1])
@@ -194,25 +214,17 @@ def scan_once(args: argparse.Namespace, verbose: bool = False) -> tuple[list[dic
         except Exception:
             pass
 
-        direction = 0
-        tag = ""
-        ext_min = 1.0
-        if rsi >= args.rsi_hi and ext_z >= ext_min and fr > 0:
-            direction = -1
-            tag = "🔻做空觀察(1h超買≥75·資費正·待1m整根收破)"
-        elif rsi <= args.rsi_lo and ext_z <= -ext_min and fr < 0:
-            direction = 1
-            tag = "🔺做多觀察(1h超賣≤25·資費負·待1m整根收破)"
-        if not tag:
-            continue
-
         oi_state = "堆積" if oi_chg >= 3 else "消退" if oi_chg <= -3 else "中性"
         ext_extreme = abs(ext_z) >= 3
-        quality = _clamp((abs(ext_z) - ext_min) / 2.5) * 50
-        quality += (_clamp((fr_pct - 0.6) / 0.4) if direction < 0 else _clamp((0.4 - fr_pct) / 0.4)) * 25
-        quality += 10 if oi_chg >= 3 else -8 if oi_chg <= -3 else 0
+        rsi_quality = _clamp((rsi - args.rsi_hi) / (100 - args.rsi_hi)) * 45 if direction < 0 else _clamp((args.rsi_lo - rsi) / args.rsi_lo) * 45
+        funding_aligned = (direction < 0 and fr > 0) or (direction > 0 and fr < 0)
+        quality = rsi_quality
+        quality += _clamp(abs(ext_z) / 3) * 20
+        quality += 15 if funding_aligned else 0
+        quality += 10 if oi_chg >= 3 else -5 if oi_chg <= -3 else 0
         quality += 8 if ext_extreme else 0
         quality = max(0.0, min(100.0, quality))
+        tag += " 資費順風" if funding_aligned else " 資費逆風"
         if quality < args.min_q:
             continue
         if oi_state == "堆積":
@@ -236,7 +248,7 @@ def scan_once(args: argparse.Namespace, verbose: bool = False) -> tuple[list[dic
                 tier = "★" if trig["loud"] else "◆"
                 dir_txt = "🔻做空" if direction < 0 else "🔺做多"
                 brk = "整根實體跌破" if direction < 0 else "整根實體突破"
-                tag = f"{dir_txt} {tier}{args.trig_tf}{brk}EMA20+守住{'+放量' if trig['loud'] else '(無量)'}"
+                tag = f"{dir_txt} {tier}{args.trig_tf}{brk}EMA12+守住{'+放量' if trig['loud'] else '(無量)'}"
         except Exception:
             pass
 
@@ -270,8 +282,14 @@ def scan_once(args: argparse.Namespace, verbose: bool = False) -> tuple[list[dic
 
 
 def _round_json(value: Any) -> Any:
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (int, np.integer)):
+        return int(value)
     if isinstance(value, float):
         return round(value, 6)
+    if isinstance(value, np.floating):
+        return round(float(value), 6)
     if isinstance(value, dict):
         return {key: _round_json(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -283,6 +301,7 @@ def _output(args: argparse.Namespace, rows: list[dict[str, Any]], now: str) -> N
     if args.json:
         payload = {
             "status": "ok",
+            "scan_mode": "rsi_setup_v2",
             "generated_at": now,
             "tf": args.tf,
             "trig_tf": args.trig_tf,

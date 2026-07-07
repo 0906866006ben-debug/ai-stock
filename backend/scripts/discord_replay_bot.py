@@ -1,8 +1,8 @@
 """Discord 交易複盤 bot — 你在群組貼交易圖,它用 Claude(能看圖)自動複盤。
 
-複盤邏輯 = 使用者的策略鐵則(多空同一套:超買超賣 + 放量實體破 EMA20 + 資費;
-設定看15m、觸發看1m一大根放量實體破線、非收針;背離只是注意不是扳機;
-出場目標要跟進場框架匹配)。若能從圖辨識幣種,另抓 Binance 真實 K 線佐證。
+複盤邏輯 = 使用者的策略鐵則(多空同一套:1h 超買超賣 + 1m 實體破 EMA12;
+15m EMA12 是目標參考,不是訊號篩選條件;背離只是注意不是扳機)。
+若能從圖辨識幣種,另抓 Binance 真實 K 線佐證。
 
 需要環境變數:
   DISCORD_BOT_TOKEN  — Discord 開發者頁面拿的 bot token
@@ -44,20 +44,20 @@ ai = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # ── 訊號自動推播設定 ──
 SIGNAL_CHANNEL_ID = int(os.getenv("SIGNAL_CHANNEL_ID", "1523771234230337657"))
-# minQ=1:放寬品質分,但掃描端點仍會過 1h RSI 75/25 + 資費方向 + EMA12 偏離 gate。
-SCAN_URL = os.getenv("SCAN_URL", "https://ai-stock-rosy-eight.vercel.app/api/crypto-scan?minVol=15&minQ=1")
+# minQ=0:只用 1h RSI 75/25 跳觀察名單;15m EMA12/資費/OI 只作參考與排序。
+SCAN_URL = os.getenv("SCAN_URL", "https://ai-stock-rosy-eight.vercel.app/api/crypto-scan?minVol=15&top=150&minQ=0")
 SIGNAL_SIDE = os.getenv("SIGNAL_SIDE", "both")        # both / short / long
 COOLDOWN_MIN = int(os.getenv("SIGNAL_COOLDOWN_MIN", "30"))
 _setup_alert: dict[str, float] = {}                   # sym -> 上次「👀超買超賣觀察」推播時間
 _trig_alert: dict[str, float] = {}                    # sym -> 上次「★1m收破訊號」推播時間
 
-SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:設定看1hr RSI-14超買≥75/超賣≤25(鐵門檻,沒到不做);多空鏡像=超買做空/超賣做多+資費(空要資費正、多要資費負);觸發=1分一大根整根實體收破EMA20(非收針,均值回歸不強求放量);目標=拉回EMA12(均線修正);背離只是注意不是扳機;逆勢/搶跑是死因;出場=吃反轉那根就走或保本續抱。
+SYSTEM = """你是加密永續交易複盤助手。使用者鐵則:設定看1hr RSI-14超買≥75/超賣≤25(鐵門檻,沒到不做);多空鏡像=超買做空/超賣做多;資費只作順風/逆風參考不是跳訊號門檻;觸發=1分一大根整根實體收破EMA12(非收針,均值回歸不強求放量);目標=拉回15m EMA12(目標參考,不是篩選條件);背離只是注意不是扳機;逆勢/搶跑是死因;出場=吃反轉那根就走或保本續抱。
 
 若給了多張圖=同一單的不同時間框架:大週期(1h)判「設定/方向/超買超賣」、小週期(1m/15m)判「觸發那根合不合格」,綜合後給一個結論,不要每張圖各講一段。
 
 看圖後用繁中輸出**極精簡**複盤,總共不超過 6 行,格式:
 方向/結果:(做多或做空、賺或賠)
-進場:(合不合格?有沒有一大根放量實體破EMA20,還是搶跑)
+進場:(合不合格?有沒有一大根實體破1m EMA12,還是搶跑)
 趨勢:(均線多頭還空頭、順勢還逆勢)
 問題:(這單最關鍵的一個錯,一句話)
 教訓:(一句)
@@ -123,26 +123,26 @@ async def signal_loop():
                 sym = r["sym"]
                 rsi = round(r.get("rsi", 0))
                 if r.get("triggered"):
-                    # ★/◆ 1m 整根實體收破 EMA20 = 觸發觀察(較強)
+                    # ★/◆ 1m 整根實體收破 EMA12 = 觸發觀察(較強)
                     if now - _trig_alert.get(sym, 0) < COOLDOWN_MIN * 60:
                         continue
                     _trig_alert[sym] = now
                     _setup_alert[sym] = now   # 觸發也算一次設定,避免緊接著又推觀察
                     head = "🔻 做空訊號" if is_short else "🔺 做多訊號"
                     tier = r.get("tier") or "◆"
-                    msg = (f"**{tier} {head}  {sym}**  1m整根收破EMA20\n"
+                    msg = (f"**{tier} {head}  {sym}**  1m整根收破EMA12\n"
                            f"RSI{rsi} · 偏離z{r['ext_z']} · 距EMA12目標{r['dist_e12']}% · "
                            f"資費分位{r['fr_pct']}% · 1m實體{r['trig_body']}x/量{r['trig_vol']}x · 品質{r['quality']}\n"
                            f"目標:拉回 EMA12。價{r['price']}")
                 else:
-                    # 👀 只是 1h 超買/超賣設定,還沒 1m 收破 → 提醒去盯 1m
+                    # 👀 只是 1h 超買/超賣設定,還沒 1m EMA12 收破 → 提醒去盯 1m
                     if now - _setup_alert.get(sym, 0) < COOLDOWN_MIN * 60:
                         continue
                     _setup_alert[sym] = now
                     head = "👀 超買·做空觀察" if is_short else "👀 超賣·做多觀察"
                     msg = (f"**{head}  {sym}**  1h RSI{rsi}\n"
-                           f"偏離z{r['ext_z']} · 距EMA12目標{r['dist_e12']}% · 資費分位{r['fr_pct']}% · {r['oi_state']}\n"
-                           f"去盯 1m,等整根實體收破 EMA20 再進。價{r['price']}")
+                           f"距15m EMA12目標{r['dist_e12']}% · 資費分位{r['fr_pct']}% · {r['oi_state']}\n"
+                           f"去盯 1m,等整根實體收破 EMA12。價{r['price']}")
                 await ch.send(msg)
         except Exception as e:  # noqa: BLE001 網路波動不中斷
             print(f"訊號掃描失敗:{e}", flush=True)
