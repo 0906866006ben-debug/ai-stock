@@ -87,32 +87,43 @@ def _std(values: np.ndarray) -> float:
 
 def big_break(klines: list[list[Any]], direction: int, vol_mult: float, body_mult: float) -> dict[str, float | bool]:
     if len(klines) < 26:
-        return {"hit": False, "loud": False, "body": 0.0, "vol": 0.0, "held": False}
+        return {"hit": False, "loud": False, "body": 0.0, "vol": 0.0, "held": False, "trigger_ms": 0, "confirm_ms": 0}
     opens = np.array([float(c[1]) for c in klines], dtype=float)
     highs = np.array([float(c[2]) for c in klines], dtype=float)
     lows = np.array([float(c[3]) for c in klines], dtype=float)
     closes = np.array([float(c[4]) for c in klines], dtype=float)
     vols = np.array([float(c[5]) for c in klines], dtype=float)
-    idx = len(closes) - 2
-    e12_prev = ema_last(closes[:idx], 12)
-    e12_break = ema_last(closes[: idx + 1], 12)
-    e12_confirm = ema_last(closes, 12)
-    open_, high, low, close, volume = opens[idx], highs[idx], lows[idx], closes[idx], vols[idx]
-    prev_close = closes[idx - 1]
+    confirm_idx = len(closes) - 2             # 最後一根是未收 K,排除;這根才是最後已收確認根
+    break_idx = confirm_idx - 1
+    if break_idx < 21:
+        return {"hit": False, "loud": False, "body": 0.0, "vol": 0.0, "held": False, "trigger_ms": 0, "confirm_ms": 0}
+    e12_prev = ema_last(closes[:break_idx], 12)
+    e12_break = ema_last(closes[: break_idx + 1], 12)
+    e12_confirm = ema_last(closes[: confirm_idx + 1], 12)
+    open_, high, low, close, volume = opens[break_idx], highs[break_idx], lows[break_idx], closes[break_idx], vols[break_idx]
+    prev_close = closes[break_idx - 1]
     body = abs(close - open_)
     candle_range = max(high - low, 1e-12)
-    body_mul = body / (float(np.mean(np.abs(closes[idx - 20:idx] - opens[idx - 20:idx]))) or 1e-12)
-    vol_mul = volume / (_mean(vols[idx - 20:idx]) or 1e-12)
+    body_mul = body / (float(np.mean(np.abs(closes[break_idx - 20:break_idx] - opens[break_idx - 20:break_idx]))) or 1e-12)
+    vol_mul = volume / (_mean(vols[break_idx - 20:break_idx]) or 1e-12)
     big = body_mul >= body_mult
     loud = vol_mul >= vol_mult
     close_pos = (close - low) / candle_range
     if direction < 0:
         broke = big and prev_close >= e12_prev and close < e12_break and close < open_ and close_pos <= 0.4
-        held = closes[-1] < e12_confirm
+        held = closes[confirm_idx] < e12_confirm
     else:
         broke = big and prev_close <= e12_prev and close > e12_break and close > open_ and close_pos >= 0.6
-        held = closes[-1] > e12_confirm
-    return {"hit": bool(broke and held), "loud": bool(loud), "body": float(body_mul), "vol": float(vol_mul), "held": bool(held)}
+        held = closes[confirm_idx] > e12_confirm
+    return {
+        "hit": bool(broke and held),
+        "loud": bool(loud),
+        "body": float(body_mul),
+        "vol": float(vol_mul),
+        "held": bool(held),
+        "trigger_ms": int(float(klines[break_idx][0])),
+        "confirm_ms": int(float(klines[confirm_idx][0])),
+    }
 
 
 def main() -> None:
@@ -238,14 +249,18 @@ def scan_once(args: argparse.Namespace, verbose: bool = False) -> tuple[list[dic
         tier = ""
         trig_body = 0.0
         trig_vol = 0.0
+        trigger_ms = 0
+        confirm_ms = 0
         try:
-            k1 = _get("/fapi/v1/klines", {"symbol": sym, "interval": args.trig_tf, "limit": 40})
+            k1 = _get("/fapi/v1/klines", {"symbol": sym, "interval": args.trig_tf, "limit": 60})
             trig = big_break(k1, direction, args.vol_mult, args.body_mult)
             trig_body = round(float(trig["body"]), 1)
             trig_vol = round(float(trig["vol"]), 1)
             if trig["hit"]:
                 triggered = True
                 tier = "★" if trig["loud"] else "◆"
+                trigger_ms = int(trig.get("trigger_ms", 0))
+                confirm_ms = int(trig.get("confirm_ms", 0))
                 dir_txt = "🔻做空" if direction < 0 else "🔺做多"
                 brk = "整根實體跌破" if direction < 0 else "整根實體突破"
                 tag = f"{dir_txt} {tier}{args.trig_tf}{brk}EMA12+守住{'+放量' if trig['loud'] else '(無量)'}"
@@ -274,6 +289,8 @@ def scan_once(args: argparse.Namespace, verbose: bool = False) -> tuple[list[dic
             "tier": tier,
             "trig_body": trig_body,
             "trig_vol": trig_vol,
+            "trigger_ms": trigger_ms,
+            "confirm_ms": confirm_ms,
         })
 
     rows.sort(key=lambda row: (bool(row["triggered"]), row["quality"]), reverse=True)

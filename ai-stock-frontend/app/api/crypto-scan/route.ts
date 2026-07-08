@@ -42,6 +42,7 @@ interface Row {
   oi_state: string; ext_extreme: boolean;
   diverg: boolean; chg24: number; tag: string; quality: number;
   triggered: boolean; tier: string; trig_body: number; trig_vol: number;
+  trigger_ms: number; confirm_ms: number;
 }
 
 function rsiSeries(closes: number[], n = 14): number[] {
@@ -104,8 +105,8 @@ async function jget<T>(path: string): Promise<T> {
 // 一大根 + 實體收破 EMA12 + 「下一根守住(沒收回均線)」確認。全用「已收 K」:
 // 排除幣安最後一根未收 K(n-1);確認根 = 最後已收(n-2)、突破根 = n-3。dir=1 多、dir=-1 空。
 function bigBreak(kl: BinanceKline[], dir: number, volMult: number, bodyMult: number):
-  { hit: boolean; loud: boolean; body: number; vol: number; held: boolean } {
-  if (!Array.isArray(kl) || kl.length < 26) return { hit: false, loud: false, body: 0, vol: 0, held: false };
+  { hit: boolean; loud: boolean; body: number; vol: number; held: boolean; triggerMs: number; confirmMs: number } {
+  if (!Array.isArray(kl) || kl.length < 26) return { hit: false, loud: false, body: 0, vol: 0, held: false, triggerMs: 0, confirmMs: 0 };
   const o = kl.map((c) => parseFloat(c[1])), h = kl.map((c) => parseFloat(c[2]));
   const lo = kl.map((c) => parseFloat(c[3])), cl = kl.map((c) => parseFloat(c[4]));
   const v = kl.map((c) => parseFloat(c[5]));
@@ -113,7 +114,7 @@ function bigBreak(kl: BinanceKline[], dir: number, volMult: number, bodyMult: nu
   // 幣安最後一根 cl[n-1] 是「當下未收完」的 K——排除,只用已收 K 判斷,否則會用半根 K 提前跳訊號。
   const ci = n - 2;                                  // 確認根(已收的最後一根)
   const bi = ci - 1;                                  // 突破那根(已收)
-  if (bi < 21) return { hit: false, loud: false, body: 0, vol: 0, held: false };
+  if (bi < 21) return { hit: false, loud: false, body: 0, vol: 0, held: false, triggerMs: 0, confirmMs: 0 };
   const e12p = emaLast(cl.slice(0, bi), 12);          // 突破前一根的 EMA12
   const e12b = emaLast(cl.slice(0, bi + 1), 12);      // 突破當根的 EMA12
   const e12c = emaLast(cl.slice(0, ci + 1), 12);      // 確認根的 EMA12(不含未收根)
@@ -136,7 +137,7 @@ function bigBreak(kl: BinanceKline[], dir: number, volMult: number, bodyMult: nu
     held = cl[ci] > e12c;                                 // 確認根(已收)仍收在 EMA12 上
   }
   // hit = 扳機成立(整根實體收破+守住,無需放量);loud = 有放量(升級為 ★ 用)
-  return { hit: broke && held, loud, body: bodyMul, vol: volMul, held };
+  return { hit: broke && held, loud, body: bodyMul, vol: volMul, held, triggerMs: Number(kl[bi][0]) || 0, confirmMs: Number(kl[ci][0]) || 0 };
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -236,7 +237,7 @@ export async function GET(request: Request): Promise<Response> {
         sym, price, rsi: r, fr: fr * 100, fr_pct: Math.round(fr_pct * 100),
         dist_e12, ext_z, vol_z, oi_chg, oi_state, ext_extreme, diverg: false,
         chg24: chgMap[sym], tag, quality: Math.round(quality),
-        triggered: false, tier: '', trig_body: 0, trig_vol: 0,
+        triggered: false, tier: '', trig_body: 0, trig_vol: 0, trigger_ms: 0, confirm_ms: 0,
       });
     }));
 
@@ -250,6 +251,8 @@ export async function GET(request: Request): Promise<Response> {
       if (b.hit) {
         row.triggered = true;
         row.tier = b.loud ? '★' : '◆';   // ★=整根收破+放量(最高把握)、◆=整根收破無量
+        row.trigger_ms = b.triggerMs;
+        row.confirm_ms = b.confirmMs;
         const dirTxt = dirOf[row.sym] < 0 ? '🔻做空' : '🔺做多';
         const brk = dirOf[row.sym] < 0 ? '整根實體跌破' : '整根實體突破';
         row.tag = `${dirTxt} ${row.tier}${trigTf}${brk}EMA12+守住${b.loud ? '+放量' : '(無量)'}`;

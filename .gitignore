@@ -22,5 +22,7 @@ build/
 .claude/
 .specify/cache/
 backend/data/cache/
+backend/auto_trades_state.json
+backend/auto_trades_cooldown.json
 *.log
 logs/
