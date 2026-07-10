@@ -1,9 +1,11 @@
+import os
 import re
+import secrets
 from pathlib import Path
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Request, Body
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Request, Body, Header
 from fastapi.concurrency import run_in_threadpool
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -75,9 +77,27 @@ from backend.app.services import file_cache
 
 app = FastAPI(title="AI Stock Analysis API", version="3.0.0")
 
+_DEFAULT_CORS_ORIGINS = (
+    "https://ai-stock-rosy-eight.vercel.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+)
+_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", ",".join(_DEFAULT_CORS_ORIGINS)).split(",")
+    if origin.strip()
+]
+_CORS_ORIGIN_REGEX = os.getenv(
+    "CORS_ORIGIN_REGEX",
+    r"https://ai-stock(?:-[a-z0-9-]+)?\.vercel\.app",
+).strip() or None
+TELEGRAM_ADMIN_SECRET = os.getenv("TELEGRAM_ADMIN_SECRET", "").strip()
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
+    allow_origin_regex=_CORS_ORIGIN_REGEX,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
@@ -983,8 +1003,18 @@ async def external_news(
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
 
+def _require_route_secret(configured: str, provided: str | None, name: str) -> None:
+    if not configured:
+        raise HTTPException(status_code=503, detail=f"{name} is not configured")
+    if not provided or not secrets.compare_digest(provided, configured):
+        raise HTTPException(status_code=401, detail="invalid route secret")
+
 @app.post("/tw/telegram/watchlist/sync", response_model=TelegramWatchlistSyncResponse)
-async def telegram_watchlist_sync(body: TelegramWatchlistSyncRequest) -> TelegramWatchlistSyncResponse:
+async def telegram_watchlist_sync(
+    body: TelegramWatchlistSyncRequest,
+    x_ai_stock_admin_token: str | None = Header(default=None, alias="X-AI-Stock-Admin-Token"),
+) -> TelegramWatchlistSyncResponse:
+    _require_route_secret(TELEGRAM_ADMIN_SECRET, x_ai_stock_admin_token, "Telegram admin route")
     result = sync_watchlist(
         action=body.action,
         stock_code=body.stock_code,
@@ -994,7 +1024,15 @@ async def telegram_watchlist_sync(body: TelegramWatchlistSyncRequest) -> Telegra
 
 
 @app.post("/tw/telegram/webhook")
-async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
+async def telegram_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_telegram_bot_api_secret_token: str | None = Header(
+        default=None,
+        alias="X-Telegram-Bot-Api-Secret-Token",
+    ),
+):
+    _require_route_secret(TELEGRAM_WEBHOOK_SECRET, x_telegram_bot_api_secret_token, "Telegram webhook")
     body = await request.json()
     background_tasks.add_task(handle_webhook, body)
     return {"ok": True}

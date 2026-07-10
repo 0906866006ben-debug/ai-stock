@@ -34,24 +34,32 @@ function pct(v: number | undefined | null): string {
 }
 
 export default function EntryContextCard({ symbol }: { symbol: string }) {
-  const [data, setData] = useState<EntryContext | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    symbol: string;
+    data: EntryContext | null;
+    error: string | null;
+  }>({ symbol: '', data: null, error: null });
 
   useEffect(() => {
     if (!symbol) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setData(null);
     getTwEntryContext(symbol)
-      .then((res) => { if (!cancelled) setData(res); })
-      .catch((exc) => {
-        if (!cancelled) setError(exc?.response?.data?.detail || (exc instanceof Error ? exc.message : '無法取得進場條件。'));
+      .then((res) => {
+        if (!cancelled) setResult({ symbol, data: res, error: null });
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .catch((exc) => {
+        if (!cancelled) {
+          const message = exc?.response?.data?.detail
+            || (exc instanceof Error ? exc.message : '無法取得進場條件。');
+          setResult({ symbol, data: null, error: message });
+        }
+      });
     return () => { cancelled = true; };
   }, [symbol]);
+
+  const loading = Boolean(symbol) && result.symbol !== symbol;
+  const data = result.symbol === symbol ? result.data : null;
+  const error = result.symbol === symbol ? result.error : null;
 
   if (loading) {
     return <div className="rounded-2xl border border-zinc-200 bg-white p-5 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">正在計算進場條件(估值/支撐/結構)…</div>;

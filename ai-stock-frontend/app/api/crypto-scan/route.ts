@@ -7,6 +7,9 @@ export const dynamic = 'force-dynamic';
 
 const BASE = 'https://fapi.binance.com';
 const FETCH_TIMEOUT_MS = 8000;
+const FETCH_ATTEMPTS = 2;
+const SCAN_CONCURRENCY = 24;
+const MIN_SETUP_COVERAGE = 0.7;
 const JSON_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' };
 const SETUP_INTERVALS = new Set(['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d']);
 const TRIGGER_INTERVALS = new Set(['1m', '3m', '5m', '15m']);
@@ -42,7 +45,24 @@ interface Row {
   oi_state: string; ext_extreme: boolean;
   diverg: boolean; chg24: number; tag: string; quality: number;
   triggered: boolean; tier: string; trig_body: number; trig_vol: number;
+  trigger_checked: boolean;
   trigger_ms: number; confirm_ms: number;
+}
+
+interface ScanDiagnostics {
+  shortlisted: number;
+  setup_attempted: number;
+  setup_succeeded: number;
+  setup_failed: number;
+  setup_candidates: number;
+  target_attempted: number;
+  target_succeeded: number;
+  target_failed: number;
+  oi_failed: number;
+  trigger_attempted: number;
+  trigger_succeeded: number;
+  trigger_failed: number;
+  setup_coverage: number;
 }
 
 function rsiSeries(closes: number[], n = 14): number[] {
@@ -81,25 +101,48 @@ function intervalParam(raw: string | null, fallback: string, allowed: Set<string
   return raw !== null && allowed.has(raw) ? raw : fallback;
 }
 
-async function jget<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const r = await fetch(BASE + path, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    if (!r.ok) throw new Error(`${path} ${r.status}`);
-    return await r.json() as T;
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error(`${path} upstream timeout`);
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function mapLimit<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let nextIndex = 0;
+  const runners = Array.from({ length: Math.min(Math.max(limit, 1), items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      await worker(item);
     }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+  });
+  await Promise.all(runners);
+}
+
+function errorName(error: unknown): string {
+  if (!error || typeof error !== 'object' || !('name' in error)) return '';
+  return String((error as { name?: unknown }).name || '');
+}
+
+async function jget<T>(path: string): Promise<T> {
+  let lastError: unknown = new Error(`${path} upstream failed`);
+  for (let attempt = 0; attempt < FETCH_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const r = await fetch(BASE + path, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      if (!r.ok) throw new Error(`${path} ${r.status}`);
+      return await r.json() as T;
+    } catch (error) {
+      lastError = errorName(error) === 'AbortError'
+        ? new Error(`${path} upstream timeout`)
+        : error;
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (attempt + 1 < FETCH_ATTEMPTS) await delay(150 * (attempt + 1));
   }
+  throw lastError;
 }
 
 // 一大根 + 實體收破 EMA12 + 「下一根守住(沒收回均線)」確認。全用「已收 K」:
@@ -174,14 +217,30 @@ export async function GET(request: Request): Promise<Response> {
       return frVals.length ? lo / frVals.length : 0.5;
     };
     const shortlist = pool.sort((a, b) => Math.abs(chgMap[b]) - Math.abs(chgMap[a])).slice(0, Math.max(top, 20));
+    const diagnostics: ScanDiagnostics = {
+      shortlisted: shortlist.length,
+      setup_attempted: shortlist.length,
+      setup_succeeded: 0,
+      setup_failed: 0,
+      setup_candidates: 0,
+      target_attempted: 0,
+      target_succeeded: 0,
+      target_failed: 0,
+      oi_failed: 0,
+      trigger_attempted: 0,
+      trigger_succeeded: 0,
+      trigger_failed: 0,
+      setup_coverage: 0,
+    };
 
     // ── 第一階段:只用 1h RSI 超買/超賣產生觀察名單;15m EMA12 只作目標參考 ──
     const rows: Row[] = [];
     const dirOf: Record<string, number> = {};
-    await Promise.all(shortlist.map(async (sym) => {
+    await mapLimit(shortlist, SCAN_CONCURRENCY, async (sym) => {
       let k: BinanceKline[] | null = null, k15: BinanceKline[] | null = null, oiHist: OpenInterestPoint[] | null = null;
-      try { k = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=120`); } catch { return; }        // 1h → RSI 超買超賣
-      if (!Array.isArray(k) || k.length < 40) return;
+      try { k = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=120`); } catch { diagnostics.setup_failed += 1; return; }        // 1h → RSI 超買超賣
+      if (!Array.isArray(k) || k.length < 40) { diagnostics.setup_failed += 1; return; }
+      diagnostics.setup_succeeded += 1;
       const closes = k.map((c) => parseFloat(c[4]));         // 1h 收盤 → RSI
       const rs = rsiSeries(closes);
       const r = rs[rs.length - 1];                           // 1h RSI-14(超買超賣鐵門檻)
@@ -192,9 +251,12 @@ export async function GET(request: Request): Promise<Response> {
       else if (r <= RSI_LO) { dir = 1; tag = '🔺做多觀察(1h超賣≤25·待1m EMA12突破)'; }
       if (!tag) return;
 
-      try { k15 = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=120`); } catch { return; }        // 15m → EMA12 目標
-      try { oiHist = await jget<OpenInterestPoint[]>(`/futures/data/openInterestHist?symbol=${sym}&period=${tf}&limit=12`); } catch { /* OI 可缺 */ }
-      if (!Array.isArray(k15) || k15.length < 20) return;
+      diagnostics.setup_candidates += 1;
+      diagnostics.target_attempted += 1;
+      try { k15 = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${sym}&interval=15m&limit=120`); } catch { diagnostics.target_failed += 1; return; }        // 15m → EMA12 目標
+      if (!Array.isArray(k15) || k15.length < 20) { diagnostics.target_failed += 1; return; }
+      diagnostics.target_succeeded += 1;
+      try { oiHist = await jget<OpenInterestPoint[]>(`/futures/data/openInterestHist?symbol=${sym}&period=${tf}&limit=12`); } catch { diagnostics.oi_failed += 1; }
       const closes15 = k15.map((c) => parseFloat(c[4]));      // 15m 收盤 → 目標/偏離
       const vols = k15.map((c) => parseFloat(c[5]));          // 15m 量(context)
       const price = closes15[closes15.length - 1];
@@ -237,14 +299,29 @@ export async function GET(request: Request): Promise<Response> {
         sym, price, rsi: r, fr: fr * 100, fr_pct: Math.round(fr_pct * 100),
         dist_e12, ext_z, vol_z, oi_chg, oi_state, ext_extreme, diverg: false,
         chg24: chgMap[sym], tag, quality: Math.round(quality),
-        triggered: false, tier: '', trig_body: 0, trig_vol: 0, trigger_ms: 0, confirm_ms: 0,
+        triggered: false, tier: '', trig_body: 0, trig_vol: 0, trigger_checked: false,
+        trigger_ms: 0, confirm_ms: 0,
       });
-    }));
+    });
+
+    diagnostics.setup_coverage = diagnostics.setup_attempted
+      ? Math.round((diagnostics.setup_succeeded / diagnostics.setup_attempted) * 1000) / 1000
+      : 1;
+    if (diagnostics.setup_attempted > 0 && diagnostics.setup_coverage < MIN_SETUP_COVERAGE) {
+      throw new Error(`Binance 1h data coverage too low (${diagnostics.setup_succeeded}/${diagnostics.setup_attempted})`);
+    }
+    if (diagnostics.target_attempted > 0 && diagnostics.target_succeeded === 0) {
+      throw new Error('Binance 15m target data unavailable');
+    }
 
     // ── 第二階段:只對「設定成立」者抓 1m,驗「一大根實體破 EMA12」──
-    await Promise.all(rows.map(async (row) => {
+    diagnostics.trigger_attempted = rows.length;
+    await mapLimit(rows, SCAN_CONCURRENCY, async (row) => {
       let k1: BinanceKline[];
-      try { k1 = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${row.sym}&interval=${trigTf}&limit=60`); } catch { return; }
+      try { k1 = await jget<BinanceKline[]>(`/fapi/v1/klines?symbol=${row.sym}&interval=${trigTf}&limit=60`); } catch { diagnostics.trigger_failed += 1; return; }
+      if (!Array.isArray(k1) || k1.length < 26) { diagnostics.trigger_failed += 1; return; }
+      diagnostics.trigger_succeeded += 1;
+      row.trigger_checked = true;
       const b = bigBreak(k1, dirOf[row.sym], volMult, bodyMult);
       row.trig_body = Math.round(b.body * 10) / 10;
       row.trig_vol = Math.round(b.vol * 10) / 10;
@@ -257,12 +334,17 @@ export async function GET(request: Request): Promise<Response> {
         const brk = dirOf[row.sym] < 0 ? '整根實體跌破' : '整根實體突破';
         row.tag = `${dirTxt} ${row.tier}${trigTf}${brk}EMA12+守住${b.loud ? '+放量' : '(無量)'}`;
       }
-    }));
+    });
 
     // 已觸發排前面,再依品質分
     rows.sort((a, b) => (Number(b.triggered) - Number(a.triggered)) || (b.quality - a.quality));
+    const degraded = diagnostics.setup_failed > 0
+      || diagnostics.target_failed > 0
+      || diagnostics.oi_failed > 0
+      || diagnostics.trigger_failed > 0;
     return Response.json({
-      status: 'ok', scan_mode: 'rsi_setup_v2', generated_at: new Date().toISOString(), tf, trig_tf: trigTf, min_quality: minQ, rows,
+      status: 'ok', scan_mode: 'rsi_setup_v2', generated_at: new Date().toISOString(), tf, trig_tf: trigTf,
+      min_quality: minQ, degraded, diagnostics, rows,
     }, { headers: JSON_HEADERS });
   } catch (e: unknown) {
     return Response.json(

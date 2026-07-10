@@ -8,9 +8,17 @@ interface Row {
   oi_state: string; ext_extreme: boolean;
   diverg: boolean; chg24: number; tag: string; quality: number;
   triggered: boolean; tier: string; trig_body: number; trig_vol: number;
+  trigger_checked?: boolean;
+}
+interface ScanDiagnostics {
+  shortlisted: number; setup_attempted: number; setup_succeeded: number; setup_failed: number;
+  setup_candidates: number; target_attempted: number; target_succeeded: number; target_failed: number;
+  oi_failed: number; trigger_attempted: number; trigger_succeeded: number; trigger_failed: number;
+  setup_coverage: number;
 }
 interface ScanResp {
   status: string; scan_mode?: string; generated_at?: string; tf?: string; rows?: Row[]; detail?: string;
+  degraded?: boolean; diagnostics?: ScanDiagnostics;
 }
 
 const REFRESH_SEC = 30;
@@ -57,7 +65,7 @@ export default function CryptoScanView() {
     try {
       const r = await fetch('/api/crypto-scan?minVol=15&top=150&minQ=0', { cache: 'no-store' });
       const d: ScanResp = await r.json();
-      if (d.status !== 'ok') { setErr(d.detail || '掃描暫時失敗(可能為交易所地區限制)'); }
+      if (!r.ok || d.status !== 'ok') { setErr(d.detail || `掃描暫時失敗(HTTP ${r.status})`); }
       else {
         setData(d); setErr(''); setUpdatedAt(new Date().toLocaleTimeString('zh-TW'));
         // 偵測「新出現」的 ★ 觸發 → 響鈴+通知(只有開啟通知後才響)
@@ -190,13 +198,22 @@ export default function CryptoScanView() {
       {loading && <p className="text-sm text-zinc-500">掃描中…（首次約需數秒）</p>}
       {err && (
         <p className="rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-300">
-          {err}
+          掃描來源暫時異常:{err}。畫面保留上次成功結果，不代表目前沒有超買超賣。
+        </p>
+      )}
+
+      {!err && data?.degraded && data.diagnostics && (
+        <p className="rounded-xl border border-amber-700 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+          本輪部分資料未完成:1h {data.diagnostics.setup_succeeded}/{data.diagnostics.setup_attempted}、
+          1m {data.diagnostics.trigger_succeeded}/{data.diagnostics.trigger_attempted}。未完成檢查的幣種不會被當成「沒有觸發」。
         </p>
       )}
 
       {!loading && !err && shown.length === 0 && (
         <p className="rounded-xl border border-dashed border-zinc-700 px-4 py-6 text-center text-sm text-zinc-500">
-          此分類目前無訊號——掃描不硬湊，空的是正常的。
+          {filter === 'all'
+            ? `本輪已完成 ${data?.diagnostics?.setup_succeeded ?? 0} 個標的的 1h 檢查，目前沒有 RSI≥75 或 RSI≤25 的觀察名單。`
+            : '此分類目前沒有符合條件的觀察或觸發。'}
         </p>
       )}
 
@@ -337,4 +354,3 @@ function RefTable({ title, rows }: { title: string; rows: [string, string][] }) 
     </div>
   );
 }
-
