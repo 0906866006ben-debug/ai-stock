@@ -18,7 +18,7 @@ interface ScanDiagnostics {
 }
 interface ScanResp {
   status: string; scan_mode?: string; generated_at?: string; tf?: string; rows?: Row[]; detail?: string;
-  degraded?: boolean; diagnostics?: ScanDiagnostics;
+  degraded?: boolean; stale?: boolean; cache_status?: string; served_at?: string; diagnostics?: ScanDiagnostics;
 }
 
 const REFRESH_SEC = 30;
@@ -69,7 +69,7 @@ export default function CryptoScanView() {
       else {
         setData(d); setErr(''); setUpdatedAt(new Date().toLocaleTimeString('zh-TW'));
         // 偵測「新出現」的 ★ 觸發 → 響鈴+通知(只有開啟通知後才響)
-        const nowTrig = (d.rows || []).filter((x) => x.triggered);
+        const nowTrig = d.stale ? [] : (d.rows || []).filter((x) => x.triggered);
         const fresh = nowTrig.filter((x) => !prevTrig.current.has(x.sym));
         if (alertOnRef.current && fresh.length > 0) fireAlert(fresh);
         prevTrig.current = new Set(nowTrig.map((x) => x.sym));
@@ -202,7 +202,13 @@ export default function CryptoScanView() {
         </p>
       )}
 
-      {!err && data?.degraded && data.diagnostics && (
+      {!err && data?.stale && (
+        <p className="rounded-xl border border-amber-700 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+          Binance 即時來源暫時受限，現在顯示最近一次成功的超買超賣觀察資料；所有舊觸發已停用，不會推播或交給自動交易。
+        </p>
+      )}
+
+      {!err && !data?.stale && data?.degraded && data.diagnostics && (
         <p className="rounded-xl border border-amber-700 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
           本輪部分資料未完成:1h {data.diagnostics.setup_succeeded}/{data.diagnostics.setup_attempted}、
           1m {data.diagnostics.trigger_succeeded}/{data.diagnostics.trigger_attempted}。未完成檢查的幣種不會被當成「沒有觸發」。

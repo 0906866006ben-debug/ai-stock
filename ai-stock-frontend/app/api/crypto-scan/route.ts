@@ -1,6 +1,8 @@
 // 加密永續異常掃描 — Vercel Edge Route(亞洲區,避開 Binance 對美國 IP 的封鎖)。
 // 多框架:設定只看 1h RSI 超買/超賣,觸發在 1m 抓
 // 「一大根實體收破 EMA12 + 守住」;15m EMA12 只作目標參考,不是篩選條件。
+import { getCache } from '@vercel/functions';
+
 export const runtime = 'edge';
 export const preferredRegion = ['hnd1', 'sin1'];
 export const dynamic = 'force-dynamic';
@@ -10,7 +12,13 @@ const FETCH_TIMEOUT_MS = 8000;
 const FETCH_ATTEMPTS = 2;
 const SCAN_CONCURRENCY = 24;
 const MIN_SETUP_COVERAGE = 0.7;
-const JSON_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' };
+const FRESH_CACHE_TTL_SEC = 25;
+const STALE_CACHE_TTL_SEC = 300;
+const JSON_HEADERS = {
+  'content-type': 'application/json',
+  'cache-control': 'no-store',
+  'vercel-cdn-cache-control': 'public, s-maxage=10, stale-while-revalidate=20',
+};
 const SETUP_INTERVALS = new Set(['5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d']);
 const TRIGGER_INTERVALS = new Set(['1m', '3m', '5m', '15m']);
 
@@ -63,6 +71,18 @@ interface ScanDiagnostics {
   trigger_succeeded: number;
   trigger_failed: number;
   setup_coverage: number;
+}
+
+interface ScanPayload {
+  status: 'ok';
+  scan_mode: string;
+  generated_at: string;
+  tf: string;
+  trig_tf: string;
+  min_quality: number;
+  degraded: boolean;
+  diagnostics: ScanDiagnostics;
+  rows: Row[];
 }
 
 function rsiSeries(closes: number[], n = 14): number[] {
@@ -131,12 +151,17 @@ async function jget<T>(path: string): Promise<T> {
         cache: 'no-store',
         signal: controller.signal,
       });
-      if (!r.ok) throw new Error(`${path} ${r.status}`);
+      if (!r.ok) {
+        const failure = new Error(`${path} ${r.status}`);
+        if (r.status === 418 || r.status === 429) throw Object.assign(failure, { noRetry: true });
+        throw failure;
+      }
       return await r.json() as T;
     } catch (error) {
       lastError = errorName(error) === 'AbortError'
         ? new Error(`${path} upstream timeout`)
         : error;
+      if (error && typeof error === 'object' && 'noRetry' in error) break;
     } finally {
       clearTimeout(timeout);
     }
@@ -192,6 +217,22 @@ export async function GET(request: Request): Promise<Response> {
   const minQ = boundedNumber(u.searchParams.get('minQ'), 0, 0, 100);
   const volMult = boundedNumber(u.searchParams.get('volMult'), 1.5, 0.1, 10);   // 放量倍數
   const bodyMult = boundedNumber(u.searchParams.get('bodyMult'), 1.5, 0.1, 10);  // 一大根倍數
+  const cache = getCache({ namespace: 'crypto-scan' });
+  const cacheKey = [tf, trigTf, minVol, top, minQ, volMult, bodyMult].join(':');
+  const freshKey = `fresh:${cacheKey}`;
+  const staleKey = `stale:${cacheKey}`;
+
+  try {
+    const cached = await cache.get(freshKey) as ScanPayload | undefined;
+    if (cached) {
+      return Response.json(
+        { ...cached, cache_status: 'hit', served_at: new Date().toISOString() },
+        { headers: JSON_HEADERS },
+      );
+    }
+  } catch {
+    // Runtime Cache is an optimization; scan directly if it is unavailable.
+  }
 
   try {
     const [tickers, prem] = await Promise.all([
@@ -342,11 +383,50 @@ export async function GET(request: Request): Promise<Response> {
       || diagnostics.target_failed > 0
       || diagnostics.oi_failed > 0
       || diagnostics.trigger_failed > 0;
-    return Response.json({
+    const payload: ScanPayload = {
       status: 'ok', scan_mode: 'rsi_setup_v2', generated_at: new Date().toISOString(), tf, trig_tf: trigTf,
       min_quality: minQ, degraded, diagnostics, rows,
-    }, { headers: JSON_HEADERS });
+    };
+    try {
+      await Promise.all([
+        cache.set(freshKey, payload, { ttl: FRESH_CACHE_TTL_SEC, tags: ['crypto-scan'], name: 'crypto-scan-fresh' }),
+        cache.set(staleKey, payload, { ttl: STALE_CACHE_TTL_SEC, tags: ['crypto-scan'], name: 'crypto-scan-stale' }),
+      ]);
+    } catch {
+      // A cache write failure must not turn a successful live scan into an error.
+    }
+    return Response.json(
+      { ...payload, cache_status: 'miss', served_at: new Date().toISOString() },
+      { headers: JSON_HEADERS },
+    );
   } catch (e: unknown) {
+    try {
+      const stale = await cache.get(staleKey) as ScanPayload | undefined;
+      if (stale) {
+        const rows = stale.rows.map((row) => ({
+          ...row,
+          tag: row.tag.includes('做空') ? '🔻做空觀察(資料更新中)' : '🔺做多觀察(資料更新中)',
+          triggered: false,
+          tier: '',
+          trigger_checked: false,
+          trig_body: 0,
+          trig_vol: 0,
+          trigger_ms: 0,
+          confirm_ms: 0,
+        }));
+        return Response.json({
+          ...stale,
+          rows,
+          degraded: true,
+          stale: true,
+          cache_status: 'stale',
+          served_at: new Date().toISOString(),
+          detail: 'Live Binance scan is temporarily unavailable; stale triggers are disabled.',
+        }, { headers: JSON_HEADERS });
+      }
+    } catch {
+      // Fall through to the explicit upstream error response.
+    }
     return Response.json(
       { status: 'error', detail: e instanceof Error ? e.message : 'scan failed' },
       { status: 502, headers: JSON_HEADERS },
