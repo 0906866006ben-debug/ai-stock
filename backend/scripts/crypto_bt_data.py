@@ -429,10 +429,10 @@ class CryptoBacktestStore:
         start = (start_ms // step) * step
         end = ((end_ms + step - 1) // step) * step
         existing = {
-            int(row[0])
+            (int(row[0]) // step) * step
             for row in self.conn.execute(
                 "SELECT ts FROM funding WHERE sym = ? AND ts >= ? AND ts <= ?",
-                (sym, start, end),
+                (sym, start, end + 60_000),
             )
         }
         missing: list[tuple[int, int]] = []
@@ -527,6 +527,7 @@ def build_daily_universe(
     min_quote_volume: float = 15_000_000.0,
     top_n: int = 150,
     symbols: list[str] | None = None,
+    findings: list[str] | None = None,
 ) -> dict[int, list[str]]:
     """Build the previous-UTC-day universe for each UTC day in the run."""
     source_symbols = symbols
@@ -541,8 +542,18 @@ def build_daily_universe(
 
     daily_start = floor_ms(start_ms, "1d") - INTERVAL_MS["1d"]
     daily_end = floor_ms(end_ms + INTERVAL_MS["1d"], "1d")
+    covered_symbols: list[str] = []
     for sym in source_symbols:
-        store.ensure_klines(sym, "1d", daily_start, daily_end, client)
+        try:
+            store.ensure_klines(sym, "1d", daily_start, daily_end, client)
+        except Exception as exc:  # noqa: BLE001
+            if findings is not None:
+                findings.append(f"{sym}: excluded from universe due to incomplete 1d coverage ({str(exc)[:120]})")
+            continue
+        covered_symbols.append(sym)
+    source_symbols = covered_symbols
+    if not source_symbols:
+        raise RuntimeError("no symbols have complete daily coverage for universe construction")
 
     by_day: dict[int, list[str]] = {}
     for day in iter_days(start_ms, end_ms):

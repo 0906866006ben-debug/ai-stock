@@ -64,6 +64,22 @@ def test_mutation_endpoint_fails_closed_without_token(
     assert response.json()["detail"]["code"] == "RESEARCH_AUTH_NOT_CONFIGURED"
 
 
+def test_validation_gate_endpoint_blocks_small_legacy_sample(
+    tmp_path: Path,
+    market_db: Path,
+    runs_path: Path,
+) -> None:
+    with _client(tmp_path, market_db, runs_path) as client:
+        response = client.get("/api/v1/research/validation-gates")
+    app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    gates = response.json()
+    assert len(gates) == 4
+    assert all(item["allowed"] is False for item in gates)
+    assert all(item["observed_trades"] == 40 for item in gates)
+
+
 def test_mutation_endpoint_requires_and_accepts_bearer_token(
     tmp_path: Path,
     market_db: Path,

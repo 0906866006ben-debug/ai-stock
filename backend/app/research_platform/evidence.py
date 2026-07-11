@@ -72,6 +72,12 @@ def parse_legacy_report(path: Path, *, imported_at: datetime | None = None) -> E
             tuning_allowed = True
 
     artifact_hash = hashlib.sha256(raw).hexdigest()
+    policy_match = re.search(
+        r"(?m)^Higher-timeframe policy: (closed_only|partial_live_mirror)\.\s*$",
+        text,
+    )
+    quality_findings_count = len(re.findall(r"(?m)^- .*?(?:excluded|skipped|missing)", text, flags=re.IGNORECASE))
+    trades = int(overview.group(1))
     return ExperimentSummary(
         experiment_id=f"legacy:{artifact_hash[:20]}",
         variant=variant,
@@ -80,7 +86,7 @@ def parse_legacy_report(path: Path, *, imported_at: datetime | None = None) -> E
         period_end=end,
         dataset_role=role,
         tuning_allowed=tuning_allowed,
-        trades=int(overview.group(1)),
+        trades=trades,
         win_rate=_optional_number(overview.group(2), percent=True),
         total_r=_optional_number(overview.group(3)) or 0.0,
         average_r=_optional_number(overview.group(4)),
@@ -96,6 +102,9 @@ def parse_legacy_report(path: Path, *, imported_at: datetime | None = None) -> E
         data_version="legacy-cache-unversioned",
         engine_version="crypto_backtester-legacy",
         imported_at=imported_at,
+        higher_timeframe_policy=policy_match.group(1) if policy_match else "unknown",
+        quality_findings_count=quality_findings_count,
+        sample_adequate=trades >= 100,
         warnings=warnings,
     )
 
@@ -110,4 +119,3 @@ def discover_legacy_experiments(runs_path: Path) -> list[ExperimentSummary]:
         except (OSError, ValueError):
             continue
     return experiments
-

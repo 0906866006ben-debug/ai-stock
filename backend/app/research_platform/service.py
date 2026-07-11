@@ -19,6 +19,7 @@ from .schemas import (
 )
 from .settings import ResearchSettings
 from .universe import UniverseBuilder
+from .validation import funding_ablation_finding, validation_gates
 
 
 class ResearchPlatformService:
@@ -55,16 +56,7 @@ class ResearchPlatformService:
         now = datetime.now(timezone.utc)
         experiment_ids = [item.experiment_id for item in experiments]
         findings = [
-            FactorFinding(
-                factor="FUNDING",
-                status="INSUFFICIENT_EVIDENCE",
-                evidence_strength="LOW",
-                applicable_scope="Legacy no-OI mean-reversion variants only",
-                reason="Settled funding exists, but no controlled OOS funding ablation has passed candidate gates.",
-                invalidation="A purged, cross-symbol OOS ablation shows non-positive marginal expectancy after costs.",
-                source_experiment_ids=experiment_ids,
-                observed_at=now,
-            ),
+            funding_ablation_finding(experiments),
             FactorFinding(
                 factor="OPEN_INTEREST",
                 status="UNAVAILABLE",
@@ -166,6 +158,11 @@ class ResearchPlatformService:
         self.ensure_bootstrapped()
         items, total = self.repository.list_experiments(limit=limit, offset=offset)
         return PaginatedExperiments(items=items, total=total, limit=limit, offset=offset)
+
+    def validation_gates(self):
+        self.ensure_bootstrapped()
+        items, _ = self.repository.list_experiments(limit=200, offset=0)
+        return validation_gates(items)
 
     def current_universe(self) -> UniverseSnapshotResponse | None:
         return self.repository.latest_universe_snapshot()

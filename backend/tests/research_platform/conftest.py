@@ -60,6 +60,10 @@ hypothesis=baseline evidence import
 trades=40 win_rate=42.5% totalR=-2.50 avgR=-0.06 PF=0.88 netPnL=-12.50
 CAGR=-18.0% maxDD_R=6.20 Sharpe=-0.40 exposure=12.0% turnover=8.50
 fees=10.00 funding_paid=0.30 timeouts=0 ambiguous=1 crossed_settlement=4
+Higher-timeframe policy: closed_only.
+
+## Data Quality Findings
+- ETHUSDT excluded because daily coverage is incomplete.
 """,
         encoding="utf-8",
     )
@@ -83,4 +87,3 @@ def make_settings(tmp_path: Path, market_db: Path, runs_path: Path, token: str =
         openai_min_days_between_auto=7,
         openai_min_new_valid_backtests=10_000,
     )
-

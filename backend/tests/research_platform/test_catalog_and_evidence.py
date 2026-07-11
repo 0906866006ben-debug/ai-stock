@@ -41,6 +41,9 @@ def test_legacy_report_before_oos_is_train_but_never_candidate_evidence(runs_pat
     assert experiment.profit_factor == pytest.approx(0.88)
     assert experiment.win_rate == pytest.approx(0.425)
     assert experiment.is_mock is False
+    assert experiment.higher_timeframe_policy == "closed_only"
+    assert experiment.quality_findings_count == 1
+    assert experiment.sample_adequate is False
     assert any("cannot promote" in warning for warning in experiment.warnings)
 
 
@@ -57,4 +60,3 @@ def test_legacy_report_crossing_oos_is_sealed(runs_path: Path) -> None:
     assert experiment.dataset_role == "LOCKED_OR_FORWARD_EVIDENCE"
     assert experiment.tuning_allowed is False
     assert any("optimizer access is forbidden" in warning for warning in experiment.warnings)
-

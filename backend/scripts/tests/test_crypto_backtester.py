@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.scripts.crypto_bt_data import CryptoBacktestStore, Kline, utc_ms
+from backend.scripts.crypto_bt_data import CryptoBacktestStore, FundingRate, Kline, build_daily_universe, utc_ms
 from backend.scripts.crypto_backtester import (
     PlannedTrade,
     StrategyParams,
@@ -138,3 +138,52 @@ def test_strict_higher_timeframe_policy_ignores_partial_hour_close() -> None:
     assert closed == pytest.approx(100.0)
     assert partial is not None
     assert partial < closed
+
+
+def test_universe_excludes_incomplete_symbol_without_fabricating_rows() -> None:
+    store = CryptoBacktestStore(":memory:")
+    start = _ms(2026, 5, 2)
+    end = _ms(2026, 5, 3)
+    findings: list[str] = []
+    try:
+        btc_rows = [
+            _bar("BTCUSDT", "1d", start - 86_400_000, 100, 110, 90, 105, 1_000_000),
+            _bar("BTCUSDT", "1d", start, 105, 112, 100, 108, 1_000_000),
+            _bar("BTCUSDT", "1d", end, 108, 115, 102, 110, 1_000_000),
+        ]
+        store.upsert_klines(btc_rows)
+
+        universe = build_daily_universe(
+            store,
+            client=None,
+            start_ms=start,
+            end_ms=end,
+            min_quote_volume=0,
+            top_n=10,
+            symbols=["BTCUSDT", "MISSINGUSDT"],
+            findings=findings,
+        )
+    finally:
+        store.close()
+
+    assert all(members == ["BTCUSDT"] for members in universe.values())
+    assert any("MISSINGUSDT: excluded" in finding for finding in findings)
+
+
+def test_funding_coverage_accepts_exchange_millisecond_jitter() -> None:
+    store = CryptoBacktestStore(":memory:")
+    step = 8 * 3_600_000
+    start = _ms(2026, 5, 1)
+    try:
+        store.upsert_funding(
+            [
+                FundingRate(sym="BTCUSDT", ts=start + offset * step + jitter, rate=0.0001)
+                for offset, jitter in ((0, 3), (1, 1), (2, 8))
+            ]
+        )
+
+        missing = store._missing_funding_ranges("BTCUSDT", start, start + 2 * step)
+    finally:
+        store.close()
+
+    assert missing == []

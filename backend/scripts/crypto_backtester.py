@@ -926,6 +926,7 @@ def run_backtest_once(
         min_quote_volume=min_quote_volume,
         top_n=top_n,
         symbols=symbols,
+        findings=notes,
     )
     all_symbols = sorted({sym for members in universe_by_day.values() for sym in members})
     if symbols:
@@ -937,18 +938,18 @@ def run_backtest_once(
 
     warmup_1h = start_ms - 3 * INTERVAL_MS["1d"]
     funding_start = start_ms - INTERVAL_MS["1d"]
-    funding_end = end_ms + int(params.max_hold_hours * INTERVAL_MS["1h"]) + INTERVAL_MS["1d"]
+    funding_end = end_ms + int(params.max_hold_hours * INTERVAL_MS["1h"])
     hourly_by_symbol: dict[str, list[Kline]] = {}
     windows_by_symbol: dict[str, list[tuple[int, int]]] = {}
 
     for idx, sym in enumerate(all_symbols, start=1):
         try:
             hourly = store.ensure_klines(sym, "1h", warmup_1h, end_ms, client)
-            hourly_by_symbol[sym] = hourly
             windows = scan_hourly_event_windows(hourly, start_ms, end_ms, params.rsi_hi, params.rsi_lo)
+            store.ensure_funding(sym, funding_start, funding_end, client)
+            hourly_by_symbol[sym] = hourly
             if windows:
                 windows_by_symbol[sym] = windows
-            store.ensure_funding(sym, funding_start, funding_end, client)
         except Exception as exc:  # noqa: BLE001
             notes.append(f"{sym}: data load skipped ({str(exc)[:120]})")
         if idx % 25 == 0:
@@ -970,19 +971,27 @@ def run_backtest_once(
         for event in events:
             if event.confirm_ms < next_allowed or event.confirm_ms < open_until:
                 continue
-            fr_pct, rv, breadth, fr_recent = _build_context(store, hourly_by_symbol, daily_btc, universe_by_day, event, params)
-            context_start = event.confirm_ms - 12 * INTERVAL_MS["1h"]
-            context_end = event.confirm_ms + 2 * INTERVAL_MS["1h"]
-            klines_1m = store.ensure_klines(sym, "1m", context_start, context_end, client)
-            klines_15m = store.ensure_klines(sym, "15m", context_start, context_end, client)
-            planned = plan_trade(event, klines_1m, klines_15m, params, fr_pct, rv, breadth, fr_recent)
-            next_allowed = event.confirm_ms + params.cooldown_minutes * INTERVAL_MS["1m"]
-            if planned is None:
+            try:
+                fr_pct, rv, breadth, fr_recent = _build_context(
+                    store, hourly_by_symbol, daily_btc, universe_by_day, event, params
+                )
+                context_start = event.confirm_ms - 12 * INTERVAL_MS["1h"]
+                context_end = event.confirm_ms + 2 * INTERVAL_MS["1h"]
+                klines_1m = store.ensure_klines(sym, "1m", context_start, context_end, client)
+                klines_15m = store.ensure_klines(sym, "15m", context_start, context_end, client)
+                planned = plan_trade(event, klines_1m, klines_15m, params, fr_pct, rv, breadth, fr_recent)
+                next_allowed = event.confirm_ms + params.cooldown_minutes * INTERVAL_MS["1m"]
+                if planned is None:
+                    continue
+                exit_end = planned.entry_ts + int(params.max_hold_hours * INTERVAL_MS["1h"]) + 2 * INTERVAL_MS["1m"]
+                exit_bars = store.ensure_klines(sym, "1m", planned.entry_ts, exit_end, client)
+                funding = store.ensure_funding(sym, planned.entry_ts, exit_end, client)
+                result = simulate_exit(planned, exit_bars, funding, params)
+            except Exception as exc:  # noqa: BLE001
+                notes.append(
+                    f"{sym}: event {iso_utc(event.confirm_ms)} skipped for incomplete replay data ({str(exc)[:120]})"
+                )
                 continue
-            exit_end = planned.entry_ts + int(params.max_hold_hours * INTERVAL_MS["1h"]) + 2 * INTERVAL_MS["1m"]
-            exit_bars = store.ensure_klines(sym, "1m", planned.entry_ts, exit_end, client)
-            funding = store.ensure_funding(sym, planned.entry_ts, exit_end, client)
-            result = simulate_exit(planned, exit_bars, funding, params)
             trades.append(result)
             open_until = result.exit_ts
         if idx % 10 == 0:

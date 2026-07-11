@@ -123,6 +123,9 @@ class ExperimentSummary(BaseModel):
     engine_version: str
     imported_at: datetime
     is_mock: bool = False
+    higher_timeframe_policy: Literal["closed_only", "partial_live_mirror", "unknown"] = "unknown"
+    quality_findings_count: int = 0
+    sample_adequate: bool = False
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -229,6 +232,16 @@ class CycleStartResponse(BaseModel):
     message: str
     request_id: str
     created_at: datetime
+
+
+class ValidationGate(BaseModel):
+    gate: Literal["FACTOR_ABLATION", "PARAMETER_SEARCH", "WALK_FORWARD", "CANDIDATE_PROMOTION"]
+    allowed: bool
+    status: str
+    required_trades: int
+    observed_trades: int
+    reason: str
+    observed_at: datetime
 
 
 class ActionResponse(BaseModel):

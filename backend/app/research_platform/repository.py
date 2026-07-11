@@ -160,7 +160,7 @@ class ResearchRepository:
         with self._connect() as conn:
             total = int(conn.execute("SELECT COUNT(*) FROM research_experiments").fetchone()[0])
             rows = conn.execute(
-                "SELECT payload_json FROM research_experiments ORDER BY period_start DESC LIMIT ? OFFSET ?",
+                  "SELECT payload_json FROM research_experiments ORDER BY period_start DESC LIMIT ? OFFSET ?",
                 (limit, offset),
             ).fetchall()
         return [ExperimentSummary.model_validate_json(row[0]) for row in rows], total

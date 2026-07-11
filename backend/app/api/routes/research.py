@@ -19,6 +19,7 @@ from backend.app.research_platform.schemas import (
     PaginatedExperiments,
     SystemStatusResponse,
     UniverseSnapshotResponse,
+    ValidationGate,
     WorkerHeartbeat,
 )
 from backend.app.research_platform.orchestrator import ResearchOrchestrator
@@ -134,6 +135,13 @@ def experiments(
     service: ResearchPlatformService = Depends(get_research_service),
 ) -> PaginatedExperiments:
     return service.experiments(limit, offset)
+
+
+@router.get("/research/validation-gates", response_model=list[ValidationGate], dependencies=[Depends(require_read_token)])
+def research_validation_gates(
+    service: ResearchPlatformService = Depends(get_research_service),
+) -> list[ValidationGate]:
+    return service.validation_gates()
 
 
 @router.post("/research/start-cycle", response_model=CycleStartResponse, dependencies=[Depends(require_mutation_token)])
