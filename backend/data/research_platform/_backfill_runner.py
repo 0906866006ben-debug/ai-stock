@@ -9,6 +9,7 @@ descending universe-appearance order, so the most strategy-relevant symbols
 gain coverage first. Resumable: the store only downloads missing ranges.
 Temporary operational script; safe to delete after the backfill.
 """
+import os
 import sys
 import time
 import traceback
@@ -20,12 +21,20 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT / "backend" / ".env")
+except ImportError:
+    pass
+
 from backend.scripts.crypto_bt_data import BinanceFuturesClient, CryptoBacktestStore, utc_ms
 from backend.scripts.altcoin_universe import is_eligible_altcoin_symbol
 
 START_MS = utc_ms(datetime(2025, 10, 1, tzinfo=timezone.utc))
 END_MS = utc_ms(datetime(2026, 6, 1, tzinfo=timezone.utc))
-DB = Path.home() / ".crypto_backtest" / "klines.db"
+_db_override = os.getenv("CRYPTO_BACKTEST_DB", "").strip()
+DB = Path(_db_override).expanduser() if _db_override else Path.home() / ".crypto_backtest" / "klines.db"
 DAY_MS = 86_400_000
 MIN_QUOTE_VOLUME = 15_000_000.0
 TOP_N = 150

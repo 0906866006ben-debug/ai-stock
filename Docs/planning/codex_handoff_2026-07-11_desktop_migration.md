@@ -22,8 +22,10 @@
 - [ ] Git、Python 3.12、Tailscale（登入 `0906866006ben@gmail.com` 的 Google 帳號——tailnet 是 `tailbed1ea.ts.net`，**不要**用 GitHub 帳號登，會開出另一個空 tailnet）
 - [ ] `gh auth login`（repo 私有）
 
-### 2. Clone + venv
+### 2. Clone + venv（使用者指定：一律放 E 槽，2TB）
 ```powershell
+New-Item -ItemType Directory -Force E:\GitHub | Out-Null
+cd E:\GitHub
 git clone https://github.com/0906866006ben-debug/ai-stock.git
 cd ai-stock
 git checkout feature/autonomous-alpha-research
@@ -31,16 +33,21 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r backend\requirements.txt
 ```
 （主機也是 Windows，`requirements.txt` 的 pywin32 可裝；若失敗改用 `requirements-deploy.txt` 再補漏套件。）
+**重要：不要 clone 進 OneDrive 同步目錄**——筆電上 OneDrive 曾造成 pyc rename `WinError 5` 與 SQLite `disk I/O error`。
 
 ### 3. 接收筆電傳來的檔案（Taildrop）
 筆電端會用 `tailscale file cp` 送出 `klines.db` 與 `.env`。主機端：
 ```powershell
 tailscale file get $env:USERPROFILE\Downloads
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.crypto_backtest"
-Move-Item "$env:USERPROFILE\Downloads\klines.db" "$env:USERPROFILE\.crypto_backtest\klines.db"
-Move-Item "$env:USERPROFILE\Downloads\.env" "backend\.env"
+New-Item -ItemType Directory -Force "E:\crypto_backtest"
+Move-Item "$env:USERPROFILE\Downloads\klines.db" "E:\crypto_backtest\klines.db"
+Move-Item "$env:USERPROFILE\Downloads\laptop.env" "backend\.env"
 ```
-- [ ] 確認 `klines.db` 大小 ≥ 2GB、`backend/.env` 內含 `AI_STOCK_BACKEND_TOKEN`
+然後在 `backend\.env` **追加一行**，讓平台與回填腳本都指向 E 槽：
+```text
+CRYPTO_BACKTEST_DB=E:\crypto_backtest\klines.db
+```
+- [ ] 確認 `klines.db` 大小 ≥ 2GB、`backend/.env` 內含 `AI_STOCK_BACKEND_TOKEN` 與 `CRYPTO_BACKTEST_DB`
 
 ### 4. 啟動平台
 ```powershell
