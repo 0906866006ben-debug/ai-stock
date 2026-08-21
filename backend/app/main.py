@@ -62,7 +62,7 @@ from .services.tw_etf_holdings import get_etf_holdings
 from .services.fmp_price_history import get_us_price_history
 from backend.technical_analyzer.v1.contracts.input_contract import ContextBundle, OHLCVBar, OHLCVSeries
 from backend.technical_analyzer.v1.orchestration import AIAnalysisResultBuilder
-from .api.routes import quality_watch, screeners
+from .api.routes import quality_watch, research, screeners
 from backend.screeners.multi_factor_surge.api import router as multi_factor_surge_router
 from backend.app.services.strategy.canslim.observer import observe as observe_canslim
 from backend.app.services.strategy.canslim.live_screening import (
@@ -104,6 +104,7 @@ app.add_middleware(
 app.include_router(screeners.router)
 app.include_router(quality_watch.router)
 app.include_router(multi_factor_surge_router)
+app.include_router(research.router)
 
 SYMBOL_RE = re.compile(r"^[A-Za-z0-9]{1,10}$")
 TW_SYMBOL_RE = re.compile(r"^\d{4,6}$")
